@@ -155,8 +155,13 @@ namespace PickleGit.ViewModels
                 int i = 0;
                 while (i < lines.Count)
                 {
-                    if (lines[i].Kind == DiffLineKind.Context)
+                    if (lines[i].Kind == DiffLineKind.Context || lines[i].Kind == DiffLineKind.Header)
                     {
+                        // Header is the rare "\ No newline at end of file" marker — like Context,
+                        // it's a single line with no separate old/new side, so show it identically
+                        // on both columns. Unhandled here, `i` would never advance past it (it's
+                        // neither Context, Deleted, nor Added below) and this loop would spin
+                        // forever — this is the fix for that hang.
                         result.Add(new SideBySideItem { Kind = DiffItemKind.Line, Left = lines[i], Right = lines[i] });
                         i++;
                         continue;
