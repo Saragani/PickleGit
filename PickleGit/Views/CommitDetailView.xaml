@@ -318,7 +318,8 @@
                     <ItemsControl ItemsSource="{Binding ConflictedFileChanges}" Margin="0,6,0,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type models:FileChange}">
-                                <Grid Margin="0,3" Height="24">
+                                <Grid Margin="0,3" Height="24"
+                                      Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
@@ -347,6 +348,31 @@
                                                           RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"/>
                                     </StackPanel>
+                                    <Grid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Resolve Using Mine"
+                                                      Command="{Binding PlacementTarget.Tag.TakeOursCommand,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                            <MenuItem Header="Resolve Using Theirs"
+                                                      Command="{Binding PlacementTarget.Tag.TakeTheirsCommand,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                            <Separator/>
+                                            <MenuItem Header="Open in Merge Editor"
+                                                      Command="{Binding PlacementTarget.Tag.OpenMergeEditorCommand,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                            <MenuItem Header="Mark as Resolved"
+                                                      Command="{Binding PlacementTarget.Tag.MarkResolvedCommand,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        </ContextMenu>
+                                    </Grid.ContextMenu>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -357,8 +383,8 @@
             <Border Grid.Row="1" Padding="12,8"
                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
                 <Grid>
-                    <TextBlock Text="Staged Files" FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                    <TextBlock FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"
+                               Text="{Binding StagedFiles.Count, StringFormat='Staged Files ({0} files)'}"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Style="{StaticResource DangerButton}" Padding="8,3"
                                 Content="{Binding SelectedStagedFiles.Count, Converter={StaticResource BulkActionLabel}, ConverterParameter=Unstage}"
@@ -379,6 +405,7 @@
                 <ListView.ItemTemplate>
                     <DataTemplate DataType="{x:Type models:FileChange}">
                         <Grid Height="26" Margin="4,0" Background="Transparent"
+                              ToolTip="{Binding Path}"
                               Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="18"/>
@@ -456,8 +483,8 @@
                     <Border Grid.Row="0" Padding="12,6"
                             BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,1">
                         <Grid>
-                            <TextBlock Text="Unstaged Files" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <TextBlock FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"
+                                       Text="{Binding WorkingDirFiles.Count, StringFormat='Unstaged Files ({0} files)'}"/>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <!-- The single discard button — trash icon with a count badge that only
                                      appears once 2+ files are multi-selected,
@@ -510,6 +537,7 @@
                         <ListView.ItemTemplate>
                             <DataTemplate DataType="{x:Type models:FileChange}">
                                 <Grid Height="26" Margin="4,0" Background="Transparent"
+                                      ToolTip="{Binding Path}"
                                       Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="18"/>

@@ -10,8 +10,8 @@ namespace PickleGit.Views
             InitializeComponent();
             DataContextChanged += (s, e) =>
             {
-                if (e.OldValue is MergeConflictEditorViewModel oldVm) oldVm.RequestClose -= OnRequestClose;
-                if (e.NewValue is MergeConflictEditorViewModel newVm) newVm.RequestClose += OnRequestClose;
+                if (e.OldValue is MergeConflictSessionViewModel oldVm) oldVm.RequestClose -= OnRequestClose;
+                if (e.NewValue is MergeConflictSessionViewModel newVm) newVm.RequestClose += OnRequestClose;
             };
         }
 

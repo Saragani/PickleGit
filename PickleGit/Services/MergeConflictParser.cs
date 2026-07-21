@@ -6,9 +6,9 @@ namespace PickleGit.Services
 {
     /// <summary>
     /// Parses a working-tree file containing git conflict markers into a document with
-    /// separate "ours"/"theirs" reconstructions plus the individual conflict blocks,
-    /// for MergeConflictEditorViewModel. Supports plain and diff3-style (with a
-    /// |||||||  base section) markers.
+    /// separate "ours"/"theirs" reconstructions plus the individual conflict blocks and their
+    /// original interleaved order (Items), for MergeConflictFileViewModel. Supports plain and
+    /// diff3-style (with a ||||||| base section) markers.
     /// </summary>
     public static class MergeConflictParser
     {
@@ -35,6 +35,12 @@ namespace PickleGit.Services
 
             void FlushContext()
             {
+                if (context.Count > 0)
+                    doc.Items.Add(new ConflictDocItem
+                    {
+                        Kind = ConflictDocItemKind.Context,
+                        ContextText = string.Join("\n", context)
+                    });
                 foreach (var l in context)
                 {
                     oursSb.Append(l).Append('\n');
@@ -106,6 +112,7 @@ namespace PickleGit.Services
                         RawText = string.Join("\n", rawLines).Replace("\n", newline)
                     };
                     doc.Blocks.Add(block);
+                    doc.Items.Add(new ConflictDocItem { Kind = ConflictDocItemKind.Block, Block = block });
                     if (oursLines.Count > 0) oursSb.Append(block.OursText).Append('\n');
                     if (theirsLines.Count > 0) theirsSb.Append(block.TheirsText).Append('\n');
                     state = 0;

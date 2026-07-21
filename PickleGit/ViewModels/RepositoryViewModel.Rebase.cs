@@ -114,17 +114,28 @@ namespace PickleGit.ViewModels
 
         private async void OpenMergeEditor(object param)
         {
-            if (!(param is FileChange fc)) return;
-            var abs = GetAbsoluteFilePath(fc);
-            if (abs == null || !File.Exists(abs)) return;
-            var vm = new MergeConflictEditorViewModel(abs, fc.Path);
-            var win = new Views.MergeConflictEditorWindow { DataContext = vm, Owner = Application.Current.MainWindow };
-            if (win.ShowDialog() == true)
+            var clicked = param as FileChange;
+            var conflicted = ConflictedFileChanges.ToList();
+            if (conflicted.Count == 0) return;
+
+            var vm = new MergeConflictSessionViewModel(
+                conflicted,
+                path => GetAbsoluteFilePath(conflicted.FirstOrDefault(f => f.Path == path)),
+                async path =>
+                {
+                    await RunCliAsync($"Staging {path}…",
+                        $"add -- {Services.Git.CliGitService.Quote(path)}", "Mark resolved");
+                });
+
+            if (clicked != null)
             {
-                await RunCliAsync($"Staging {fc.Path}…",
-                    $"add -- {Services.Git.CliGitService.Quote(fc.Path)}", "Mark resolved");
-                await LoadWorkingDirAsync();
+                var match = vm.Files.FirstOrDefault(f => string.Equals(f.Path, clicked.Path, StringComparison.Ordinal));
+                if (match != null) vm.SelectedEntry = match;
             }
+
+            var win = new Views.MergeConflictEditorWindow { DataContext = vm, Owner = Application.Current.MainWindow };
+            win.ShowDialog();
+            await LoadWorkingDirAsync();
         }
 
         private async Task ContinueOperationAsync()

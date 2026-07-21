@@ -25,7 +25,9 @@ namespace PickleGit.Views
         {
             InitializeComponent();
             Loaded += OnLoaded;
+            Unloaded += OnUnloaded;
             SizeChanged += OnSizeChanged;
+            DataContextChanged += OnDataContextChanged;
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e)
@@ -42,7 +44,32 @@ namespace PickleGit.Views
                 _listScrollViewer.ScrollChanged += OnListScrollChanged;
             }
 
+            if (RepoVm != null) RepoVm.PropertyChanged += OnRepoVmPropertyChanged;
             UpdateCommitListViewportWidth();
+        }
+
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (RepoVm != null) RepoVm.PropertyChanged -= OnRepoVmPropertyChanged;
+        }
+
+        private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (e.OldValue is RepositoryViewModel oldVm) oldVm.PropertyChanged -= OnRepoVmPropertyChanged;
+            if (e.NewValue is RepositoryViewModel newVm) newVm.PropertyChanged += OnRepoVmPropertyChanged;
+        }
+
+        private void OnRepoVmPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            // The detail panel's column collapses/expands (HasDetailPanel/DetailPanelWidth) whenever
+            // the selection changes — recompute the last column's tracked width once that layout pass
+            // has actually settled, so the commit list fills the freed space immediately instead of
+            // waiting for an incidental scroll/resize to trigger it.
+            if (e.PropertyName == nameof(RepositoryViewModel.HasDetailPanel) ||
+                e.PropertyName == nameof(RepositoryViewModel.DetailPanelWidth))
+            {
+                Dispatcher.BeginInvoke(new Action(UpdateCommitListViewportWidth), DispatcherPriority.Render);
+            }
         }
 
         private void OnListScrollChanged(object sender, ScrollChangedEventArgs e)
@@ -108,7 +135,7 @@ namespace PickleGit.Views
 
         private void OnSizeChanged(object sender, SizeChangedEventArgs e)
         {
-            Dispatcher.BeginInvoke(new Action(UpdateCommitListViewportWidth));
+            Dispatcher.BeginInvoke(new Action(UpdateCommitListViewportWidth), DispatcherPriority.Render);
         }
 
         private void UpdateCommitListViewportWidth()

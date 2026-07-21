@@ -857,7 +857,12 @@ namespace PickleGit.ViewModels
         {
             if (!_git.IsOpen || RepoDirectoryMissing()) return;
             _isLoaded = true;
-            await RunAsync("Refreshing…", () =>
+            // Called both standalone (watcher tick, failsafe timer, initial load — none of which
+            // are already inside a busy scope) and as the last step of a RunThenRefresh* sequence
+            // (which already holds the busy scope). In the latter case, go through RunWorkAsync
+            // directly so refresh doesn't re-trip the "already busy" guard or drop IsBusy back to
+            // false before the whole sequence is actually done (see TryEnterBusyScope).
+            Action work = () =>
             {
                 var branch   = _git.GetCurrentBranch();
                 var headSha  = _git.GetHeadSha();
@@ -888,11 +893,13 @@ namespace PickleGit.ViewModels
                         bisect.FirstBadSummary = _bisectInfo.FirstBadSummary;
                     }
                     BisectInfo = bisect;
-                    if (conflict.HasConflicts)
-                    {
-                        ShowWorkingDir = true;
-                        ApplyWorkingDirStatus(status, updateGraph: false);
-                    }
+                    if (conflict.HasConflicts) ShowWorkingDir = true;
+                    // Always resync from this same status snapshot, not just during conflicts —
+                    // otherwise the "Uncommitted changes" node (driven by `hasChanges` below, from
+                    // this same `status`) and the Staged/Unstaged file lists (otherwise only kept
+                    // current by LoadWorkingDirAsync/RefreshWorkingDirStatusAsync's own, separately
+                    // timed status snapshot) can disagree about whether there are any changes.
+                    ApplyWorkingDirStatus(status, updateGraph: false);
                 });
 
                 // Skip the graph/UI/cache rebuild when the repo state is identical —
@@ -961,7 +968,12 @@ namespace PickleGit.ViewModels
                     HasUncommittedChanges = hasChanges,
                     ReachedLimit          = history.ReachedLimit
                 });
-            });
+            };
+
+            if (IsBusy)
+                await RunWorkAsync("Refreshing…", work);
+            else
+                await RunAsync("Refreshing…", work);
         }
 
         /// <summary>
@@ -1162,30 +1174,49 @@ namespace PickleGit.ViewModels
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
+        /// <summary>Like RunAsync, but keeps the busy scope held continuously across the primary
+        /// work plus a trailing refresh, so the "Working" indicator doesn't drop out and back in
+        /// between the two steps (each of which used to be its own separately-guarded RunAsync
+        /// call).</summary>
         private async Task<bool> RunThenRefresh(string status, Action work)
         {
-            var ok = await RunAsync(status, work);
-            await RefreshAsync();
-            return ok;
+            if (!TryEnterBusyScope()) return false;
+            try
+            {
+                var ok = await RunWorkAsync(status, work);
+                await RefreshAsync();
+                return ok;
+            }
+            finally { IsBusy = false; }
         }
 
         /// <summary>Like RunThenRefresh, for ops that also change the working directory (reset, revert, stash).</summary>
         private async Task<bool> RunThenRefreshWorkingDir(string status, Action work)
         {
-            var ok = await RunAsync(status, work);
-            await LoadWorkingDirAsync();
-            await RefreshAsync();
-            return ok;
+            if (!TryEnterBusyScope()) return false;
+            try
+            {
+                var ok = await RunWorkAsync(status, work);
+                await LoadWorkingDirAsync();
+                await RefreshAsync();
+                return ok;
+            }
+            finally { IsBusy = false; }
         }
 
         /// <summary>Like RunThenRefresh, for checkouts — also re-smudges any now-stale LFS pointer files
         /// before refreshing (see TryLfsCheckoutAsync).</summary>
         private async Task<bool> RunThenRefreshCheckout(string status, Action work)
         {
-            var ok = await RunAsync(status, work);
-            if (ok) await TryLfsCheckoutAsync();
-            await RefreshAsync();
-            return ok;
+            if (!TryEnterBusyScope()) return false;
+            try
+            {
+                var ok = await RunWorkAsync(status, work);
+                if (ok) await TryLfsCheckoutAsync();
+                await RefreshAsync();
+                return ok;
+            }
+            finally { IsBusy = false; }
         }
 
         // ── Operation cancellation ────────────────────────────────────────────
@@ -1228,19 +1259,36 @@ namespace PickleGit.ViewModels
                 ProgressPercent = pct;
         }
 
-        private async Task<bool> RunAsync(string status, Action work)
+        /// <summary>Claims the single busy scope, or reports it's already held and refuses.
+        /// Most commands only gate their CanExecute on HasRepo, not !IsBusy, so this check — not
+        /// those bindings — is what actually stops a second overlapping call from clobbering the
+        /// first operation's state. Callers must reset <see cref="IsBusy"/> to false themselves
+        /// (in a finally block) once their whole sequence — one step or several chained ones — is
+        /// done, so a multi-step sequence (see RunThenRefresh*) can stay continuously "Working"
+        /// instead of flickering between steps.</summary>
+        private bool TryEnterBusyScope()
         {
             if (IsBusy)
             {
-                // RunAsync's per-operation state (_opCts, watcher suppression scope) lives in
-                // instance fields, not locals. Most commands only gate their CanExecute on
-                // HasRepo, not !IsBusy, so this check — not those bindings — is what actually
-                // stops a second overlapping call from clobbering the first operation's
-                // CancellationTokenSource and ending its watcher suppression early.
                 StatusMessage = "Another operation is already in progress.";
                 return false;
             }
             IsBusy = true;
+            return true;
+        }
+
+        private async Task<bool> RunAsync(string status, Action work)
+        {
+            if (!TryEnterBusyScope()) return false;
+            try { return await RunWorkAsync(status, work); }
+            finally { IsBusy = false; }
+        }
+
+        /// <summary>Runs one unit of git work and reports/classifies failures. Does not touch
+        /// <see cref="IsBusy"/> — the caller (either <see cref="RunAsync"/> for a single step, or
+        /// a RunThenRefresh* helper chaining several steps under one busy scope) owns that.</summary>
+        private async Task<bool> RunWorkAsync(string status, Action work)
+        {
             StatusMessage = status;
             var suppression = _watcher?.Suppress();
             _opCts = new System.Threading.CancellationTokenSource();
@@ -1260,10 +1308,10 @@ namespace PickleGit.ViewModels
                     return false;
                 }
                 var msg = ex.Message;
-                // libgit2 reports credential failures as "too many redirects or authentication replays"
-                // when the server keeps rejecting the same credentials. Translate to something actionable.
-                if (msg.IndexOf("too many redirects", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    msg.IndexOf("authentication replays", StringComparison.OrdinalIgnoreCase) >= 0)
+                // libgit2 reports genuine credential rejection as "authentication replays" — the
+                // server kept rejecting the same credentials until libgit2 gave up. Purge them and
+                // force a fresh prompt next attempt.
+                if (msg.IndexOf("authentication replays", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     // Purge the stale PickleGit entry so it won't shadow a fresh credential
                     var failedUser = RemoteUsername;
@@ -1283,6 +1331,19 @@ namespace PickleGit.ViewModels
                         catch { }
                     }
                     msg = "Authentication failed. Check that your username and password (or app password) are correct.";
+                }
+                // "Too many redirects" on its own (not paired with "authentication replays") is
+                // libgit2's other trigger for the same underlying cap, but it's frequently a genuine
+                // HTTP redirect loop (misconfigured remote URL, corporate proxy/SSO) rather than a
+                // bad password — treating it as a credential failure would wrongly delete a correct
+                // saved credential and blame the wrong thing. Point at the network/URL instead, and
+                // leave any saved credential untouched.
+                else if (msg.IndexOf("too many redirects", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    msg = "Too many redirects. This usually means the remote URL is wrong (e.g. an http:// " +
+                          "URL that keeps redirecting to https://) or a proxy/VPN is intercepting the " +
+                          "request — check the remote URL and any proxy settings. If your credentials were " +
+                          "actually the problem, you'll be prompted to re-enter them next attempt.";
                 }
                 // SSH runs with GIT_TERMINAL_PROMPT=0, so agent/key problems fail without any
                 // prompt — translate the common ones into something actionable.
@@ -1313,7 +1374,6 @@ namespace PickleGit.ViewModels
                 cts?.Dispose();
                 RaisePropertyChanged(nameof(CanCancel));
                 ProgressPercent = -1;
-                IsBusy = false;
             }
         }
 

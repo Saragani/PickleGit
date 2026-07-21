@@ -8,6 +8,16 @@ namespace PickleGit.Models
         public int LinesAdded { get; set; }
         public int LinesDeleted { get; set; }
         public bool IsStaged { get; set; }
+
+        /// <summary>For Kind == Conflicted: true when this side (ours/HEAD) has no version of the
+        /// file at all — an add/delete existence conflict, not a content conflict. Git writes no
+        /// conflict markers for these, so the merge editor must treat them specially instead of
+        /// diffing (otherwise Ours/Theirs would render as identical, misleading content).</summary>
+        public bool OursMissing { get; set; }
+
+        /// <summary>Same as <see cref="OursMissing"/>, for the other side (theirs/MERGE_HEAD).</summary>
+        public bool TheirsMissing { get; set; }
+
         public string StatusLabel
         {
             get

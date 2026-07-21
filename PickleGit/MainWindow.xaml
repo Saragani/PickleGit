@@ -238,9 +238,11 @@
                     </StackPanel.Resources>
                     <Separator Width="1" Height="20" Background="{DynamicResource BorderBrush}" Margin="0,0,8,0"/>
                     <Button Content="↻  Fetch" Style="{StaticResource ToolbarButton}"
-                            Command="{Binding ActiveTab.FetchCommand}" Margin="2,0,0,0" ToolTip="Fetch from remote"/>
+                            Command="{Binding ActiveTab.FetchCommand}" Margin="2,0,0,0" ToolTip="Fetch from remote"
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}"/>
                     <Button Style="{StaticResource DropdownArrow}" Click="DropdownButton_Click"
-                            ToolTip="Fetch options">
+                            ToolTip="Fetch options"
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}">
                         <Button.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Fetch"
@@ -253,9 +255,11 @@
                         </Button.ContextMenu>
                     </Button>
                     <Button Content="⬇  Pull" Style="{StaticResource ToolbarButton}"
-                            Command="{Binding ActiveTab.PullCommand}" Margin="2,0,0,0" ToolTip="Pull (merge)"/>
+                            Command="{Binding ActiveTab.PullCommand}" Margin="2,0,0,0" ToolTip="Pull (merge)"
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}"/>
                     <Button Style="{StaticResource DropdownArrow}" Click="DropdownButton_Click"
-                            ToolTip="Pull options">
+                            ToolTip="Pull options"
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}">
                         <Button.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Pull (merge)"
@@ -266,9 +270,11 @@
                         </Button.ContextMenu>
                     </Button>
                     <Button Content="⬆  Push" Style="{StaticResource ToolbarButton}"
-                            Command="{Binding ActiveTab.PushCommand}" Margin="2,0,0,0" ToolTip="Push"/>
+                            Command="{Binding ActiveTab.PushCommand}" Margin="2,0,0,0" ToolTip="Push"
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}"/>
                     <Button Style="{StaticResource DropdownArrow}" Click="DropdownButton_Click"
-                            ToolTip="Push options">
+                            ToolTip="Push options"
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}">
                         <Button.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Push"
@@ -280,9 +286,11 @@
                     </Button>
                     <Separator Width="1" Height="20" Background="{DynamicResource BorderBrush}" Margin="8,0"/>
                     <Button Content="⎇  Branch" Style="{StaticResource ToolbarButton}"
-                            Command="{Binding ActiveTab.CreateBranchCommand}" Margin="2,0" ToolTip="Create branch"/>
+                            Command="{Binding ActiveTab.CreateBranchCommand}" Margin="2,0" ToolTip="Create branch"
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}"/>
                     <Button Content="📦  Stash" Style="{StaticResource ToolbarButton}"
-                            Command="{Binding ActiveTab.StashCommand}" Margin="2,0" ToolTip="Stash changes"/>
+                            Command="{Binding ActiveTab.StashCommand}" Margin="2,0" ToolTip="Stash changes"
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}"/>
                     <Separator Width="1" Height="20" Background="{DynamicResource BorderBrush}" Margin="8,0"/>
                     <Button Content="±  Commit" Style="{StaticResource ToolbarButton}"
                             Command="{Binding ActiveTab.ShowWorkingDirCommand}" Margin="2,0" ToolTip="Show staging area"/>

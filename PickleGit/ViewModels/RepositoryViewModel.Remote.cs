@@ -203,17 +203,19 @@ namespace PickleGit.ViewModels
             await RefreshAsync();
         }
 
-        private async Task PushAsync()
+        /// <summary>Pushes the current branch. Returns whether the push succeeded, so callers
+        /// (e.g. HostingViewModel's push-before-PR prompt) can decide whether to proceed.</summary>
+        public async Task<bool> PushAsync()
         {
             var remoteName = Remotes.FirstOrDefault()?.Name ?? "origin";
             if (GitCli.IsSshUrl(Remotes.FirstOrDefault()?.Url))
             {
-                if (await RunCliAsync($"Pushing to {remoteName}…",
-                        $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(CurrentBranch)}", "Push"))
-                    await RefreshAsync();
-                return;
+                var cliOk = await RunCliAsync($"Pushing to {remoteName}…",
+                    $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(CurrentBranch)}", "Push");
+                if (cliOk) await RefreshAsync();
+                return cliOk;
             }
-            if (!await EnsureCredentialsAsync()) return;
+            if (!await EnsureCredentialsAsync()) return false;
             var ok = await RunAsync($"Pushing to {remoteName}…", () =>
             {
                 _git.Push(remoteName, CurrentBranch, RemoteUsername, RemotePassword,
@@ -221,6 +223,7 @@ namespace PickleGit.ViewModels
             });
             if (ok && _credentialsFromDialog) SaveCredentials();
             await RefreshAsync();
+            return ok;
         }
 
         // ── Credential helpers ────────────────────────────────────────────────

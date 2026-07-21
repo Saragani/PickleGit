@@ -33,7 +33,26 @@ namespace PickleGit.Models
 
         public List<MergeConflictBlock> Blocks { get; set; } = new List<MergeConflictBlock>();
 
+        /// <summary>Context and conflict blocks in original file order, for rendering one
+        /// interleaved merged view instead of separate Ours/Theirs/Result panes.</summary>
+        public List<ConflictDocItem> Items { get; set; } = new List<ConflictDocItem>();
+
         /// <summary>Detected line-ending style ("\r\n" or "\n") of the source file.</summary>
         public string Newline { get; set; } = "\n";
+    }
+
+    public enum ConflictDocItemKind { Context, Block }
+
+    /// <summary>One entry in MergeConflictDocument.Items — either a run of plain (non-conflicting)
+    /// text or one marker-delimited conflict block, in original file order.</summary>
+    public class ConflictDocItem
+    {
+        public ConflictDocItemKind Kind { get; set; }
+
+        /// <summary>Set when Kind == Context.</summary>
+        public string ContextText { get; set; }
+
+        /// <summary>Set when Kind == Block.</summary>
+        public MergeConflictBlock Block { get; set; }
     }
 }

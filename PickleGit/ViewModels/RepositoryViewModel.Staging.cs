@@ -81,8 +81,10 @@ namespace PickleGit.ViewModels
                 var selectedWorkingPaths = new HashSet<string>(_selectedWorkingFiles.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
                 var selectedStagedPaths = new HashSet<string>(_selectedStagedFiles.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
 
-                WorkingDirFiles = new ObservableCollection<FileChange>(changes.Where(f => !f.IsStaged));
-                StagedFiles = new ObservableCollection<FileChange>(changes.Where(f => f.IsStaged));
+                WorkingDirFiles = new ObservableCollection<FileChange>(
+                    changes.Where(f => !f.IsStaged).OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase));
+                StagedFiles = new ObservableCollection<FileChange>(
+                    changes.Where(f => f.IsStaged).OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase));
 
                 _selectedWorkingFiles.Clear();
                 foreach (var f in WorkingDirFiles.Where(f => selectedWorkingPaths.Contains(f.Path)))

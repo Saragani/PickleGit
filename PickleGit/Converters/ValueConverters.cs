@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using PickleGit.Models;
+using PickleGit.ViewModels;
 
 namespace PickleGit.Converters
 {
@@ -54,6 +55,33 @@ namespace PickleGit.Converters
         }
         public object ConvertBack(object value, Type t, object p, CultureInfo c) =>
             value is Visibility v && v == Visibility.Visible;
+    }
+
+    /// <summary>Shows/hides a conflict block's "unresolved" (inline accept buttons) vs "resolved"
+    /// (collapsed strip) sub-panel based on MergeConflictBlock.Resolution. A fresh ConflictViewItem
+    /// is rebuilt for every block on every resolve, so this never needs to react to the same
+    /// instance changing — the value is fixed for that item's lifetime.</summary>
+    public class ResolutionToVisibilityConverter : IValueConverter
+    {
+        /// <summary>false (default) = visible while Unresolved; true = visible once resolved.</summary>
+        public bool Invert { get; set; }
+        public object Convert(object value, Type t, object p, CultureInfo c)
+        {
+            bool isUnresolved = value is ConflictResolution r && r == ConflictResolution.Unresolved;
+            bool show = Invert ? !isUnresolved : isUnresolved;
+            return show ? Visibility.Visible : Visibility.Collapsed;
+        }
+        public object ConvertBack(object value, Type t, object p, CultureInfo c) => throw new NotSupportedException();
+    }
+
+    /// <summary>Inverts a bool — for IsEnabled bindings that should be false while some other
+    /// bool (e.g. IsBusy) is true.</summary>
+    public class InverseBooleanConverter : IValueConverter
+    {
+        public object Convert(object value, Type t, object p, CultureInfo c) =>
+            !(value is bool b && b);
+        public object ConvertBack(object value, Type t, object p, CultureInfo c) =>
+            !(value is bool b && b);
     }
 
     /// <summary>Detects RepositoryViewModel.CurrentBranch's "detached @ &lt;sha&gt;" / "(detached)"
@@ -468,6 +496,21 @@ namespace PickleGit.Converters
             if (item is DiffItem di) return di.Kind == DiffItemKind.HunkHeader ? HunkTemplate : LineTemplate;
             if (item is SideBySideItem sbs) return sbs.Kind == DiffItemKind.HunkHeader ? HunkTemplate : LineTemplate;
             return LineTemplate;
+        }
+    }
+
+    /// <summary>Picks the context-text vs conflict-block row template for the merge editor's
+    /// flattened, interleaved document view (MergeConflictFileViewModel.FlatItems).</summary>
+    public class ConflictViewItemTemplateSelector : DataTemplateSelector
+    {
+        public DataTemplate ContextTemplate { get; set; }
+        public DataTemplate BlockTemplate { get; set; }
+
+        public override DataTemplate SelectTemplate(object item, DependencyObject container)
+        {
+            if (item is ConflictViewItem ci)
+                return ci.Kind == ConflictDocItemKind.Block ? BlockTemplate : ContextTemplate;
+            return ContextTemplate;
         }
     }
 

@@ -424,6 +424,22 @@ namespace PickleGit.Services
                 var w = BuildFileChange(entry, staged: false);
                 if (w != null) result.Add(w);
             }
+
+            if (result.Any(f => f.Kind == FileChangeKind.Conflicted))
+            {
+                var conflictsByPath = _repo.Index.Conflicts
+                    .Select(c => new { Path = c.Ours?.Path ?? c.Theirs?.Path ?? c.Ancestor?.Path, Conflict = c })
+                    .Where(x => x.Path != null)
+                    .ToDictionary(x => x.Path, x => x.Conflict);
+
+                foreach (var f in result.Where(f => f.Kind == FileChangeKind.Conflicted))
+                {
+                    if (!conflictsByPath.TryGetValue(f.Path, out var conflict)) continue;
+                    f.OursMissing = conflict.Ours == null;
+                    f.TheirsMissing = conflict.Theirs == null;
+                }
+            }
+
             return result;
         }
 
