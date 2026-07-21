@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Two steps:
-      1. MSBuild Release build of MyGitClient.csproj - this increments VersionBuild in
+      1. MSBuild Release build of PickleGit.csproj - this increments VersionBuild in
          ..\Version.props and stamps the new version into PickleGit.exe.
       2. ISCC.exe (Inno Setup Compiler) compiles Setup.iss, which reads the version straight back
          out of the just-built exe, producing Installer\Output\PickleGit-Setup-<version>.exe.
@@ -15,7 +15,7 @@
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$csproj = Join-Path $root '..\MyGitClient\MyGitClient.csproj'
+$csproj = Join-Path $root '..\PickleGit\PickleGit.csproj'
 $setupScript = Join-Path $root 'Setup.iss'
 
 function Find-MSBuild {

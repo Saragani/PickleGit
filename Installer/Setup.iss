@@ -7,7 +7,7 @@
 #define MyAppName "PickleGit"
 #define MyAppExeName "PickleGit.exe"
 #define MyAppPublisher "PickleGit"
-#define MyAppSourceDir "..\MyGitClient\bin\Release\net472"
+#define MyAppSourceDir "..\PickleGit\bin\Release\net472"
 #define MyAppVersion GetVersionNumbersString(MyAppSourceDir + "\" + MyAppExeName)
 
 [Setup]
@@ -25,7 +25,7 @@ PrivilegesRequired=lowest
 ; git2 binary for every Windows architecture (x86/x64/arm64) - so no architecture restriction here.
 OutputDir=Output
 OutputBaseFilename=PickleGit-Setup-{#MyAppVersion}
-SetupIconFile=..\MyGitClient\Resources\pickle.ico
+SetupIconFile=..\PickleGit\Resources\pickle.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
 SolidCompression=yes
