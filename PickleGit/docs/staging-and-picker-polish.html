@@ -1,0 +1,597 @@
+<html data-theme="dark"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><title>PickleGit — Staging &amp; Picker Polish</title><script>document.documentElement.setAttribute("data-theme","dark")</script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #14171c;
+    --surface: #1b2027;
+    --surface-2: #232a33;
+    --border: #2b323c;
+    --text: #e7e9ec;
+    --text-dim: #8b929a;
+    --accent: #9a82d1;
+    --accent-dim: #6b5590;
+    --accent-text: #f3effa;
+    --good: #6fbe72;
+    --good-bg: #1c2a1e;
+    --warn: #d69a67;
+    --warn-bg: #2f2216;
+    --info: #6ea3d6;
+    --info-bg: #182531;
+    --shadow: 0 20px 50px -25px rgba(0,0,0,0.6);
+  }
+
+  :root[data-theme="light"] {
+    --bg: #f7f6f3;
+    --surface: #ffffff;
+    --surface-2: #efece5;
+    --border: #ddd8cd;
+    --text: #22262b;
+    --text-dim: #6b6f76;
+    --accent: #6b4fa0;
+    --accent-dim: #8a72b8;
+    --accent-text: #ffffff;
+    --good: #2f7a37;
+    --good-bg: #e6f1e6;
+    --warn: #93551a;
+    --warn-bg: #f5e9da;
+    --info: #2c5c88;
+    --info-bg: #e3edf5;
+    --shadow: 0 20px 50px -30px rgba(30,25,15,0.25);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f7f6f3;
+      --surface: #ffffff;
+      --surface-2: #efece5;
+      --border: #ddd8cd;
+      --text: #22262b;
+      --text-dim: #6b6f76;
+      --accent: #6b4fa0;
+      --accent-dim: #8a72b8;
+      --accent-text: #ffffff;
+      --good: #2f7a37;
+      --good-bg: #e6f1e6;
+      --warn: #93551a;
+      --warn-bg: #f5e9da;
+      --info: #2c5c88;
+      --info-bg: #e3edf5;
+      --shadow: 0 20px 50px -30px rgba(30,25,15,0.25);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Segoe UI Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .display {
+    font-family: "Palatino Linotype", "Iowan Old Style", "URW Palladio L", Palatino, Georgia, serif;
+  }
+
+  .mono {
+    font-family: Consolas, "Cascadia Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a { color: var(--accent); }
+
+  ::selection { background: var(--accent-dim); color: var(--accent-text); }
+
+  /* ── Layout shell ─────────────────────────────────────────────── */
+
+  .page {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    max-width: 1180px;
+    margin: 0 auto;
+    align-items: start;
+  }
+
+  .railwrap {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    padding: 40px 16px 40px 32px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+  }
+
+  .rail-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 28px;
+  }
+  .rail-brand .mark { font-size: 20px; }
+  .rail-brand .name {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--text);
+  }
+
+  nav.rail ol {
+    list-style: none;
+    margin: 0 0 24px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  nav.rail a {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    padding: 7px 10px;
+    margin: 0 -10px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--text-dim);
+    font-size: 13.5px;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  nav.rail a .num {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    opacity: 0.7;
+    min-width: 1.4em;
+  }
+  nav.rail a:hover { background: var(--surface-2); color: var(--text); }
+  nav.rail a.active {
+    background: var(--surface-2);
+    color: var(--text);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  nav.rail a.active .num { color: var(--accent); opacity: 1; }
+
+  nav.rail .rail-extra { border-top: 1px solid var(--border); padding-top: 14px; }
+
+  .content { min-width: 0; padding: 56px 40px 40px 44px; }
+
+  /* ── Masthead ─────────────────────────────────────────────────── */
+
+  .masthead { margin-bottom: 64px; }
+
+  .eyebrow {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 16px;
+  }
+
+  h1.title {
+    font-size: clamp(2.1rem, 4vw, 3rem);
+    line-height: 1.08;
+    margin: 0 0 18px;
+    text-wrap: balance;
+    font-weight: 600;
+  }
+
+  .dek {
+    max-width: 62ch;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    line-height: 1.55;
+    margin: 0 0 32px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    max-width: 720px;
+  }
+  .stat { background: var(--surface); padding: 16px 18px; }
+  .stat .n {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .l { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+
+  /* ── Phase sections ───────────────────────────────────────────── */
+
+  section.phase {
+    scroll-margin-top: 24px;
+    padding: 44px 0;
+    border-top: 1px solid var(--border);
+  }
+  section.phase:first-of-type { border-top: none; padding-top: 0; }
+
+  .phase-head { display: flex; gap: 18px; align-items: baseline; margin-bottom: 10px; }
+  .phase-badge {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 11px;
+    white-space: nowrap;
+  }
+  h2.phase-title { font-size: 1.65rem; margin: 0; font-weight: 600; text-wrap: balance; }
+
+  .thesis { max-width: 66ch; color: var(--text-dim); margin: 0 0 26px; font-size: 1.02rem; }
+
+  .feature-list {
+    list-style: none;
+    margin: 0 0 20px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .feature-list li { display: grid; grid-template-columns: 20px minmax(0,1fr); gap: 12px; }
+  .feature-list li::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-top: 9px;
+    justify-self: center;
+  }
+  .feature-list b { font-weight: 600; }
+  .feature-list .desc { color: var(--text-dim); }
+  .feature-list code {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 0.88em;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.08em 0.4em;
+    color: var(--text);
+  }
+
+  .callout {
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    padding: 16px 18px;
+    margin: 18px 0;
+    display: flex;
+    gap: 12px;
+  }
+  .callout .icon { font-size: 1.1rem; line-height: 1.5; }
+  .callout .body { min-width: 0; }
+  .callout .kicker {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0 0 6px;
+    font-weight: 700;
+  }
+  .callout p { margin: 0 0 6px; color: var(--text); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout.bug { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 35%, var(--border)); }
+  .callout.bug .kicker { color: var(--warn); }
+  .callout.verify { background: var(--info-bg); border-color: color-mix(in srgb, var(--info) 35%, var(--border)); }
+  .callout.verify .kicker { color: var(--info); }
+  .callout.good { background: var(--good-bg); border-color: color-mix(in srgb, var(--good) 35%, var(--border)); }
+  .callout.good .kicker { color: var(--good); }
+
+  /* ── Before/after mock ───────────────────────────────────────── */
+
+  .swatch-row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; margin: 18px 0; }
+  .swatch { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; }
+  .swatch .swatch-label { font-family: Consolas, ui-monospace, monospace; font-size: 11px; color: var(--text-dim); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 10px; }
+  .combo-mock { display: flex; align-items: center; justify-content: space-between; width: 200px; background: #fff; border: 1px solid #b8b8b8; border-radius: 3px; padding: 5px 8px; font-size: 12px; color: #333; }
+  .combo-mock.dark { background: var(--surface-2); border-color: var(--border); color: var(--text); border-radius: 4px; }
+  .combo-mock .arrow { font-size: 9px; color: #666; }
+  .combo-mock.dark .arrow { color: var(--text-dim); }
+
+  .filelist-mock { width: 260px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px; font-size: 12px; }
+  .filelist-mock .frow { display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; border-radius: 4px; }
+  .filelist-mock .frow.sel { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+  .filelist-mock .frow .fname { font-family: Consolas, ui-monospace, monospace; font-size: 11px; }
+  .filelist-mock .frow .fbtn { color: var(--text-dim); font-size: 10px; }
+
+  .mech {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin: 18px 0;
+  }
+  .mech h4 {
+    margin: 0 0 10px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .mech ol, .mech ul { margin: 0; padding-left: 1.2em; color: var(--text); }
+  .mech li { margin-bottom: 8px; }
+  .mech li:last-child { margin-bottom: 0; }
+  .mech code {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 0.88em;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.08em 0.4em;
+    color: var(--accent);
+  }
+
+  .left-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .left-list li { display: flex; gap: 10px; align-items: baseline; color: var(--text-dim); font-size: 0.96rem; }
+  .left-list .tag {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+  .left-list b { color: var(--text); font-weight: 600; }
+  .left-list.done li { color: var(--text); }
+  .left-list.done .tag { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
+
+  footer.colophon {
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+    padding-top: 28px;
+    padding-bottom: 24px;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    max-width: 66ch;
+  }
+  footer.colophon p { margin: 0 0 10px; }
+
+  /* ── Mobile ───────────────────────────────────────────────────── */
+
+  @media (max-width: 860px) {
+    .page { grid-template-columns: 1fr; }
+    .railwrap {
+      position: static;
+      height: auto;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      padding: 18px 20px;
+    }
+    nav.rail ol { flex-direction: row; flex-wrap: wrap; }
+    .rail-extra { border-top: none; padding-top: 0; margin-top: 8px; }
+    .content { padding: 36px 20px; }
+  }
+</style>
+
+<div class="page">
+  <div class="railwrap">
+    <div class="rail-brand">
+      <span class="mark">🥒</span>
+      <span class="name">PickleGit</span>
+    </div>
+    <nav class="rail">
+      <ol id="rail-list">
+        <li><a href="#combo"><span class="num mono">01</span>The ComboBox Bug</a></li>
+        <li><a href="#multiselect"><span class="num mono">02</span>Multi-Select Everywhere</a></li>
+        <li><a href="#unstage"><span class="num mono">03</span>Unstage All</a></li>
+      </ol>
+      <ol class="rail-extra">
+        <li><a href="#left"><span class="num mono">—</span>What's left now</a></li>
+      </ol>
+    </nav>
+  </div>
+
+  <div class="content">
+
+    <header class="masthead">
+      <p class="eyebrow">PickleGit — Engineering Changelog · Staging &amp; Dialogs</p>
+      <h1 class="title display">Staging &amp; Picker Polish</h1>
+      <p class="dek">User testing against a real Bitbucket repo turned up a real bug the same day the PR
+         dialog shipped: the "Into" branch picker rendered as a plain white Windows dropdown, not the app's
+         dark theme. Fixing it properly meant re-templating <code>ComboBox</code> from scratch — which also
+         made room for the type-to-filter search the branch list actually needed. Alongside it, three
+         long-standing Local Changes gaps close: multi-select now really works for stage, unstage, and
+         discard, and there's finally an Unstage All to match Stage All.</p>
+
+      <div class="stats">
+        <div class="stat"><div class="n mono">1</div><div class="l">ComboBox fully re-templated for dark theme</div></div>
+        <div class="stat"><div class="n mono">2</div><div class="l">file lists gain real multi-select (stage, unstage)</div></div>
+        <div class="stat"><div class="n mono">3</div><div class="l">actions now batch — stage, unstage, discard</div></div>
+        <div class="stat"><div class="n mono">1</div><div class="l">new Unstage All button</div></div>
+      </div>
+    </header>
+
+    <!-- ══════════════════════ THE COMBOBOX BUG ══════════════════════ -->
+    <section class="phase" id="combo">
+      <div class="phase-head">
+        <span class="phase-badge mono">01</span>
+        <h2 class="phase-title display">The ComboBox Bug</h2>
+      </div>
+      <p class="thesis">PickleGit had never used a <code>ComboBox</code> anywhere before the pull-request
+         dialog. The theme's existing style only set <code>Background</code>/<code>Foreground</code>/
+         <code>BorderBrush</code> — which changes the closed box a little, but does nothing for the dropdown
+         popup, because the default Aero template's popup chrome is hard-coded to system colors regardless of
+         those three properties. The result, caught by hand-testing against a real repo: a dark app with a
+         stark white branch list.</p>
+
+      <div class="swatch-row">
+        <div class="swatch">
+          <div class="swatch-label mono">Before</div>
+          <div class="combo-mock">Master<span class="arrow">▾</span></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-label mono">After</div>
+          <div class="combo-mock dark">Master<span class="arrow">▾</span></div>
+        </div>
+      </div>
+
+      <ul class="feature-list">
+        <li><div><b>Fully re-templated, not patched</b> — <span class="desc"><code>ComboBox</code> and
+            <code>ComboBoxItem</code> both get complete dark <code>ControlTemplate</code>s in
+            <code>DarkTheme.xaml</code>, the same treatment already given to <code>ScrollBar</code>,
+            <code>ContextMenu</code>, and <code>MenuItem</code> — an unstyled popup wasn't a one-off, it was
+            the last stock WPF control left untouched.</span></div></li>
+        <li><div><b>Type to filter</b> — <span class="desc">the box is now editable
+            (<code>IsEditable="True"</code>) with WPF's built-in single-character jump-to-match turned off
+            (<code>IsTextSearchEnabled="False"</code>) in favor of hand-rolled substring filtering on every
+            keystroke — useful the moment a repo has more than a handful of remote branches.</span></div></li>
+        <li><div><b>The arrow, not the whole box, opens it</b> — <span class="desc">the first pass at the
+            template put an invisible <code>ToggleButton</code> across the entire control, which is how the
+            default non-editable ComboBox works — but on an editable one that also blocks every click meant to
+            place a text caret. Caught in review before shipping; the toggle now only covers the narrow arrow
+            strip.</span></div></li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════ MULTI-SELECT EVERYWHERE ══════════════════════ -->
+    <section class="phase" id="multiselect">
+      <div class="phase-head">
+        <span class="phase-badge mono">02</span>
+        <h2 class="phase-title display">Multi-Select Everywhere</h2>
+      </div>
+      <p class="thesis">The commit list has supported multi-select since early on, via
+         <code>ListViewMultiSelectBehavior</code> syncing <code>ListView.SelectedItems</code> to a view-model
+         collection. The two Local Changes file lists never got the same treatment — you could Ctrl-click
+         three files, but Stage / Unstage / Discard only ever acted on whichever single file the click or
+         right-click happened to land on.</p>
+
+      <div class="filelist-mock">
+        <div class="frow sel"><span class="fname">Foo.cs</span><span class="fbtn">− discard</span></div>
+        <div class="frow sel"><span class="fname">Bar.cs</span><span class="fbtn">− discard</span></div>
+        <div class="frow sel"><span class="fname">Baz.cs</span><span class="fbtn">− discard</span></div>
+        <div class="frow"><span class="fname">Untouched.cs</span><span class="fbtn"></span></div>
+      </div>
+
+      <div class="mech">
+        <h4>How the target list is resolved</h4>
+        <ol>
+          <li>Both file lists now run <code>SelectionMode="Extended"</code> with their own
+              <code>ListViewMultiSelectBehavior</code>, feeding <code>SelectedWorkingFiles</code> and
+              <code>SelectedStagedFiles</code> — the same pattern <code>SelectedNodes</code> already uses for
+              commits.</li>
+          <li>A per-row <code>+</code>/<code>−</code>/<code>✕</code> button click doesn't change ListView
+              selection at all — clicking a button never selects its row. So <code>ResolveFileTargets</code>
+              takes both the clicked file <i>and</i> the current selection: if there's a multi-selection and
+              the clicked file is part of it (or nothing specific was clicked, e.g. a keyboard/menu
+              invocation), the whole selection is the target; otherwise it's just the one file that was
+              clicked.</li>
+          <li>Right-clicking already behaves correctly for free — WPF's own <code>ListBoxItem</code> only
+              replaces the selection on right-click when the clicked row <i>wasn't</i> already part of it, so
+              a context-menu "Discard changes" on a 3-file selection reaches all three without any extra
+              code.</li>
+          <li><code>GitService.StageFiles</code> / <code>UnstageFiles</code> / <code>DiscardFiles</code> batch
+              the whole target list into one <code>Commands.Stage</code>/<code>Unstage</code>/
+              <code>CheckoutPaths</code> call rather than looping single-file calls — one index write instead
+              of N.</li>
+        </ol>
+      </div>
+
+      <div class="callout good">
+        <div class="icon">✅</div>
+        <div class="body">
+          <p class="kicker mono">Discard confirmation scales with the batch</p>
+          <p>Discarding one file still asks "Discard changes to 'Foo.cs'?" — discarding five now asks
+             "Discard changes to 5 files?" instead of firing the same confirm dialog five times in a row.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ UNSTAGE ALL ══════════════════════ -->
+    <section class="phase" id="unstage">
+      <div class="phase-head">
+        <span class="phase-badge mono">03</span>
+        <h2 class="phase-title display">Unstage All</h2>
+      </div>
+      <p class="thesis">Stage All has existed since early on, sitting in the Staged Files header — the panel
+         whose contents it fills, not the one it reads from. Unstage All follows the same logic and lands in
+         the same header, right next to it, rather than in the Unstaged Files section it would seem to belong
+         to at first glance: both buttons control what ends up in the Staged list.</p>
+
+      <ul class="feature-list">
+        <li><div><b><code>GitService.UnstageAll()</code></b> — <span class="desc">a single
+            <code>Commands.Unstage(_repo, "*")</code> call, the mirror image of the existing
+            <code>StageAll()</code>'s <code>Commands.Stage(_repo, "*")</code>.</span></div></li>
+        <li><div><b>Disabled with nothing to do</b> — <span class="desc">the button's
+            <code>CanExecute</code> checks <code>StagedFiles.Count &gt; 0</code>, the same guard style already
+            used for the commit button, so it's visibly inert rather than a no-op click when the staging area
+            is empty.</span></div></li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════ WHAT'S LEFT NOW ══════════════════════ -->
+    <section class="phase" id="left">
+      <div class="phase-head">
+        <h2 class="phase-title display">What's left now</h2>
+      </div>
+      <p class="thesis">All five items from this round's punch list are in.</p>
+      <ul class="left-list done">
+        <li><span class="tag mono">DONE</span><span><b>Dark "Into" picker</b> — full <code>ComboBox</code>/
+            <code>ComboBoxItem</code> re-template, matching every other themed control in the app.</span></li>
+        <li><span class="tag mono">DONE</span><span><b>Type-to-filter branch search</b> — substring match,
+            live as you type, no more scrolling a long branch list by eye.</span></li>
+        <li><span class="tag mono">DONE</span><span><b>Discard on the full selection</b> — batched into one
+            <code>CheckoutPaths</code> call, one confirm dialog.</span></li>
+        <li><span class="tag mono">DONE</span><span><b>Unstage All</b> — next to Stage All in the Staged
+            Files header.</span></li>
+        <li><span class="tag mono">DONE</span><span><b>Stage / Unstage on the full selection</b> — same
+            <code>ResolveFileTargets</code> logic backs both directions.</span></li>
+      </ul>
+    </section>
+
+    <footer class="colophon">
+      <p><b>Verification.</b> Confirmed by a clean rebuild (<code>0</code> warnings, <code>0</code> errors)
+         after each change, including after catching and fixing the ToggleButton hit-test regression in the
+         first pass of the ComboBox template. This session had no screen-capture tooling available, so the
+         dark popup and filtering behavior were verified by tracing the template and event-handler logic by
+         hand rather than by an on-screen check — worth a real look next time the app is run manually.</p>
+    </footer>
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('#rail-list a'));
+    var sections = links.map(function (a) {
+      return document.querySelector(a.getAttribute('href'));
+    });
+
+    if (!('IntersectionObserver' in window)) return;
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        var idx = sections.indexOf(entry.target);
+        if (idx === -1) return;
+        if (entry.isIntersecting) {
+          links.forEach(function (l) { l.classList.remove('active'); });
+          links[idx].classList.add('active');
+        }
+      });
+    }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+
+    sections.forEach(function (s) { if (s) observer.observe(s); });
+  })();
+</script>
+</html>

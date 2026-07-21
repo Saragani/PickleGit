@@ -1,0 +1,312 @@
+<Window x:Class="PickleGit.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings" Height="640" Width="600" MinHeight="480" MinWidth="560"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize" ShowInTaskbar="False"
+        Icon="pack://application:,,,/Resources/pickle.ico"
+        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextPrimaryBrush}">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="../Themes/DarkTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <Style x:Key="SectionButton" TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                <Setter Property="Padding" Value="10,5"/>
+                <Setter Property="Margin" Value="0,0,6,0"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Settings" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16"/>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,16">
+            <Button x:Name="GeneralSectionButton" Content="General" Style="{StaticResource SectionButton}" Tag="General" Click="ShowSection_Click"/>
+            <Button x:Name="ProfileSectionButton" Content="Profile" Style="{StaticResource SectionButton}" Tag="Profile" Click="ShowSection_Click"/>
+            <Button x:Name="UISectionButton" Content="UI" Style="{StaticResource SectionButton}" Tag="UI" Click="ShowSection_Click"/>
+            <Button x:Name="GitBehaviorSectionButton" Content="Git Behavior" Style="{StaticResource SectionButton}" Tag="GitBehavior" Click="ShowSection_Click"/>
+            <Button x:Name="IntegrationsSectionButton" Content="Integrations" Style="{StaticResource SectionButton}" Tag="Integrations" Click="ShowSection_Click"/>
+            <Button x:Name="ShortcutsSectionButton" Content="Shortcuts" Style="{StaticResource SectionButton}" Tag="Shortcuts" Click="ShowSection_Click"/>
+            <Button x:Name="AboutSectionButton" Content="About" Style="{StaticResource SectionButton}" Tag="About" Click="ShowSection_Click"/>
+        </StackPanel>
+
+        <Grid Grid.Row="2">
+            <!-- ── GENERAL ─────────────────────────────────────────────────── -->
+            <ScrollViewer x:Name="GeneralSection" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="git.exe path override" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Leave blank to auto-discover git.exe from PATH or the standard install locations."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Name="GitPathBox" Style="{StaticResource DarkTextBox}"
+                                 Text="{Binding GitExePathOverride, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Button Grid.Column="2" Content="Browse…" Style="{StaticResource ToolbarButton}"
+                                Click="BrowseGitPath_Click"/>
+                    </Grid>
+
+                    <TextBlock Text="Commit history load limit (new tabs)" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                    <TextBox Name="CommitLimitBox" Style="{StaticResource DarkTextBox}" Width="140"
+                             HorizontalAlignment="Left"
+                             Text="{Binding DefaultCommitLoadLimit, UpdateSourceTrigger=PropertyChanged}"
+                             Margin="0,0,0,20"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ── PROFILE ─────────────────────────────────────────────────── -->
+            <ScrollViewer x:Name="ProfileSection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock Text="DEFAULT IDENTITY" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"/>
+                    <TextBlock Text="Used for commits/merges/stashes when a repository has no git config identity and no per-repository override below."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                    <TextBlock Text="Name" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                    <TextBox Style="{StaticResource DarkTextBox}" Margin="0,0,0,10"
+                             Text="{Binding DefaultAuthorName, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Text="Email" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                    <TextBox Style="{StaticResource DarkTextBox}" Margin="0,0,0,20"
+                             Text="{Binding DefaultAuthorEmail, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <Separator Margin="0,0,0,16"/>
+
+                    <TextBlock Text="THIS REPOSITORY'S OVERRIDE" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8"/>
+                    <TextBlock Text="Takes priority over both the repo's own git config and the default identity above."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,10"
+                               Visibility="{Binding ActiveTab, Converter={StaticResource NullToVis}}"/>
+                    <TextBlock Text="Open a repository to set a per-repository identity override."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,10"
+                               Visibility="{Binding ActiveTab, Converter={StaticResource InvertNullToVis}}"/>
+                    <StackPanel>
+                        <TextBlock Text="Name" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                        <TextBox Style="{StaticResource DarkTextBox}" Margin="0,0,0,10"
+                                 Text="{Binding ActiveTab.AuthorName, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="Email" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                        <TextBox Style="{StaticResource DarkTextBox}" Margin="0,0,0,12"
+                                 Text="{Binding ActiveTab.AuthorEmail, UpdateSourceTrigger=PropertyChanged}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Save as Override" Style="{StaticResource ToolbarButton}" Padding="10,4"
+                                    Margin="0,0,8,0" Command="{Binding SaveRepoIdentityCommand}"/>
+                            <Button Content="Clear Override" Style="{StaticResource ToolbarButton}" Padding="10,4"
+                                    Command="{Binding ClearRepoIdentityCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ── UI ───────────────────────────────────────────────────────── -->
+            <ScrollViewer x:Name="UISection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock Text="Theme" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                    <ComboBox x:Name="ThemeBox" Width="180" HorizontalAlignment="Left"
+                              SelectionChanged="ThemeBox_SelectionChanged" Margin="0,0,0,4">
+                        <ComboBoxItem Content="Dark" Tag="Dark"/>
+                        <ComboBoxItem Content="Light" Tag="Light"/>
+                    </ComboBox>
+                    <TextBlock Text="Applies immediately."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
+                               TextWrapping="Wrap" Margin="0,0,0,20"/>
+
+                    <TextBlock Text="Date/time format (commit list)" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                    <TextBox Style="{StaticResource DarkTextBox}" Width="220" HorizontalAlignment="Left"
+                             Text="{Binding DateFormat, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,6"/>
+                    <TextBlock Text="A .NET date format string. Examples: yyyy-MM-dd HH:mm · MM/dd/yyyy h:mm tt · dd/MM/yyyy HH:mm · MMM d, yyyy h:mm tt"
+                               FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,20"/>
+
+                    <CheckBox Content="Show relative dates (e.g. 2h ago)"
+                              IsChecked="{Binding UseRelativeDates}" Margin="0,0,0,4"/>
+                    <TextBlock Text="The commit list shows how long ago each commit was made; hover for the exact date. Takes effect on the next refresh."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,20"/>
+
+                    <CheckBox Content="Confirm before discarding changes"
+                              IsChecked="{Binding ConfirmBeforeDiscard}" Margin="0,0,0,4"/>
+                    <TextBlock Text="When off, the discard-changes button/menu item acts immediately with no confirmation dialog."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,20"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ── GIT BEHAVIOR ─────────────────────────────────────────────── -->
+            <ScrollViewer x:Name="GitBehaviorSection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                <StackPanel>
+                    <CheckBox Content="Remember conflict resolutions (rerere)"
+                              IsChecked="{Binding RerereEnabled}" Margin="0,0,0,10"/>
+
+                    <CheckBox Content="Sign commits with GPG"
+                              IsChecked="{Binding GpgSignCommits}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Requires a configured signing key (user.signingkey) and Git for Windows. Applies via `git commit -S`."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+                    <Button Content="Install Git LFS for this repository" HorizontalAlignment="Left"
+                            Style="{StaticResource ToolbarButton}"
+                            Command="{Binding ActiveTab.InstallLfsCommand}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Runs `git lfs install`. Requires the Git LFS extension to already be installed on this machine."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,20"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ── INTEGRATIONS ─────────────────────────────────────────────── -->
+            <ScrollViewer x:Name="IntegrationsSection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock Text="Access tokens for pull-request lookups on GitHub, GitLab, and Bitbucket Cloud. GitHub/GitLab use a personal access token; Bitbucket uses your username + an app password."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                    <ItemsControl Name="ConfiguredHostsList" Margin="0,0,0,10">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Domain}" FontWeight="SemiBold" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding Username}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="Remove" Style="{StaticResource ToolbarButton}"
+                                            Click="RemoveHostToken_Click" Tag="{Binding}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition/>
+                            <RowDefinition Height="6"/>
+                            <RowDefinition/>
+                        </Grid.RowDefinitions>
+                        <TextBox Grid.Row="0" Grid.Column="0" Name="HostDomainBox" Style="{StaticResource DarkTextBox}"
+                                 Text="github.com"/>
+                        <TextBox Grid.Row="0" Grid.Column="2" Name="HostUsernameBox" Style="{StaticResource DarkTextBox}"
+                                 Text=""/>
+                        <PasswordBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="1" Name="HostSecretBox"
+                                     Style="{StaticResource DarkPasswordBox}"/>
+                        <Button Grid.Row="2" Grid.Column="2" Content="Save token" HorizontalAlignment="Left" Width="140"
+                                Style="{StaticResource ToolbarButton}" Click="SaveHostToken_Click"/>
+                    </Grid>
+                    <TextBlock Text="Domain (e.g. github.com) · Username (Bitbucket only, else leave blank) · Token/app-password"
+                               FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,4,0,0"/>
+
+                    <Separator Margin="0,14,0,10"/>
+
+                    <TextBlock Text="SELF-HOSTED SERVERS" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Map a custom domain to its provider type so pull requests work on GitHub Enterprise Server or self-managed GitLab (add its token above)."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                    <ItemsControl Name="SelfHostedList" Margin="0,0,0,8">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Domain}" FontWeight="SemiBold" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding KindLabel}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="Remove" Style="{StaticResource ToolbarButton}"
+                                            Click="RemoveSelfHosted_Click" Tag="{Binding}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="170"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Name="SelfHostedDomainBox" Style="{StaticResource DarkTextBox}"
+                                 ToolTip="e.g. git.mycompany.com"/>
+                        <ComboBox Grid.Column="2" Name="SelfHostedKindBox" SelectedIndex="0">
+                            <ComboBoxItem Content="GitHub Enterprise" Tag="github"/>
+                            <ComboBoxItem Content="GitLab (self-managed)" Tag="gitlab"/>
+                        </ComboBox>
+                        <Button Grid.Column="4" Content="Add" Width="80"
+                                Style="{StaticResource ToolbarButton}" Click="AddSelfHosted_Click"/>
+                    </Grid>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ── SHORTCUTS ────────────────────────────────────────────────── -->
+            <ScrollViewer x:Name="ShortcutsSection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock Text="Click a gesture box, type a new combination (e.g. Ctrl+Shift+K), then Save. Clear the box and Save to disable a shortcut."
+                               FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                    <ItemsControl Name="ShortcutsList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="180"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="4"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding DisplayName}" VerticalAlignment="Center" FontSize="12"/>
+                                    <TextBox Grid.Column="2" Style="{StaticResource DarkTextBox}"
+                                             Text="{Binding GestureText, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Button Grid.Column="4" Content="Save" Style="{StaticResource ToolbarButton}"
+                                            Padding="10,4" Click="SaveShortcut_Click" Tag="{Binding}"/>
+                                    <Button Grid.Column="6" Content="Reset" Style="{StaticResource ToolbarButton}"
+                                            Padding="10,4" Click="ResetShortcut_Click" Tag="{Binding}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ── ABOUT ────────────────────────────────────────────────────── -->
+            <ScrollViewer x:Name="AboutSection" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock Text="PickleGit" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="VersionText" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,12"/>
+                    <TextBlock Text="A fast, keyboard-friendly Git client for Windows."
+                               FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                    <TextBlock FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap">
+                        <Run Text="Settings:"/> <Run x:Name="SettingsPathText" FontFamily="Consolas"/>
+                        <LineBreak/>
+                        <Run Text="Log:"/> <Run x:Name="LogPathText" FontFamily="Consolas"/>
+                    </TextBlock>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Close" Style="{StaticResource AccentButton}" Width="80" Click="Close_Click"
+                    IsDefault="True" IsCancel="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

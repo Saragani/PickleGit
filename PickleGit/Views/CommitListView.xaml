@@ -1,0 +1,577 @@
+<UserControl x:Class="PickleGit.Views.CommitListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+             xmlns:vm="clr-namespace:PickleGit.ViewModels"
+             xmlns:ctrl="clr-namespace:PickleGit.Controls"
+             xmlns:conv="clr-namespace:PickleGit.Converters"
+             xmlns:behaviors="clr-namespace:PickleGit.Behaviors"
+             xmlns:models="clr-namespace:PickleGit.Models">
+
+    <UserControl.Resources>
+        <!-- ── Column resize thumb style ─────────────────────────────────── -->
+        <Style x:Key="ColResizeThumb" TargetType="Thumb">
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="SizeWE"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="Transparent"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ── Gear button style ──────────────────────────────────────────── -->
+        <Style x:Key="GearButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="Width" Value="22"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceAltBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Row 0: Search / filter bar (Ctrl+F) -->
+        <Border Grid.Row="0"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="6,4"
+                Visibility="{Binding IsSearchOpen, Converter={StaticResource BoolToVis}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
+                           Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                <TextBox Grid.Column="1" x:Name="SearchBox"
+                         Style="{StaticResource DarkTextBox}"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                         ToolTip="Filter commits by message, author name/email, or SHA (Esc to close)"
+                         KeyDown="SearchBox_KeyDown"/>
+                <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="8,0"
+                           FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
+                           Visibility="{Binding ShowSearchMatchCount, Converter={StaticResource BoolToVis}}">
+                    <Run Text="{Binding SearchMatchCount, Mode=OneWay}"/><Run Text=" matches"/>
+                </TextBlock>
+                <Button Grid.Column="3" Content="✕" Style="{StaticResource GearButton}"
+                                AutomationProperties.Name="Close search"
+                        ToolTip="Close search (Esc)" Click="CloseSearch_Click"/>
+            </Grid>
+        </Border>
+
+        <!-- Row 1: Column headers + gear button -->
+        <Border Grid.Row="1"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="22"/>
+                    <ColumnDefinition Width="22"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Scrollable header — offset is driven by the ListView ScrollChanged event -->
+                <ScrollViewer x:Name="HeaderScroller"
+                              Grid.Column="0"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled">
+                    <Grid Margin="0,4,0,4">
+                        <Grid.ColumnDefinitions>
+                            <!-- BRANCH / TAG -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthBranchTag, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <!-- GRAPH -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthGraph, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <!-- COMMIT / DESCRIPTION -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthCommitDesc, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <!-- AUTHOR -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthAuthor, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <!-- DATE / TIME -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthDateTime, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <!-- SHA -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthSha, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- BRANCH / TAG header cell -->
+                        <Border Grid.Column="0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+                            <Grid>
+                                <TextBlock Text="BRANCH / TAG" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           VerticalAlignment="Center" Margin="4,0"/>
+                                <Thumb Style="{StaticResource ColResizeThumb}" DragDelta="ResizeBranchTag_DragDelta"/>
+                            </Grid>
+                        </Border>
+                        <!-- GRAPH header cell -->
+                        <Border Grid.Column="1" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+                            <Grid>
+                                <TextBlock Text="GRAPH" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           VerticalAlignment="Center" Margin="4,0"/>
+                                <Thumb Style="{StaticResource ColResizeThumb}" DragDelta="ResizeGraph_DragDelta"/>
+                            </Grid>
+                        </Border>
+                        <!-- COMMIT / DESCRIPTION header cell -->
+                        <Border Grid.Column="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+                            <Grid>
+                                <TextBlock Text="COMMIT / DESCRIPTION" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           VerticalAlignment="Center" Margin="4,0"/>
+                                <Thumb Style="{StaticResource ColResizeThumb}" DragDelta="ResizeCommitDesc_DragDelta"/>
+                            </Grid>
+                        </Border>
+                        <!-- AUTHOR header cell -->
+                        <Border Grid.Column="3" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+                            <Grid>
+                                <TextBlock Text="AUTHOR" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           VerticalAlignment="Center" Margin="4,0"/>
+                                <Thumb Style="{StaticResource ColResizeThumb}" DragDelta="ResizeAuthor_DragDelta"/>
+                            </Grid>
+                        </Border>
+                        <!-- DATE / TIME header cell -->
+                        <Border Grid.Column="4" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+                            <Grid>
+                                <TextBlock Text="DATE / TIME" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           VerticalAlignment="Center" Margin="4,0"/>
+                                <Thumb Style="{StaticResource ColResizeThumb}" DragDelta="ResizeDateTime_DragDelta"/>
+                            </Grid>
+                        </Border>
+                        <!-- SHA header cell -->
+                        <Border Grid.Column="5" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+                            <Grid>
+                                <TextBlock Text="SHA" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           VerticalAlignment="Center" Margin="4,0"/>
+                                <Thumb Style="{StaticResource ColResizeThumb}" DragDelta="ResizeSha_DragDelta"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </ScrollViewer>
+
+                <!-- Search toggle (fixed, does not scroll) -->
+                <Button Grid.Column="1"
+                        Content="🔍"
+                        FontSize="10"
+                        Style="{StaticResource GearButton}"
+                        Click="SearchToggle_Click"
+                        ToolTip="Filter commits (Ctrl+F)"/>
+
+                <!-- Gear / column-settings button (fixed, does not scroll) -->
+                <Button Grid.Column="2"
+                        Content="&#x2699;"
+                        Style="{StaticResource GearButton}"
+                        Click="GearButton_Click"
+                        ToolTip="Column settings"
+                        Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="BRANCH / TAG" IsCheckable="True"
+                                      IsChecked="{Binding PlacementTarget.Tag.ShowBranchTag,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      IsEnabled="{Binding PlacementTarget.Tag.CanToggleBranchTag,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="GRAPH" IsCheckable="True"
+                                      IsChecked="{Binding PlacementTarget.Tag.ShowGraph,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      IsEnabled="{Binding PlacementTarget.Tag.CanToggleGraph,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="COMMIT / DESCRIPTION" IsCheckable="True"
+                                      IsChecked="{Binding PlacementTarget.Tag.ShowCommitDesc,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      IsEnabled="{Binding PlacementTarget.Tag.CanToggleCommitDesc,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="AUTHOR" IsCheckable="True"
+                                      IsChecked="{Binding PlacementTarget.Tag.ShowAuthor,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      IsEnabled="{Binding PlacementTarget.Tag.CanToggleAuthor,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="DATE / TIME" IsCheckable="True"
+                                      IsChecked="{Binding PlacementTarget.Tag.ShowDateTime,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      IsEnabled="{Binding PlacementTarget.Tag.CanToggleDateTime,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="SHA" IsCheckable="True"
+                                      IsChecked="{Binding PlacementTarget.Tag.ShowSha,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      IsEnabled="{Binding PlacementTarget.Tag.CanToggleSha,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <Separator/>
+                            <MenuItem Header="Smart Branch Visibility" IsCheckable="True"
+                                      IsChecked="{Binding PlacementTarget.Tag.SmartBranchVisibility,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <Separator/>
+                            <MenuItem Header="Reset column widths"
+                                      Command="{Binding PlacementTarget.Tag.ResetColumnWidthsCommand,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Row 2: Commit ListView -->
+        <ListView x:Name="CommitList"
+                  Grid.Row="2"
+                  Style="{StaticResource DarkListView}"
+                  SelectionMode="Extended"
+                  ItemContainerStyle="{StaticResource DarkListViewItem}"
+                  ItemsSource="{Binding GraphNodes}"
+                  VirtualizingStackPanel.IsVirtualizing="True"
+                  VirtualizingStackPanel.VirtualizationMode="Recycling"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
+            <i:Interaction.Behaviors>
+                <behaviors:ListViewMultiSelectBehavior
+                    SelectedItems="{Binding SelectedNodes}"/>
+            </i:Interaction.Behaviors>
+
+            <ListView.ItemTemplate>
+                <DataTemplate DataType="{x:Type models:GraphNode}">
+                    <Grid x:Name="RowRoot" Height="32" Background="Transparent"
+                          PreviewMouseLeftButtonDown="CommitRow_PreviewMouseLeftButtonDown"
+                          PreviewMouseMove="CommitRow_PreviewMouseMove">
+                        <Grid.ColumnDefinitions>
+                            <!-- BRANCH / TAG -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthBranchTag, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <!-- GRAPH (fixed width — CommitGraphCell clips if too many lanes) -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthGraph, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <!-- COMMIT / DESCRIPTION -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthCommitDesc, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <!-- AUTHOR -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthAuthor, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <!-- DATE / TIME -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthDateTime, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <!-- SHA -->
+                            <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthSha, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- BRANCH / TAG: ref badges (capped, "+N" overflow; hover for all),
+                             plus a "ghost refs" overlay populated only while hovering this row's
+                             message/author/date/sha (Feature B) — half-opacity, non-interactive. -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                    VerticalAlignment="Center" Margin="4,0"
+                                    ClipToBounds="True">
+                            <ItemsControl ItemsSource="{Binding Commit.Refs, Converter={StaticResource RefsOverflow}}"
+                                          ToolTip="{Binding Commit.Refs, Converter={StaticResource RefsTooltip}}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <ctrl:RefLabel RefName="{Binding}" Margin="0,0,3,0"
+                                                       MouseEnter="RefLabel_MouseEnter"
+                                                       MouseLeave="RefLabel_MouseLeave"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <ItemsControl x:Name="GhostRefsHost" Opacity="0.5" IsHitTestVisible="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <ctrl:RefLabel RefName="{Binding}" Margin="0,0,3,0"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- GRAPH: commit node + lines, clipped to column width -->
+                        <Grid Grid.Column="1" ClipToBounds="True">
+                            <ctrl:CommitGraphCell Node="{Binding}"
+                                                  HorizontalAlignment="Left"
+                                                  Width="{Binding TotalLanes, Converter={StaticResource GraphWidth}}">
+                                <ctrl:CommitGraphCell.ToolTip>
+                                    <ToolTip>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Commit.AuthorName}"
+                                                       FontWeight="SemiBold" FontSize="12"/>
+                                            <TextBlock Text="{Binding Commit.AuthorEmail}"
+                                                       FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </ctrl:CommitGraphCell.ToolTip>
+                            </ctrl:CommitGraphCell>
+                        </Grid>
+
+                        <!-- COMMIT / DESCRIPTION: bisect badge (only while a bisect is in progress) + message
+                             text. A nested Grid, not a StackPanel — StackPanel measures its children with
+                             infinite available width in the stacking direction, which silently defeats the
+                             message TextBlock's TextTrimming (it never gets a bounded width to trim against). -->
+                        <Grid Grid.Column="2" Margin="4,0" Background="Transparent"
+                              MouseEnter="RowContent_MouseEnter" MouseLeave="RowContent_MouseLeave">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="14" Height="14" CornerRadius="7" Margin="0,0,4,0" VerticalAlignment="Center"
+                                    Background="{Binding Commit.BisectMark, Converter={StaticResource BisectMarkToColor}}"
+                                    ToolTip="{Binding Commit.BisectMark}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Commit.BisectMark}" Value="None">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="{Binding Commit.BisectMark, Converter={StaticResource BisectMarkToLabel}}"
+                                           FontSize="9" FontWeight="Bold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Commit.MessageShort}"
+                                       ToolTip="{Binding Commit.Message}"
+                                       ToolTipService.InitialShowDelay="600"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       FontSize="13">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Commit.IsUncommitted}" Value="True">
+                                                <Setter Property="FontStyle" Value="Italic"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+
+                        <!-- AUTHOR -->
+                        <TextBlock Grid.Column="3"
+                                   Text="{Binding Commit.AuthorName}"
+                                   ToolTip="{Binding Commit.AuthorEmail}"
+                                   ToolTipService.InitialShowDelay="600"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   Background="Transparent"
+                                   MouseEnter="RowContent_MouseEnter" MouseLeave="RowContent_MouseLeave"
+                                   FontSize="12" Margin="4,0"/>
+
+                        <!-- DATE / TIME -->
+                        <TextBlock Grid.Column="4"
+                                   Text="{Binding Commit.AuthorDate, Converter={StaticResource DateFmt}}"
+                                   ToolTip="{Binding Commit.AuthorDate, Converter={StaticResource DateFmt}, ConverterParameter=abs}"
+                                   ToolTipService.InitialShowDelay="600"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   Background="Transparent"
+                                   MouseEnter="RowContent_MouseEnter" MouseLeave="RowContent_MouseLeave"
+                                   FontSize="12" Margin="4,0"/>
+
+                        <!-- SHA -->
+                        <TextBlock Grid.Column="5"
+                                   Text="{Binding Commit.ShortSha}"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   Background="Transparent"
+                                   MouseEnter="RowContent_MouseEnter" MouseLeave="RowContent_MouseLeave"
+                                   FontSize="10" FontFamily="Consolas"
+                                   Margin="4,0"/>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+
+            <ListView.ContextMenu>
+                <ContextMenu>
+                    <ContextMenu.Resources>
+                        <!-- Single-selection items share this visibility -->
+                        <Style x:Key="SingleSelItem" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                            <Setter Property="Visibility"
+                                    Value="{Binding PlacementTarget.DataContext.IsMultiSelection,
+                                            Converter={StaticResource InvertBoolToVis},
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        </Style>
+                        <Style x:Key="SingleSelSeparator" TargetType="Separator"
+                               BasedOn="{StaticResource {x:Static MenuItem.SeparatorStyleKey}}">
+                            <Setter Property="Visibility"
+                                    Value="{Binding PlacementTarget.DataContext.IsMultiSelection,
+                                            Converter={StaticResource InvertBoolToVis},
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        </Style>
+                    </ContextMenu.Resources>
+
+                    <!-- Single-commit actions (hidden when multiple are selected) -->
+                    <MenuItem Header="Checkout commit (detached)" Style="{StaticResource SingleSelItem}"
+                              Command="{Binding PlacementTarget.DataContext.CheckoutCommitCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="Create branch here…" Style="{StaticResource SingleSelItem}"
+                              Command="{Binding PlacementTarget.DataContext.CreateBranchCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                              CommandParameter="here"/>
+                    <MenuItem Header="Create tag here…" Style="{StaticResource SingleSelItem}"
+                              Command="{Binding PlacementTarget.DataContext.CreateTagCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                              CommandParameter="here"/>
+                    <Separator Style="{StaticResource SingleSelSeparator}"/>
+                    <MenuItem Header="Revert commit" Style="{StaticResource SingleSelItem}"
+                              Command="{Binding PlacementTarget.DataContext.RevertCommitCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="Reset current branch to here" Style="{StaticResource SingleSelItem}">
+                        <MenuItem Header="Soft — keep changes staged"
+                                  Command="{Binding PlacementTarget.DataContext.ResetToCommitCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="soft"/>
+                        <MenuItem Header="Mixed — keep changes unstaged"
+                                  Command="{Binding PlacementTarget.DataContext.ResetToCommitCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="mixed"/>
+                        <MenuItem Header="Hard — discard all changes"
+                                  Command="{Binding PlacementTarget.DataContext.ResetToCommitCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="hard"/>
+                    </MenuItem>
+                    <MenuItem Header="Rebase current branch onto here" Style="{StaticResource SingleSelItem}"
+                              Command="{Binding PlacementTarget.DataContext.RebaseOntoCommitCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="Interactive rebase current branch onto here…" Style="{StaticResource SingleSelItem}"
+                              Command="{Binding PlacementTarget.DataContext.InteractiveRebaseOntoCommitCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <Separator Style="{StaticResource SingleSelSeparator}"/>
+                    <MenuItem Header="Start bisect: mark bad" Style="{StaticResource SingleSelItem}"
+                              ToolTip="Marks this commit as known-bad and begins a bisect session"
+                              Command="{Binding PlacementTarget.DataContext.MarkBisectBadCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="Mark as good (start bisect from here)" Style="{StaticResource SingleSelItem}"
+                              ToolTip="Marks this commit as known-good and starts bisecting between it and the bad commit"
+                              Visibility="{Binding PlacementTarget.DataContext.IsBisectPending,
+                                           Converter={StaticResource BoolToVis},
+                                           RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                              Command="{Binding PlacementTarget.DataContext.MarkBisectGoodCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <Separator Style="{StaticResource SingleSelSeparator}"/>
+                    <MenuItem Header="Copy SHA" Style="{StaticResource SingleSelItem}"
+                              Command="{Binding PlacementTarget.DataContext.CopyShaCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="Copy commit message" Style="{StaticResource SingleSelItem}"
+                              Command="{Binding PlacementTarget.DataContext.CopyCommitMessageCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="Save as patch…" Style="{StaticResource SingleSelItem}"
+                              Command="{Binding PlacementTarget.DataContext.SaveCommitAsPatchCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="Cherry-pick commit" Style="{StaticResource SingleSelItem}"
+                              Command="{Binding PlacementTarget.DataContext.CherryPickRangeCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+
+                    <!-- Multi-commit actions (visible only when 2+ commits selected) -->
+                    <MenuItem
+                              Visibility="{Binding PlacementTarget.DataContext.IsMultiSelection,
+                                           Converter={StaticResource BoolToVis},
+                                           RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                              Command="{Binding PlacementTarget.DataContext.CherryPickRangeCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                        <MenuItem.Header>
+                            <TextBlock>
+                                <Run Text="Cherry-pick "/>
+                                <Run Text="{Binding PlacementTarget.DataContext.SelectedCount,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                            Mode=OneWay}"/>
+                                <Run Text=" commits"/>
+                            </TextBlock>
+                        </MenuItem.Header>
+                    </MenuItem>
+                    <MenuItem
+                              Visibility="{Binding PlacementTarget.DataContext.IsMultiSelection,
+                                           Converter={StaticResource BoolToVis},
+                                           RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                              Command="{Binding PlacementTarget.DataContext.RevertRangeCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                        <MenuItem.Header>
+                            <TextBlock>
+                                <Run Text="Revert "/>
+                                <Run Text="{Binding PlacementTarget.DataContext.SelectedCount,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                            Mode=OneWay}"/>
+                                <Run Text=" commits"/>
+                            </TextBlock>
+                        </MenuItem.Header>
+                    </MenuItem>
+                    <MenuItem
+                              Visibility="{Binding PlacementTarget.DataContext.IsMultiSelection,
+                                           Converter={StaticResource BoolToVis},
+                                           RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                              Command="{Binding PlacementTarget.DataContext.SaveCommitsAsPatchCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                        <MenuItem.Header>
+                            <TextBlock>
+                                <Run Text="Save "/>
+                                <Run Text="{Binding PlacementTarget.DataContext.SelectedCount,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                            Mode=OneWay}"/>
+                                <Run Text=" commits as patch…"/>
+                            </TextBlock>
+                        </MenuItem.Header>
+                    </MenuItem>
+                </ContextMenu>
+            </ListView.ContextMenu>
+        </ListView>
+
+        <!-- Row 2 overlay: empty state (no commits / no search matches) -->
+        <TextBlock Grid.Row="2" Text="{Binding EmptyStateText}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   FontSize="13" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="360"
+                   Foreground="{DynamicResource TextSecondaryBrush}" IsHitTestVisible="False"
+                   Visibility="{Binding ShowEmptyState, Converter={StaticResource BoolToVis}}"/>
+
+        <!-- Row 2 overlay: subtle loading indicator while a refresh/operation runs -->
+        <Border Grid.Row="2" VerticalAlignment="Top" Height="3" IsHitTestVisible="False"
+                Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
+            <ProgressBar IsIndeterminate="True" Height="3" BorderThickness="0"/>
+        </Border>
+
+        <!-- Row 3: Load more (history walk hit the commit ceiling) -->
+        <Border Grid.Row="3"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+                Background="{DynamicResource SurfaceBrush}"
+                Visibility="{Binding HasMoreCommits, Converter={StaticResource BoolToVis}}">
+            <Button Content="Load more commits…"
+                    Style="{StaticResource ToolbarButton}"
+                    HorizontalAlignment="Stretch" Padding="0,6" Margin="0"
+                    Command="{Binding LoadMoreCommitsCommand}"/>
+        </Border>
+    </Grid>
+</UserControl>

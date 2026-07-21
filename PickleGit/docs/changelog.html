@@ -1,0 +1,892 @@
+<html data-theme="dark"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><title>Building PickleGit — Engineering Changelog</title><script>document.documentElement.setAttribute("data-theme","dark")</script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #14171c;
+    --surface: #1b2027;
+    --surface-2: #232a33;
+    --border: #2b323c;
+    --text: #e7e9ec;
+    --text-dim: #8b929a;
+    --accent: #9a82d1;
+    --accent-dim: #6b5590;
+    --accent-text: #f3effa;
+    --good: #6fbe72;
+    --good-bg: #1c2a1e;
+    --warn: #d69a67;
+    --warn-bg: #2f2216;
+    --info: #6ea3d6;
+    --info-bg: #182531;
+    --shadow: 0 20px 50px -25px rgba(0,0,0,0.6);
+  }
+
+  :root[data-theme="light"] {
+    --bg: #f7f6f3;
+    --surface: #ffffff;
+    --surface-2: #efece5;
+    --border: #ddd8cd;
+    --text: #22262b;
+    --text-dim: #6b6f76;
+    --accent: #6b4fa0;
+    --accent-dim: #8a72b8;
+    --accent-text: #ffffff;
+    --good: #2f7a37;
+    --good-bg: #e6f1e6;
+    --warn: #93551a;
+    --warn-bg: #f5e9da;
+    --info: #2c5c88;
+    --info-bg: #e3edf5;
+    --shadow: 0 20px 50px -30px rgba(30,25,15,0.25);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f7f6f3;
+      --surface: #ffffff;
+      --surface-2: #efece5;
+      --border: #ddd8cd;
+      --text: #22262b;
+      --text-dim: #6b6f76;
+      --accent: #6b4fa0;
+      --accent-dim: #8a72b8;
+      --accent-text: #ffffff;
+      --good: #2f7a37;
+      --good-bg: #e6f1e6;
+      --warn: #93551a;
+      --warn-bg: #f5e9da;
+      --info: #2c5c88;
+      --info-bg: #e3edf5;
+      --shadow: 0 20px 50px -30px rgba(30,25,15,0.25);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Segoe UI Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .display {
+    font-family: "Palatino Linotype", "Iowan Old Style", "URW Palladio L", Palatino, Georgia, serif;
+  }
+
+  .mono {
+    font-family: Consolas, "Cascadia Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a { color: var(--accent); }
+
+  ::selection {
+    background: var(--accent-dim);
+    color: var(--accent-text);
+  }
+
+  /* ── Layout shell ─────────────────────────────────────────────── */
+
+  .page {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    max-width: 1180px;
+    margin: 0 auto;
+    align-items: start;
+  }
+
+  .railwrap {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    padding: 40px 16px 40px 32px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+  }
+
+  .rail-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 28px;
+  }
+  .rail-brand .mark { font-size: 20px; }
+  .rail-brand .name {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--text);
+  }
+
+  nav.rail ol {
+    list-style: none;
+    margin: 0 0 24px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  nav.rail a {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    padding: 7px 10px;
+    margin: 0 -10px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--text-dim);
+    font-size: 13.5px;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  nav.rail a .num {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    opacity: 0.7;
+    min-width: 1.4em;
+  }
+  nav.rail a:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+  nav.rail a.active {
+    background: var(--surface-2);
+    color: var(--text);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  nav.rail a.active .num { color: var(--accent); opacity: 1; }
+
+  nav.rail .rail-extra {
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+
+  .content { min-width: 0; padding: 56px 40px 40px 44px; }
+
+  /* ── Masthead ─────────────────────────────────────────────────── */
+
+  .masthead { margin-bottom: 64px; }
+
+  .eyebrow {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 16px;
+  }
+
+  h1.title {
+    font-size: clamp(2.1rem, 4vw, 3rem);
+    line-height: 1.08;
+    margin: 0 0 18px;
+    text-wrap: balance;
+    font-weight: 600;
+  }
+
+  .dek {
+    max-width: 62ch;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    line-height: 1.55;
+    margin: 0 0 32px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    max-width: 720px;
+  }
+  .stat {
+    background: var(--surface);
+    padding: 16px 18px;
+  }
+  .stat .n {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .l {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* ── Phase sections ───────────────────────────────────────────── */
+
+  section.phase {
+    scroll-margin-top: 24px;
+    padding: 44px 0;
+    border-top: 1px solid var(--border);
+  }
+  section.phase:first-of-type { border-top: none; padding-top: 0; }
+
+  .phase-head {
+    display: flex;
+    gap: 18px;
+    align-items: baseline;
+    margin-bottom: 10px;
+  }
+  .phase-badge {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 11px;
+    white-space: nowrap;
+  }
+  h2.phase-title {
+    font-size: 1.65rem;
+    margin: 0;
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
+  .thesis {
+    max-width: 66ch;
+    color: var(--text-dim);
+    margin: 0 0 26px;
+    font-size: 1.02rem;
+  }
+
+  .feature-list {
+    list-style: none;
+    margin: 0 0 20px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .feature-list li {
+    display: grid;
+    grid-template-columns: 20px minmax(0,1fr);
+    gap: 12px;
+  }
+  .feature-list li::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-top: 9px;
+    justify-self: center;
+  }
+  .feature-list b { font-weight: 600; }
+  .feature-list .desc { color: var(--text-dim); }
+  .feature-list code {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 0.88em;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.08em 0.4em;
+    color: var(--text);
+  }
+
+  .callout {
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    padding: 16px 18px;
+    margin: 18px 0;
+    display: flex;
+    gap: 12px;
+  }
+  .callout .icon { font-size: 1.1rem; line-height: 1.5; }
+  .callout .body { min-width: 0; }
+  .callout .kicker {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0 0 6px;
+    font-weight: 700;
+  }
+  .callout p { margin: 0 0 6px; color: var(--text); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout.bug {
+    background: var(--warn-bg);
+    border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
+  }
+  .callout.bug .kicker { color: var(--warn); }
+  .callout.verify {
+    background: var(--info-bg);
+    border-color: color-mix(in srgb, var(--info) 35%, var(--border));
+  }
+  .callout.verify .kicker { color: var(--info); }
+
+  .deferred-note {
+    font-size: 0.92rem;
+    color: var(--text-dim);
+    border-left: 2px solid var(--border);
+    padding-left: 14px;
+    margin-top: 18px;
+  }
+  .deferred-note b { color: var(--text); font-weight: 600; }
+
+  /* ── Architecture grid ────────────────────────────────────────── */
+
+  .arch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    margin-top: 10px;
+  }
+  .arch-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .arch-card h3 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .arch-card p {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 0.93rem;
+  }
+  .arch-card code {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 0.85em;
+    color: var(--accent);
+  }
+
+  /* ── What's left ──────────────────────────────────────────────── */
+
+  .left-list {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .left-list li {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    color: var(--text-dim);
+    font-size: 0.96rem;
+  }
+  .left-list .tag {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+  .left-list b { color: var(--text); font-weight: 600; }
+
+  footer.colophon {
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+    padding-top: 28px;
+    padding-bottom: 24px;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    max-width: 66ch;
+  }
+  footer.colophon p { margin: 0 0 10px; }
+
+  /* ── Mobile ───────────────────────────────────────────────────── */
+
+  @media (max-width: 860px) {
+    .page { grid-template-columns: 1fr; }
+    .railwrap {
+      position: static;
+      height: auto;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      padding: 18px 20px;
+    }
+    nav.rail ol { flex-direction: row; flex-wrap: wrap; }
+    .rail-extra { border-top: none; padding-top: 0; margin-top: 8px; }
+    .content { padding: 36px 20px; }
+  }
+</style>
+
+<div class="page">
+  <div class="railwrap">
+    <div class="rail-brand">
+      <span class="mark">🥒</span>
+      <span class="name">PickleGit</span>
+    </div>
+    <nav class="rail">
+      <ol id="rail-list">
+        <li><a href="#phase-0"><span class="num mono">00</span>Foundations</a></li>
+        <li><a href="#phase-1"><span class="num mono">01</span>Core Operations</a></li>
+        <li><a href="#phase-2"><span class="num mono">02</span>Conflicts &amp; Undo</a></li>
+        <li><a href="#phase-3"><span class="num mono">03</span>Diff &amp; Staging</a></li>
+        <li><a href="#phase-4"><span class="num mono">04</span>Rebase &amp; Drag-Drop</a></li>
+        <li><a href="#phase-5"><span class="num mono">05</span>UX Platform</a></li>
+        <li><a href="#phase-6"><span class="num mono">06</span>Hosting &amp; Ecosystem</a></li>
+      </ol>
+      <ol class="rail-extra">
+        <li><a href="#architecture"><span class="num mono">—</span>Architecture</a></li>
+        <li><a href="#left"><span class="num mono">—</span>What's left</a></li>
+      </ol>
+    </nav>
+  </div>
+
+  <div class="content">
+
+    <header class="masthead">
+      <p class="eyebrow">PickleGit — Engineering Changelog</p>
+      <h1 class="title display">Building PickleGit</h1>
+      <p class="dek">A phase-by-phase record of turning a working WPF git client into a Git daily
+         driver — conflict resolution, hunk staging, rebase, a command palette, hosted pull-request lookups,
+         and a fair number of things that broke along the way and got fixed before they shipped.</p>
+
+      <div class="stats">
+        <div class="stat"><div class="n mono">7</div><div class="l">phases, 00 → 06</div></div>
+        <div class="stat"><div class="n mono">8</div><div class="l">bugs caught live, not just in review</div></div>
+        <div class="stat"><div class="n mono">3</div><div class="l">hosting providers, one abstraction</div></div>
+        <div class="stat"><div class="n mono">1</div><div class="l">theme — dark, start to finish</div></div>
+      </div>
+    </header>
+
+    <!-- ══════════════════════ PHASE 0 ══════════════════════ -->
+    <section class="phase" id="phase-0">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 00</span>
+        <h2 class="phase-title display">Foundations</h2>
+      </div>
+      <p class="thesis">Before any feature work, the app needed plumbing that wouldn't buckle under everything
+         built on top of it: a threading model that couldn't deadlock, a CLI escape hatch for what LibGit2Sharp
+         refuses to do, and a way to notice changes without hammering the disk every two minutes.</p>
+
+      <ul class="feature-list">
+        <li><div><b>GitExecutor</b> — <span class="desc">a single dedicated thread now owns every
+            LibGit2Sharp call. Nothing touches the <code>Repository</code> object from the UI thread or a bare
+            <code>Task.Run</code> again; every later feature routes through it.</span></div></li>
+        <li><div><b>Single-walk ref-mask visibility</b> — <span class="desc">branch membership is
+            computed as a bitmask during the one history walk that already runs, removing a second full walk
+            that existed purely to answer "is this commit on my branch."</span></div></li>
+        <li><div><b>Paged history + skip-unchanged refresh</b> — <span class="desc">a "Load more"
+            footer replaces the hard commit cap, and a state-signature check skips rebuilding the graph and
+            re-serializing the cache when nothing has actually changed.</span></div></li>
+        <li><div><b>RepositoryWatcher</b> — <span class="desc">a debounced <code>FileSystemWatcher</code>
+            on the working directory and <code>.git</code> replaces a 2-minute polling timer with near-instant
+            external-change detection. The timer survives only as a 5-minute failsafe for network drives.</span></div></li>
+        <li><div><b>GitCli + CliGitService</b> — <span class="desc">the process runner and typed
+            wrapper around <code>git.exe</code> that every later CLI-backed feature — rebase, SSH, GPG, LFS —
+            is built on top of.</span></div></li>
+        <li><div><b>Dialog infrastructure</b> — <span class="desc"><code>DialogService</code> with
+            themed Prompt / Confirm / Error windows, retiring <code>Microsoft.VisualBasic.InputBox</code> and
+            raw <code>MessageBox</code> calls for good.</span></div></li>
+        <li><div><b>Keyboard shortcut baseline</b> — <span class="desc">F5, Ctrl+O, Ctrl+W, Ctrl+Tab,
+            Ctrl+Enter, and Ctrl+F reserved for search — the skeleton every later shortcut hangs off.</span></div></li>
+        <li><div><b>Cleanup</b> — <span class="desc">annotated tags stopped signing with a hardcoded
+            <code>user / user@example.com</code>; an empty <code>MainViewModel</code> and a stray
+            <code>#if false</code> block were deleted.</span></div></li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════ PHASE 1 ══════════════════════ -->
+    <section class="phase" id="phase-1">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 01</span>
+        <h2 class="phase-title display">Core Operations</h2>
+      </div>
+      <p class="thesis">With the plumbing in place, this phase filled in the operations a daily-driver git
+         client is expected to have and PickleGit simply didn't: amend, force-push, real stash management,
+         and context menus in every place a right-click came up empty.</p>
+
+      <ul class="feature-list">
+        <li><div><b>Commit polish</b> — <span class="desc">an amend checkbox that prefills the HEAD
+            message, a sign-off toggle, and a split Commit &amp; Push button.</span></div></li>
+        <li><div><b>Push options</b> — <span class="desc">automatic upstream tracking for new
+            branches, force-with-lease behind a danger confirmation, and pushing individual tags.</span></div></li>
+        <li><div><b>Pull &amp; fetch options</b> — <span class="desc">a pull-rebase dropdown next to
+            the plain pull button, plus fetch --prune and fetch-all-remotes.</span></div></li>
+        <li><div><b>Branch completeness</b> — <span class="desc">checkout a remote branch as a new
+            local tracking branch, rename branches, a fixed delete-force flag that was previously ignored, and
+            a detached-HEAD badge for detached checkouts.</span></div></li>
+        <li><div><b>Reset &amp; revert</b> — <span class="desc">soft, mixed, and hard reset plus
+            revert, added to the commit context menu.</span></div></li>
+        <li><div><b>Stash, actually finished</b> — <span class="desc">apply, pop, and drop from a
+            context menu, plus a diff preview on selection — <code>PopStash</code> existed on the view model
+            before this but had no way to reach it from the UI.</span></div></li>
+        <li><div><b>Tags &amp; remotes</b> — <span class="desc">delete / push / checkout a tag; add,
+            edit, and remove a remote — previously list-only.</span></div></li>
+        <li><div><b>File context menus</b> — <span class="desc">open, reveal in Explorer, copy path,
+            add to <code>.gitignore</code>, and discard, on both staged and unstaged files.</span></div></li>
+        <li><div><b>Commit context menu</b> — <span class="desc">copy SHA, copy message, checkout
+            detached, revert, reset here, and rebase onto (wired up fully in Phase 04).</span></div></li>
+        <li><div><b>Commit search</b> — <span class="desc">a Ctrl+F filter bar over message, author,
+            and SHA that narrows the graph live.</span></div></li>
+        <li><div><b>Tab context menu</b> — <span class="desc">close, close others, copy repository
+            path, and open in Explorer or a terminal.</span></div></li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════ PHASE 2 ══════════════════════ -->
+    <section class="phase" id="phase-2">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 02</span>
+        <h2 class="phase-title display">Conflicts &amp; Undo</h2>
+      </div>
+      <p class="thesis">The trust threshold. A client that can't show you a conflict, or take back a merge
+         gone wrong, isn't one you reach for on a bad day. This phase made both of those things visible and
+         reversible.</p>
+
+      <ul class="feature-list">
+        <li><div><b>Conflict detection</b> — <span class="desc"><code>ConflictState</code> reads
+            <code>.git/MERGE_HEAD</code>, <code>CHERRY_PICK_HEAD</code>, and the <code>rebase-merge</code>
+            directory directly; merge, cherry-pick, and revert stopped throwing on conflict and return a real
+            result instead.</span></div></li>
+        <li><div><b>Conflict banner</b> — <span class="desc">a working-directory banner listing every
+            conflicted file with Take Ours / Take Theirs / Mark Resolved, plus Continue and Abort for the
+            operation as a whole.</span></div></li>
+        <li><div><b>Three-pane merge editor</b> — <span class="desc">a diff3-aware marker parser
+            feeds a dedicated <code>MergeConflictEditorWindow</code> — Ours and Theirs read-only side by side,
+            an editable Result pane below, per-block accept buttons.</span></div></li>
+        <li><div><b>Undo</b> — <span class="desc"><code>UndoService</code> records the pre- and
+            post-operation HEAD around every mutating action and can reverse a commit, a hard HEAD move, a
+            checkout, or a branch delete from a single status-bar button.</span></div></li>
+        <li><div><b>rerere</b> — <span class="desc">an opt-in setting that turns on git's own
+            conflict-resolution memory.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Caught in testing</p>
+          <p>The conflict-marker parser only captured the marker lines themselves (<code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>,
+             <code>=======</code>, <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code>) — the actual conflicting content
+             in between was silently dropped. Fixed by appending every line, not just delimiters, to the raw
+             buffer.</p>
+          <p>A binding on <code>&lt;Run Text="{Binding UnresolvedCount}"/&gt;</code> defaulted to
+             <code>TwoWay</code> against a getter-only property and crashed the whole process on open — WPF has
+             no global safety net for a bad binding. Fixed the binding to <code>OneWay</code>, and added an
+             <code>Application.DispatcherUnhandledException</code> handler as a backstop so a single bad
+             binding can never take the app down again.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ PHASE 3 ══════════════════════ -->
+    <section class="phase" id="phase-3">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 03</span>
+        <h2 class="phase-title display">Diff &amp; Staging</h2>
+      </div>
+      <p class="thesis">Staging a whole file at a time is a blunt instrument. This phase brought staging down
+         to the hunk and the line, and made the diff panel itself worth looking at.</p>
+
+      <ul class="feature-list">
+        <li><div><b>Hunk staging</b> — <span class="desc">Stage / Discard / Unstage buttons on every
+            hunk header, built on <code>PatchBuilder</code> constructing real unified-diff text piped into
+            <code>git apply --cached</code>.</span></div></li>
+        <li><div><b>Line staging</b> — <span class="desc">a checkbox gutter on added and removed
+            lines with Stage / Discard / Unstage Selected — <code>PatchBuilder</code> converts unselected
+            deletions back to context and drops unselected additions before building the patch.</span></div></li>
+        <li><div><b>Word-level diff</b> — <span class="desc">an LCS pass over word tokens on paired
+            remove/add lines highlights the exact span that changed, not just the whole line.</span></div></li>
+        <li><div><b>Diff navigation</b> — <span class="desc">F7 / Shift+F7 jump between hunks without
+            leaving the keyboard.</span></div></li>
+        <li><div><b>Staged and unstaged lists, finally wired up</b> — <span class="desc">the file
+            lists in the commit-detail panel existed but selecting a row did nothing; they now drive the diff
+            panel like everywhere else in the app.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Caught in testing — the hard one</p>
+          <p>Hunk and line staging on a file's <i>last</i> hunk consistently failed with
+             <code>error: patch does not apply</code>, no matter how carefully the patch was reconstructed by
+             hand. Three separate manual reconstructions with <code>git apply --check</code> all succeeded,
+             which ruled out the obvious suspects.</p>
+          <p>The actual cause: <code>ParsePatch</code> split the raw patch text on <code>'\n'</code>, and a
+             string ending in a newline produces a trailing empty-string element from
+             <code>Split()</code> that isn't real patch data. Left uncorrected, that phantom element became a
+             bogus zero-length context line on the last hunk, corrupting its declared line count. Fixed by
+             detecting and dropping the trailing empty element before parsing.</p>
+        </div>
+      </div>
+      <div class="deferred-note">
+        <b>Deferred:</b> side-by-side diff view, syntax highlighting, image diff for binary assets, and
+        file history &amp; blame were scoped for this phase but not built — they remain open.
+      </div>
+    </section>
+
+    <!-- ══════════════════════ PHASE 4 ══════════════════════ -->
+    <section class="phase" id="phase-4">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 04</span>
+        <h2 class="phase-title display">Rebase &amp; Drag-Drop</h2>
+      </div>
+      <p class="thesis">Grab a branch, drop it somewhere, decide what
+         that meant — needed rebase, a reflog to fall back on, and drag-drop plumbing that had no precedent
+         anywhere else in the app.</p>
+
+      <ul class="feature-list">
+        <li><div><b>Rebase onto</b> — <span class="desc">from a branch or commit context menu, run
+            via CLI with <code>--autostash</code>; a conflict mid-rebase flows straight into the Phase 02
+            banner instead of a dead end.</span></div></li>
+        <li><div><b>Reflog</b> — <span class="desc">parsed directly from <code>.git/logs/HEAD</code>
+            (LibGit2Sharp's own reflog API proved too weak) into a hidden-by-default sidebar section with
+            checkout and hard-reset actions — the safety net standing behind Undo.</span></div></li>
+        <li><div><b>Drag-drop branch operations</b> — <span class="desc">dragging a branch onto
+            another opens a merge/rebase menu; dragging a commit onto a branch cherry-picks it. Built on WPF's
+            native <code>DragDrop.DoDragDrop</code>, a different mechanism from the custom tab-drag ghost used
+            elsewhere in the shell.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Caught in testing</p>
+          <p><code>git pull --rebase</code> stopping for a conflict is normal, expected behavior — but it exits
+             non-zero, and the generic CLI-error path treated any non-zero exit as failure and popped a scary
+             "Operation Failed" dialog instead of the conflict banner. Fixed by adding
+             <code>RunCliAllowingConflictAsync</code>, which checks whether the repo is genuinely mid-conflict
+             before deciding a non-zero exit is a real failure, and switching both pull-rebase and the new
+             rebase-onto command to use it.</p>
+        </div>
+      </div>
+
+      <div class="callout verify">
+        <div class="icon">✅</div>
+        <div class="body">
+          <p class="kicker mono">Cross-phase proof</p>
+          <p>Cherry-picking a commit by drag-drop onto a branch that had diverged produced a genuine merge
+             conflict on a shared line — and it resolved cleanly through the Phase 02 banner (Take Theirs,
+             Continue). Two phases built weeks apart, working together on the first real test.</p>
+        </div>
+      </div>
+      <div class="deferred-note">
+        <b>Deferred:</b> the interactive rebase dialog — reorder, squash, and reword commits before a rebase —
+        was scoped as an XL item and pushed out rather than rushed.
+      </div>
+    </section>
+
+    <!-- ══════════════════════ PHASE 5 ══════════════════════ -->
+    <section class="phase" id="phase-5">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 05</span>
+        <h2 class="phase-title display">UX Platform</h2>
+      </div>
+      <p class="thesis">The features under the hood were catching up to a real client; the surface around them
+         still had no settings window, no way to search for a command, and no way to push over SSH. This phase
+         closed all three, plus GPG signing and a commit-message guide most git clients take for granted.</p>
+
+      <ul class="feature-list">
+        <li><div><b>SSH remotes</b> — <span class="desc">LibGit2Sharp 0.27's credential handler can't
+            drive SSH auth at all. Fetch, pull, push, push-tag, and clone now detect
+            <code>ssh://</code> / <code>git@</code> URLs and route through the CLI, letting the system's own
+            OpenSSH client and agent do the work.</span></div></li>
+        <li><div><b>GPG signing</b> — <span class="desc">a Settings toggle, or an existing
+            <code>commit.gpgsign</code> config, routes the commit through <code>git commit -S</code> via the
+            CLI instead of the unsigned LibGit2Sharp path.</span></div></li>
+        <li><div><b>Settings window</b> — <span class="desc">General (git.exe path override with a
+            browse button, commit-history load limit) and Git Behavior (rerere, GPG signing) — the app's first
+            dedicated settings surface, reached from a new toolbar gear button.</span></div></li>
+        <li><div><b>Command palette</b> — <span class="desc">Ctrl+P opens a fuzzy-searchable list of
+            app and per-repo commands in a borderless popup — Ctrl+Shift+P was already taken by Push, so the
+            palette took the other conventional slot instead.</span></div></li>
+        <li><div><b>Commit message guides</b> — <span class="desc">a live subject-line counter that
+            turns red past 50 characters, a wrap hint for the body, and auto-fill from the repo's
+            <code>commit.template</code> the first time the staging view opens.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Caught in testing</p>
+          <p>Choosing a palette command that opens its own dialog — Create Branch, for instance — crashed with
+             <i>"Cannot call Show, ShowDialog, Close… while a Window is closing."</i> The palette closed itself
+             and executed the chosen command in the same call stack, but WPF forbids opening a new window while
+             another is still tearing down. A second, subtler issue compounded it: closing the palette shifted
+             focus, which re-fired its own <code>Deactivated</code> handler and called <code>Close()</code> a
+             second time on a window already mid-close.</p>
+          <p>Fixed by having the palette record the chosen command and close itself with nothing else running,
+             then letting the caller read that choice and execute it only after <code>ShowDialog()</code> has
+             fully returned — plus a simple re-entrancy guard so <code>Close()</code> can never fire twice.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ PHASE 6 ══════════════════════ -->
+    <section class="phase" id="phase-6">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 06</span>
+        <h2 class="phase-title display">Hosting &amp; Ecosystem</h2>
+      </div>
+      <p class="thesis">The last phase reached outside the local repository entirely: pull requests from GitHub,
+         GitLab, and Bitbucket Cloud in the sidebar, avatars on the graph, and the parts of a repo that live
+         beside it rather than inside it — submodules, worktrees, LFS.</p>
+
+      <ul class="feature-list">
+        <li><div><b>Hosting provider abstraction</b> — <span class="desc">one
+            <code>IHostingProvider</code> interface with GitHub, GitLab, and Bitbucket Cloud implementations,
+            auto-detected by parsing the origin remote's domain, owner, and repo slug.</span></div></li>
+        <li><div><b>Pull request sidebar</b> — <span class="desc">a live list of open PRs with
+            title, source → target route, and author; double-click opens it in the browser. Works
+            unauthenticated for public repositories, and picks up a stored token automatically for private
+            ones.</span></div></li>
+        <li><div><b>Settings → Integrations</b> — <span class="desc">add, list, and remove hosting
+            tokens — a personal access token for GitHub/GitLab, a username plus app password for Bitbucket —
+            stored through the existing Windows Credential Manager wrapper.</span></div></li>
+        <li><div><b>Avatars</b> — <span class="desc"><code>AvatarService</code> resolves GitHub
+            no-reply addresses directly to a GitHub avatar and falls back to Gravatar for everything else,
+            disk-caches the result, and draws it as a circle on the commit graph node — initials remain the
+            fallback when no avatar exists.</span></div></li>
+        <li><div><b>Submodules sidebar</b> — <span class="desc">lists every submodule with a
+            clean / modified / not-initialized status, with init, update, and open-as-a-new-tab actions.</span></div></li>
+        <li><div><b>Worktrees sidebar</b> — <span class="desc">list, add (from a new or an existing
+            branch), remove, and open any worktree as its own tab.</span></div></li>
+        <li><div><b>Git LFS awareness</b> — <span class="desc">a diff for an LFS-tracked file shows
+            a plain-language banner instead of a meaningless pointer-file diff, plus "Track with Git LFS…" and
+            "Install Git LFS" as direct passthroughs to the real <code>git lfs</code> commands.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Caught in testing — three, this time</p>
+          <p><b>Credential storage.</b> Hosting tokens were keyed as <code>host:&lt;domain&gt;</code>, but the
+             existing credential store splits its target string on a single colon and takes the first two
+             parts — the extra colon in <code>host:</code> shifted every field over by one, so a saved token
+             could never be found again. Fixed by moving the marker into the username slot instead of the host,
+             where an extra colon can't corrupt the split.</p>
+          <p><b>Adding a worktree.</b> Creating a worktree with a brand-new branch name failed with
+             <code>fatal: invalid reference</code> — <code>git worktree add</code> only checks out an
+             <i>existing</i> ref unless told otherwise. Fixed by checking the typed name against the local
+             branch list and adding <code>-b</code> only when it doesn't already exist.</p>
+          <p><b>Removing a worktree.</b> Removing a worktree whose directory was still open in another tab left
+             that tab throwing <code>reference 'HEAD' not found</code> on every refresh, since its working
+             directory had just been deleted out from under it. Fixed by checking whether the repo path still
+             exists before any refresh attempt, and quietly stopping that tab's watcher and auto-refresh timer
+             the moment it doesn't — no more repeated error dialogs for a tab that can't recover.</p>
+        </div>
+      </div>
+
+      <div class="callout verify">
+        <div class="icon">✅</div>
+        <div class="body">
+          <p class="kicker mono">Verified without touching a real token</p>
+          <p>All three providers were changed to attempt an unauthenticated call before falling back — public
+             repositories don't need a token at all. That made it possible to verify the entire pull-request
+             pipeline end to end against the real, public <code>microsoft/vscode</code> repository on GitHub,
+             including a live avatar fetch for Linus Torvalds's GitHub account, without ever touching the
+             user's actual Bitbucket credentials.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ ARCHITECTURE ══════════════════════ -->
+    <section class="phase" id="architecture">
+      <div class="phase-head">
+        <h2 class="phase-title display">Architecture, in short</h2>
+      </div>
+      <p class="thesis">Four decisions made in Phase 00 held up across every phase after it without needing
+         to be revisited.</p>
+
+      <div class="arch-grid">
+        <div class="arch-card">
+          <h3>Hybrid backend</h3>
+          <p><code>GitService</code> (LibGit2Sharp) handles reads, status, and index operations.
+             <code>GitService.Cli</code> takes over for anything LibGit2Sharp can't do — rebase, SSH, GPG,
+             LFS, patch application — and the libgit2 handle is reopened after every CLI mutation.</p>
+        </div>
+        <div class="arch-card">
+          <h3>GitExecutor</h3>
+          <p>One dedicated background thread. Every libgit2 and CLI call funnels through it, which serializes
+             the two backends against each other for free and keeps the <code>Repository</code> object off
+             the UI thread permanently.</p>
+        </div>
+        <div class="arch-card">
+          <h3>RepositoryWatcher</h3>
+          <p>Debounced <code>FileSystemWatcher</code>s on the working directory and <code>.git</code>, with
+             app-initiated operations wrapped in a suppression scope so PickleGit's own writes don't trigger a
+             refresh of themselves.</p>
+        </div>
+        <div class="arch-card">
+          <h3>Dialogs &amp; MVVM</h3>
+          <p>Every prompt, confirmation, and error goes through <code>DialogService</code>'s themed windows.
+             No code-behind logic outside established patterns; every view stays bound to a view model.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ WHAT'S LEFT ══════════════════════ -->
+    <section class="phase" id="left">
+      <div class="phase-head">
+        <h2 class="phase-title display">What's left</h2>
+      </div>
+      <p class="thesis">Scoped, not forgotten — the items pushed out of a phase rather than cut from the plan.</p>
+      <ul class="left-list">
+        <li><span class="tag mono">XL</span><span><b>Interactive rebase</b> — reorder, squash, and reword
+            commits before a rebase runs. Deferred out of Phase 04.</span></li>
+        <li><span class="tag mono">L</span><span><b>Side-by-side diff</b>, <b>syntax highlighting</b>,
+            <b>image diff</b>, and <b>file history &amp; blame</b> — scoped for Phase 03, not yet built.</span></li>
+        <li><span class="tag mono">P7</span><span><b>Provider-native PR creation</b> and richer hosting
+            integration beyond browser hand-off — the natural next step after Phase 06's read-only sidebar.</span></li>
+      </ul>
+    </section>
+
+    <footer class="colophon">
+      <p><b>Methodology.</b> Every feature in this log was built, then exercised live — against disposable
+         scratch repositories, driven through the real UI via Windows automation and verified with screenshots,
+         not just read back from the source. The eight bugs above were all found this way, not in code review.</p>
+      <p>The user's own repositories and settings were backed up before any test that touched them and restored
+         immediately after — nothing in this log was verified at the cost of real work.</p>
+    </footer>
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('#rail-list a'));
+    var sections = links.map(function (a) {
+      return document.querySelector(a.getAttribute('href'));
+    });
+
+    if (!('IntersectionObserver' in window)) return;
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        var idx = sections.indexOf(entry.target);
+        if (idx === -1) return;
+        if (entry.isIntersecting) {
+          links.forEach(function (l) { l.classList.remove('active'); });
+          links[idx].classList.add('active');
+        }
+      });
+    }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+
+    sections.forEach(function (s) { if (s) observer.observe(s); });
+  })();
+</script>

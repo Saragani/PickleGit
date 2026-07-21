@@ -1,0 +1,852 @@
+<UserControl x:Class="PickleGit.Views.DiffView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+             xmlns:vm="clr-namespace:PickleGit.ViewModels"
+             xmlns:ctrl="clr-namespace:PickleGit.Controls"
+             xmlns:conv="clr-namespace:PickleGit.Converters"
+             xmlns:behaviors="clr-namespace:PickleGit.Behaviors"
+             xmlns:models="clr-namespace:PickleGit.Models">
+
+    <UserControl.Resources>
+        <conv:DiffItemTemplateSelector x:Key="DiffSelector">
+            <conv:DiffItemTemplateSelector.HunkTemplate>
+                <DataTemplate DataType="{x:Type models:DiffItem}">
+                    <!-- Fixed Height, matching the line template below — VirtualizingStackPanel only
+                         reliably positions rows when every row in the ListView has identical total
+                         footprint (Height + Margin); a taller unconstrained hunk header caused rows to
+                         overlap under virtualization (see CLAUDE.md). No Margin here for the same
+                         reason — the HunkHeaderBrush background alone distinguishes this row. -->
+                    <Border Background="{DynamicResource HunkHeaderBrush}" Padding="8,2" Height="24">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Header}" FontFamily="Consolas"
+                                       FontSize="11" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DataContext.CanPartialStage,
+                                                RelativeSource={RelativeSource AncestorType=ListView}}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <Button Content="{Binding Hunk.HasLineSelection, Converter={StaticResource HunkActionLabel}, ConverterParameter=Stage}"
+                                        FontSize="10" Padding="6,1" Margin="0,0,4,0"
+                                        Command="{Binding DataContext.StageHunkOrLinesCommand,
+                                                  RelativeSource={RelativeSource AncestorType=ListView}}"
+                                        CommandParameter="{Binding Hunk}">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.IsDiffFromStagedFile,
+                                                    RelativeSource={RelativeSource AncestorType=ListView}}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button Content="{Binding Hunk.HasLineSelection, Converter={StaticResource HunkActionLabel}, ConverterParameter=Discard}"
+                                        FontSize="10" Padding="6,1" Margin="0,0,4,0"
+                                        Command="{Binding DataContext.DiscardHunkOrLinesCommand,
+                                                  RelativeSource={RelativeSource AncestorType=ListView}}"
+                                        CommandParameter="{Binding Hunk}">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource DangerButton}">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.IsDiffFromStagedFile,
+                                                    RelativeSource={RelativeSource AncestorType=ListView}}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button Content="{Binding Hunk.HasLineSelection, Converter={StaticResource HunkActionLabel}, ConverterParameter=Unstage}"
+                                        FontSize="10" Padding="6,1"
+                                        Command="{Binding DataContext.UnstageHunkOrLinesCommand,
+                                                  RelativeSource={RelativeSource AncestorType=ListView}}"
+                                        CommandParameter="{Binding Hunk}">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.IsDiffFromStagedFile,
+                                                    RelativeSource={RelativeSource AncestorType=ListView}}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </conv:DiffItemTemplateSelector.HunkTemplate>
+            <conv:DiffItemTemplateSelector.LineTemplate>
+                <DataTemplate DataType="{x:Type models:DiffItem}">
+                    <!-- Height="24" matches the hunk header template above — see its comment. -->
+                    <Border Background="{Binding Line.Kind, Converter={StaticResource DiffLineBg}}" Height="24">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="36"/>
+                                <ColumnDefinition Width="36"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.ColumnSpan="3" IsHitTestVisible="False">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True"/>
+                                                    <Condition Binding="{Binding Line.Kind}" Value="Added"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Background" Value="{DynamicResource LineSelectionBrush}"/>
+                                            </MultiDataTrigger>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True"/>
+                                                    <Condition Binding="{Binding Line.Kind}" Value="Deleted"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Background" Value="{DynamicResource LineSelectionBrush}"/>
+                                            </MultiDataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                            </Border>
+                            <TextBlock Grid.Column="0" Text="{Binding Line.OldLineNumber}"
+                                       FontFamily="Consolas" FontSize="11" TextAlignment="Right"
+                                       Padding="0,1,6,0" Opacity="0.6"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Line.NewLineNumber}"
+                                       FontFamily="Consolas" FontSize="11" TextAlignment="Right"
+                                       Padding="0,1,6,0" Opacity="0.6"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <TextBlock Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding Line}"
+                                       behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.DiffSearchText,
+                                           RelativeSource={RelativeSource AncestorType=ListView}}"
+                                       FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
+                                       FontSize="12" Margin="4,1"
+                                       Foreground="{Binding Line.Kind, Converter={StaticResource DiffLineFg}}"/>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </conv:DiffItemTemplateSelector.LineTemplate>
+        </conv:DiffItemTemplateSelector>
+
+        <!-- Side-by-side is two independent ListViews (below), one per pane, each scrolled in sync
+             with the other (see DiffView.xaml.cs). Both panes render the identical hunk header
+             (text + Stage/Discard/Unstage buttons) so their row heights always match — that's what
+             keeps the vertical-offset mirroring correct — the small duplication is worth the
+             guaranteed alignment. -->
+        <DataTemplate x:Key="SideBySideHunkTemplate" DataType="{x:Type models:SideBySideItem}">
+            <!-- Fixed Height, matching the line templates below — see the unified hunk template's
+                 comment above for why this must be uniform for virtualization to position rows
+                 correctly. No Margin for the same reason. -->
+            <Border Background="{DynamicResource HunkHeaderBrush}" Padding="8,2" Height="24">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding Header}" FontFamily="Consolas" FontSize="11"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.CanPartialStage,
+                                        RelativeSource={RelativeSource AncestorType=ListView}}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <Button Content="{Binding Hunk.HasLineSelection, Converter={StaticResource HunkActionLabel}, ConverterParameter=Stage}"
+                                FontSize="10" Padding="6,1" Margin="0,0,4,0"
+                                Command="{Binding DataContext.StageHunkOrLinesCommand,
+                                          RelativeSource={RelativeSource AncestorType=ListView}}"
+                                CommandParameter="{Binding Hunk}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataContext.IsDiffFromStagedFile,
+                                            RelativeSource={RelativeSource AncestorType=ListView}}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content="{Binding Hunk.HasLineSelection, Converter={StaticResource HunkActionLabel}, ConverterParameter=Discard}"
+                                FontSize="10" Padding="6,1" Margin="0,0,4,0"
+                                Command="{Binding DataContext.DiscardHunkOrLinesCommand,
+                                          RelativeSource={RelativeSource AncestorType=ListView}}"
+                                CommandParameter="{Binding Hunk}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource DangerButton}">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataContext.IsDiffFromStagedFile,
+                                            RelativeSource={RelativeSource AncestorType=ListView}}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content="{Binding Hunk.HasLineSelection, Converter={StaticResource HunkActionLabel}, ConverterParameter=Unstage}"
+                                FontSize="10" Padding="6,1"
+                                Command="{Binding DataContext.UnstageHunkOrLinesCommand,
+                                          RelativeSource={RelativeSource AncestorType=ListView}}"
+                                CommandParameter="{Binding Hunk}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataContext.IsDiffFromStagedFile,
+                                            RelativeSource={RelativeSource AncestorType=ListView}}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="SideBySideLeftLineTemplate" DataType="{x:Type models:SideBySideItem}">
+            <!-- Height="24" matches the hunk header template above — see its comment. -->
+            <Border Background="{Binding Left.Kind, Converter={StaticResource DiffLineBg}}" Height="24">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.ColumnSpan="2" IsHitTestVisible="False">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True"/>
+                                            <Condition Binding="{Binding Left.Kind}" Value="Added"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Background" Value="{DynamicResource LineSelectionBrush}"/>
+                                    </MultiDataTrigger>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True"/>
+                                            <Condition Binding="{Binding Left.Kind}" Value="Deleted"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Background" Value="{DynamicResource LineSelectionBrush}"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
+                    <TextBlock Grid.Column="0" Text="{Binding Left.OldLineNumber}"
+                               FontFamily="Consolas" FontSize="11" TextAlignment="Right"
+                               Padding="0,1,6,0" Opacity="0.6"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock Grid.Column="1" behaviors:WordDiffHighlighter.Line="{Binding Left}"
+                               behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.DiffSearchText,
+                                   RelativeSource={RelativeSource AncestorType=ListView}}"
+                               FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
+                               FontSize="12" Margin="4,1" TextWrapping="NoWrap"
+                               Foreground="{Binding Left.Kind, Converter={StaticResource DiffLineFg}}"/>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="SideBySideRightLineTemplate" DataType="{x:Type models:SideBySideItem}">
+            <!-- Height="24" matches the hunk header template above — see its comment. -->
+            <Border Background="{Binding Right.Kind, Converter={StaticResource DiffLineBg}}" Height="24">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.ColumnSpan="2" IsHitTestVisible="False">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True"/>
+                                            <Condition Binding="{Binding Right.Kind}" Value="Added"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Background" Value="{DynamicResource LineSelectionBrush}"/>
+                                    </MultiDataTrigger>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ListViewItem}, Path=IsSelected}" Value="True"/>
+                                            <Condition Binding="{Binding Right.Kind}" Value="Deleted"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Background" Value="{DynamicResource LineSelectionBrush}"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
+                    <TextBlock Grid.Column="0" Text="{Binding Right.NewLineNumber}"
+                               FontFamily="Consolas" FontSize="11" TextAlignment="Right"
+                               Padding="0,1,6,0" Opacity="0.6"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock Grid.Column="1" behaviors:WordDiffHighlighter.Line="{Binding Right}"
+                               behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.DiffSearchText,
+                                   RelativeSource={RelativeSource AncestorType=ListView}}"
+                               FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
+                               FontSize="12" Margin="4,1" TextWrapping="NoWrap"
+                               Foreground="{Binding Right.Kind, Converter={StaticResource DiffLineFg}}"/>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <conv:DiffItemTemplateSelector x:Key="SideBySideLeftSelector"
+                                       HunkTemplate="{StaticResource SideBySideHunkTemplate}"
+                                       LineTemplate="{StaticResource SideBySideLeftLineTemplate}"/>
+        <conv:DiffItemTemplateSelector x:Key="SideBySideRightSelector"
+                                       HunkTemplate="{StaticResource SideBySideHunkTemplate}"
+                                       LineTemplate="{StaticResource SideBySideRightLineTemplate}"/>
+    </UserControl.Resources>
+
+    <Border Background="{DynamicResource BackgroundBrush}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="{DynamicResource SurfaceBrush}" Padding="8,4"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <!-- This pane now replaces the commit list entirely while a single file is
+                             selected (see ShowDiffInsteadOfCommits in MainWindow.xaml) — the commit
+                             graph isn't reachable to click away from, so give an explicit way back. -->
+                        <Button Content="&#x2190;" FontSize="12" Width="22" Padding="0" Margin="0,0,8,0"
+                                AutomationProperties.Name="Back to commits"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Back to commits"
+                                Command="{Binding CloseDiffPaneCommand}"/>
+                        <TextBlock Text="{Binding DiffPaneHeaderText}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <CheckBox Content="Ignore whitespace" FontSize="10" Margin="0,0,10,0"
+                                  VerticalAlignment="Center"
+                                  ToolTip="Hide whitespace-only changes (git diff -w). Partial staging is unavailable while active."
+                                  IsChecked="{Binding IgnoreWhitespace}"
+                                  Visibility="{Binding IsImageDiff, Converter={StaticResource InvertBoolToVis}}"/>
+                        <CheckBox Content="Show entire file" FontSize="10" Margin="0,0,10,0"
+                                  VerticalAlignment="Center"
+                                  ToolTip="Show the whole file as context around each change, instead of just the surrounding hunk lines"
+                                  IsChecked="{Binding ShowEntireFile}"
+                                  Visibility="{Binding IsImageDiff, Converter={StaticResource InvertBoolToVis}}"/>
+                        <!-- Unified/Side-by-side are meaningless while blame content is showing (no
+                             hunks — just per-line annotation), so the whole group disappears then,
+                             not just becoming inert. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,8,0">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsImageDiff}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ShowBlame}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <Button Content="Unified" FontSize="10" Padding="6,2" Margin="0,0,2,0"
+                                    ToolTip="Unified diff view" Command="{Binding ShowUnifiedDiffCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSideBySide}" Value="False">
+                                                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                <!-- White, not inherited TextPrimaryBrush — same reasoning as AccentButton
+                                                     (DarkTheme.xaml): TextPrimaryBrush flips to near-black in Light theme,
+                                                     unreadable against this same purple accent background. -->
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Content="Side-by-side" FontSize="10" Padding="6,2"
+                                    ToolTip="Side-by-side diff view" Command="{Binding ShowSideBySideDiffCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSideBySide}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                <!-- White, not inherited TextPrimaryBrush — same reasoning as AccentButton
+                                                     (DarkTheme.xaml): TextPrimaryBrush flips to near-black in Light theme,
+                                                     unreadable against this same purple accent background. -->
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,8,0"
+                                    Visibility="{Binding SelectedFile, Converter={StaticResource NullToVis}}">
+                            <Button Content="Diff" FontSize="10" Padding="6,2" Margin="0,0,2,0"
+                                    ToolTip="Show the diff" Command="{Binding ShowDiffModeCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DiffPaneMode}" Value="{x:Static models:DiffPaneMode.Diff}">
+                                                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                <!-- White, not inherited TextPrimaryBrush — same reasoning as AccentButton
+                                                     (DarkTheme.xaml): TextPrimaryBrush flips to near-black in Light theme,
+                                                     unreadable against this same purple accent background. -->
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Content="History" FontSize="10" Padding="6,2"
+                                    ToolTip="Commit history for this file (also lets you view blame as of any commit)"
+                                    Command="{Binding ShowHistoryModeCommand}" CommandParameter="{Binding SelectedFile}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DiffPaneMode}" Value="{x:Static models:DiffPaneMode.History}">
+                                                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                <!-- White, not inherited TextPrimaryBrush — same reasoning as AccentButton
+                                                     (DarkTheme.xaml): TextPrimaryBrush flips to near-black in Light theme,
+                                                     unreadable against this same purple accent background. -->
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                        <!-- Only meaningful within History mode: toggles the right-hand content between
+                             the selected commit's diff and a full blame as of that commit
+                             combined History/Blame panel — see IsBlameContent). -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,8,0"
+                                    Visibility="{Binding ShowHistoryCommitList, Converter={StaticResource BoolToVis}}">
+                            <Button Content="Commit Diff" FontSize="10" Padding="6,2" Margin="0,0,2,0"
+                                    ToolTip="Show the selected commit's diff" Command="{Binding ShowCommitDiffContentCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsBlameContent}" Value="False">
+                                                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                <!-- White, not inherited TextPrimaryBrush — same reasoning as AccentButton
+                                                     (DarkTheme.xaml): TextPrimaryBrush flips to near-black in Light theme,
+                                                     unreadable against this same purple accent background. -->
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Content="Blame" FontSize="10" Padding="6,2"
+                                    ToolTip="Blame as of the selected commit" Command="{Binding ShowBlameContentCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsBlameContent}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                <!-- White, not inherited TextPrimaryBrush — same reasoning as AccentButton
+                                                     (DarkTheme.xaml): TextPrimaryBrush flips to near-black in Light theme,
+                                                     unreadable against this same purple accent background. -->
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                        <Button Content="🔍" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                AutomationProperties.Name="Find in diff"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Find in diff"
+                                Click="DiffSearchToggle_Click"/>
+                        <Button Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Previous hunk (Shift+F7)"
+                                AutomationProperties.Name="Previous hunk"
+                                Command="{Binding PrevHunkCommand}"/>
+                        <Button Content="&#x25BC;" FontSize="10" Width="22" Padding="0"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Next hunk (F7)"
+                                AutomationProperties.Name="Next hunk"
+                                Command="{Binding NextHunkCommand}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Find in diff -->
+            <Border Grid.Row="1" Background="{DynamicResource SurfaceBrush}" Padding="6,4"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding IsDiffSearchOpen, Converter={StaticResource BoolToVis}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
+                               Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBox Grid.Column="1" x:Name="DiffSearchBox"
+                             Style="{StaticResource DarkTextBox}"
+                             Text="{Binding DiffSearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                             ToolTip="Find text in this diff (Enter = next, Esc = close)"
+                             KeyDown="DiffSearchBox_KeyDown"/>
+                    <TextBlock Grid.Column="2" Text="{Binding DiffSearchStatus}" VerticalAlignment="Center"
+                               Margin="8,0" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <Button Grid.Column="3" Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                AutomationProperties.Name="Previous match"
+                            Style="{StaticResource ToolbarButton}" ToolTip="Previous match"
+                            Command="{Binding PrevDiffMatchCommand}"/>
+                    <Button Grid.Column="4" Content="&#x25BC;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                AutomationProperties.Name="Next match"
+                            Style="{StaticResource ToolbarButton}" ToolTip="Next match"
+                            Command="{Binding NextDiffMatchCommand}"/>
+                    <Button Grid.Column="5" Content="✕" FontSize="10" Width="22" Padding="0"
+                                AutomationProperties.Name="Close find"
+                            Style="{StaticResource ToolbarButton}" ToolTip="Close (Esc)"
+                            Click="DiffSearchClose_Click"/>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="2" Background="{DynamicResource BannerWarningBrush}" Padding="8,6"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding IsLfsPointerDiff, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="📦 This file is tracked by Git LFS — the diff below is the pointer file, not the actual content."
+                           FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimaryBrush}"/>
+            </Border>
+
+            <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" Padding="8,6"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding IsBinaryDiff, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="⬛ Binary file — contents are not shown."
+                           FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimaryBrush}"/>
+            </Border>
+
+            <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" Padding="8,6"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding IsLargeDiffPending, Converter={StaticResource BoolToVis}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding LargeDiffInfo}" FontSize="11" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,10,0"/>
+                    <Button Content="Show anyway" FontSize="10" Padding="8,2"
+                            Style="{StaticResource ToolbarButton}"
+                            Command="{Binding LoadLargeDiffCommand}"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="2" Background="{DynamicResource BannerWarningBrush}" Padding="8,6"
+                    BorderBrush="{DynamicResource WarningBrush}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding IsConflictedFileDiff, Converter={StaticResource BoolToVis}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="⚠ This file has unresolved merge conflicts — it can't be diffed normally."
+                               FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,10,0"/>
+                    <Button Content="Open Merge Editor" FontSize="10" Padding="8,2"
+                            Style="{StaticResource ToolbarButton}"
+                            Command="{Binding OpenMergeEditorCommand}"
+                            CommandParameter="{Binding SelectedFile}"/>
+                </StackPanel>
+            </Border>
+
+            <Grid Grid.Row="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="{Binding ShowHistoryCommitList, Converter={StaticResource BoolToGridLength}, ConverterParameter=280}"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- History mode: commit list for the current file, alongside the normal diff
+                     rendering (Column 1) for whichever commit is selected — reusing Unified/Side-by-side
+                     rather than a separate read-only clone gives History full search/syntax/hunk-nav
+                     parity with normal diff viewing for free. -->
+                <ListView Grid.Column="0" Style="{StaticResource DarkListView}"
+                          ItemsSource="{Binding FileHistoryCommits}"
+                          SelectedItem="{Binding SelectedFileHistoryCommit}"
+                          Visibility="{Binding ShowHistoryCommitList, Converter={StaticResource BoolToVis}}"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" BorderThickness="0,0,1,0"
+                          BorderBrush="{DynamicResource BorderBrush}">
+                    <ListView.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:CommitInfo}">
+                            <StackPanel Margin="6,4">
+                                <TextBlock Text="{Binding MessageShort}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}">
+                                    <Run Text="{Binding ShortSha, Mode=OneWay}"/>
+                                    <Run Text=" · "/>
+                                    <Run Text="{Binding AuthorName, Mode=OneWay}"/>
+                                    <Run Text=" · "/>
+                                    <Run Text="{Binding AuthorDate, Mode=OneWay, Converter={StaticResource DateFmt}}"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <!-- Blame mode: per-line author annotation of the current working-tree content. -->
+                <ListView Grid.Column="1" Style="{StaticResource DarkListView}"
+                          ItemsSource="{Binding BlameLines}"
+                          Visibility="{Binding ShowBlame, Converter={StaticResource BoolToVis}}"
+                          VirtualizingStackPanel.IsVirtualizing="True"
+                          VirtualizingStackPanel.VirtualizationMode="Recycling"
+                          VirtualizingPanel.ScrollUnit="Pixel"
+                          ScrollViewer.CanContentScroll="True"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                          BorderThickness="0">
+                    <ListView.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:BlameLine}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="260"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.Style>
+                                    <Style TargetType="Grid">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsBandAlt}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource BandAltBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Grid.Style>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="4,0"
+                                            ToolTip="{Binding MessageShort}">
+                                    <TextBlock Text="{Binding ShortSha}" FontFamily="Consolas" FontSize="11"
+                                               Foreground="{DynamicResource AccentBrush}" Width="56"/>
+                                    <TextBlock Text="{Binding AuthorName}" FontSize="11" Width="110"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="{Binding AuthorDate, Converter={StaticResource DateFmt}, ConverterParameter=abs}"
+                                               FontSize="11" Width="80"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding LineNumber}" FontFamily="Consolas" FontSize="11"
+                                           HorizontalAlignment="Right" Margin="0,0,8,0"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <TextBlock Grid.Column="2" Text="{Binding Content}" FontFamily="Cascadia Code, Consolas"
+                                           Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
+                                           FontSize="12" TextWrapping="NoWrap"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+            <Grid Grid.Column="1" Visibility="{Binding ShowUnifiedDiff, Converter={StaticResource BoolToVis}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="10"/>
+                </Grid.ColumnDefinitions>
+                <!-- Change-location strip: a thin colored mark per contiguous
+                     Added/Deleted run at its proportional position, click-to-jump. Sits in its own
+                     column next to the ListView's native scrollbar rather than replacing it — reusing
+                     the scrollbar's own drag/thumb physics avoids re-implementing scroll input. -->
+                <ctrl:DiffChangeMapControl Grid.Column="1" RowKinds="{Binding UnifiedRowKinds}"
+                                           JumpRequested="UnifiedChangeMap_JumpRequested"/>
+            <ListView x:Name="UnifiedListView" Grid.Column="0"
+                      ItemsSource="{Binding FlatDiffItems}"
+                      Style="{StaticResource DarkListView}"
+                      ItemTemplateSelector="{StaticResource DiffSelector}"
+                      SelectionMode="Extended"
+                      SelectionChanged="DiffListView_SelectionChanged"
+                      PreviewMouseLeftButtonDown="DiffListView_PreviewMouseLeftButtonDown"
+                      PreviewMouseMove="DiffListView_PreviewMouseMove"
+                      PreviewMouseLeftButtonUp="DiffListView_PreviewMouseLeftButtonUp"
+                      VirtualizingStackPanel.IsVirtualizing="True"
+                      VirtualizingStackPanel.VirtualizationMode="Recycling"
+                      VirtualizingPanel.ScrollUnit="Pixel"
+                      ScrollViewer.CanContentScroll="True"
+                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                      BorderThickness="0">
+                <!-- Uses the default VirtualizingStackPanel (ScrollUnit=Pixel keeps scrolling smooth,
+                     not item-by-item — see CLAUDE.md's TreeView virtualization note). This only works
+                     because every hunk-header and line template above now has an identical fixed
+                     Height — a taller unconstrained hunk header previously caused overlapping rows
+                     under virtualization, which was worked around with a plain StackPanel (no
+                     virtualization) until that height variance was fixed at the template level. -->
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListViewItem">
+                                    <ContentPresenter/>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListView.ItemContainerStyle>
+            </ListView>
+            </Grid>
+
+            <Grid x:Name="SideBySideContainer" Grid.Column="1"
+                  Visibility="{Binding ShowSideBySideDiff, Converter={StaticResource BoolToVis}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="4"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="10"/>
+                </Grid.ColumnDefinitions>
+                <ctrl:DiffChangeMapControl Grid.Column="3" RowKinds="{Binding SideBySideRowKinds}"
+                                           JumpRequested="SideBySideChangeMap_JumpRequested"/>
+
+                <ListView x:Name="SideBySideLeftListView" Grid.Column="0"
+                          ItemsSource="{Binding SideBySideItems}"
+                          Style="{StaticResource DarkListView}"
+                          ItemTemplateSelector="{StaticResource SideBySideLeftSelector}"
+                          SelectionMode="Extended"
+                          Loaded="SideBySideLeftListView_Loaded"
+                          SelectionChanged="SideBySideListView_SelectionChanged"
+                          PreviewMouseLeftButtonDown="SideBySideListView_PreviewMouseLeftButtonDown"
+                          PreviewMouseMove="SideBySideListView_PreviewMouseMove"
+                          PreviewMouseLeftButtonUp="SideBySideListView_PreviewMouseLeftButtonUp"
+                          VirtualizingStackPanel.IsVirtualizing="True"
+                          VirtualizingStackPanel.VirtualizationMode="Recycling"
+                          VirtualizingPanel.ScrollUnit="Pixel"
+                          ScrollViewer.CanContentScroll="True"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                          BorderThickness="0">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListViewItem">
+                                        <ContentPresenter/>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                </ListView>
+
+                <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                              Background="{DynamicResource BorderBrush}" ResizeBehavior="PreviousAndNext"/>
+
+                <ListView x:Name="SideBySideRightListView" Grid.Column="2"
+                          ItemsSource="{Binding SideBySideItems}"
+                          Style="{StaticResource DarkListView}"
+                          ItemTemplateSelector="{StaticResource SideBySideRightSelector}"
+                          SelectionMode="Extended"
+                          Loaded="SideBySideRightListView_Loaded"
+                          SelectionChanged="SideBySideListView_SelectionChanged"
+                          PreviewMouseLeftButtonDown="SideBySideListView_PreviewMouseLeftButtonDown"
+                          PreviewMouseMove="SideBySideListView_PreviewMouseMove"
+                          PreviewMouseLeftButtonUp="SideBySideListView_PreviewMouseLeftButtonUp"
+                          VirtualizingStackPanel.IsVirtualizing="True"
+                          VirtualizingStackPanel.VirtualizationMode="Recycling"
+                          VirtualizingPanel.ScrollUnit="Pixel"
+                          ScrollViewer.CanContentScroll="True"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                          BorderThickness="0">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListViewItem">
+                                        <ContentPresenter/>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                </ListView>
+            </Grid>
+
+            <Grid Grid.Column="1" Background="{DynamicResource BackgroundBrush}"
+                  Visibility="{Binding IsImageDiff, Converter={StaticResource BoolToVis}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <DockPanel Grid.Column="0">
+                    <TextBlock DockPanel.Dock="Top" Text="OLD" FontWeight="SemiBold" FontSize="11"
+                               Margin="8,8,8,4" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <Border Margin="8,0,4,8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                        <Grid>
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                <Image Source="{Binding OldImage}" Stretch="None"/>
+                            </ScrollViewer>
+                            <TextBlock Text="(file added — no previous version)" FontSize="11"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       Visibility="{Binding OldImage, Converter={StaticResource InvertNullToVis}}"/>
+                        </Grid>
+                    </Border>
+                </DockPanel>
+                <DockPanel Grid.Column="2">
+                    <TextBlock DockPanel.Dock="Top" Text="NEW" FontWeight="SemiBold" FontSize="11"
+                               Margin="8,8,8,4" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <Border Margin="4,0,8,8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                        <Grid>
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                <Image Source="{Binding NewImage}" Stretch="None"/>
+                            </ScrollViewer>
+                            <TextBlock Text="(file deleted — no new version)" FontSize="11"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       Visibility="{Binding NewImage, Converter={StaticResource InvertNullToVis}}"/>
+                        </Grid>
+                    </Border>
+                </DockPanel>
+            </Grid>
+            </Grid>
+
+            <TextBlock Grid.Row="2" Text="Select a file to see its diff."
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13"
+                       Visibility="{Binding SelectedFile, Converter={StaticResource InvertNullToVis}}"/>
+        </Grid>
+    </Border>
+</UserControl>

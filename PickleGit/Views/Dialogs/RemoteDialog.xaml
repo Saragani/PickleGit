@@ -1,0 +1,52 @@
+<Window x:Class="PickleGit.Views.Dialogs.RemoteDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding DialogTitle}" Height="270" Width="460"
+        WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/Resources/pickle.ico"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextPrimaryBrush}">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="../../Themes/DarkTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="6"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="6"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{Binding HeaderText}" FontSize="15" FontWeight="SemiBold"/>
+
+        <TextBlock Grid.Row="2" Text="Name" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+        <TextBox Grid.Row="4" Name="NameBox" Style="{StaticResource DarkTextBox}"
+                 Text="{Binding RemoteName, UpdateSourceTrigger=PropertyChanged}"
+                 IsEnabled="{Binding IsNameEditable}"/>
+
+        <TextBlock Grid.Row="6" Text="URL" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+        <TextBox Grid.Row="8" Name="UrlBox" Style="{StaticResource DarkTextBox}"
+                 Text="{Binding RemoteUrl, UpdateSourceTrigger=PropertyChanged}"/>
+
+        <StackPanel Grid.Row="10" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" Style="{StaticResource ToolbarButton}" Margin="0,0,8,0"
+                    MinWidth="80" Click="Cancel_Click" IsCancel="True"/>
+            <Button Content="{Binding OkText}" Style="{StaticResource AccentButton}" MinWidth="80"
+                    Click="Ok_Click" IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

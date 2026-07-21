@@ -1,0 +1,99 @@
+<Window x:Class="PickleGit.Views.CloneDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Clone Repository" Height="400" Width="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        Icon="pack://application:,,,/Resources/pickle.ico"
+        FocusManager.FocusedElement="{Binding ElementName=UrlBox}"
+        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextPrimaryBrush}">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="../Themes/DarkTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Clone a Repository" FontSize="16" FontWeight="SemiBold"/>
+
+        <TextBlock Grid.Row="2" Text="Repository URL" FontSize="12"
+                   Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+        <TextBox Grid.Row="2" Name="UrlBox" Margin="0,20,0,0"
+                 Style="{StaticResource DarkTextBox}"
+                 Text="{Binding RemoteUrl, UpdateSourceTrigger=PropertyChanged}"/>
+
+        <TextBlock Grid.Row="4" Text="Local Directory" FontSize="12"
+                   Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+        <Grid Grid.Row="4" Margin="0,20,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox Grid.Column="0" Name="PathBox" Style="{StaticResource DarkTextBox}"
+                     Text="{Binding LocalPath, UpdateSourceTrigger=PropertyChanged}"/>
+            <Button Grid.Column="2" Content="Browse…" Style="{StaticResource ToolbarButton}"
+                    Click="BrowseButton_Click"/>
+        </Grid>
+
+        <Grid Grid.Row="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Username" FontSize="12"
+                       Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+            <TextBox Grid.Column="0" Name="UserBox" Margin="0,20,0,0"
+                     Style="{StaticResource DarkTextBox}"
+                     Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"/>
+            <TextBlock Grid.Column="2" Text="Branch (optional)" FontSize="12"
+                       Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+            <TextBox Grid.Column="2" Name="BranchBox" Margin="0,20,0,0" Width="150"
+                     Style="{StaticResource DarkTextBox}"
+                     Text="{Binding Branch, UpdateSourceTrigger=PropertyChanged}"/>
+        </Grid>
+
+        <TextBlock Grid.Row="8" Text="Password / Access Token" FontSize="12"
+                   Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+        <PasswordBox Grid.Row="8" Name="PassBox" Margin="0,20,0,0"
+                     Style="{StaticResource DarkPasswordBox}"
+                     PasswordChanged="PassBox_PasswordChanged"/>
+
+        <StackPanel Grid.Row="10">
+            <CheckBox Content="Clone submodules recursively (requires git.exe)" FontSize="11"
+                      IsChecked="{Binding RecurseSubmodules}" Margin="0,0,0,8"/>
+            <TextBlock Name="HintText" FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       Text="For BitBucket: use an App Password (Account Settings → App passwords). For GitHub: use a Personal Access Token."/>
+            <TextBlock Name="ValidationText" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"
+                       Foreground="{DynamicResource DangerBrush}" Visibility="Collapsed"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="12" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" Style="{StaticResource ToolbarButton}" Margin="0,0,8,0"
+                    Width="80" Click="Cancel_Click" IsCancel="True"/>
+            <Button Content="Clone" Style="{StaticResource AccentButton}" Width="80"
+                    Click="Clone_Click" IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

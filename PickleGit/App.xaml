@@ -1,0 +1,44 @@
+<Application x:Class="PickleGit.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:PickleGit.Converters">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/DarkTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Converters — defined here so all UserControls can resolve them via StaticResource -->
+            <conv:BoolToVisibilityConverter x:Key="BoolToVis"/>
+            <conv:BoolToVisibilityConverter x:Key="InvertBoolToVis" Invert="True"/>
+            <conv:NullToVisibilityConverter x:Key="NullToVis"/>
+            <conv:NullToVisibilityConverter x:Key="InvertNullToVis" Invert="True"/>
+            <conv:DetachedHeadConverter x:Key="DetachedVis"/>
+            <conv:DetachedHeadConverter x:Key="InvertDetachedVis" Invert="True"/>
+            <conv:FileChangeKindToColorConverter x:Key="KindToColor"/>
+            <conv:GraphWidthConverter x:Key="GraphWidth"/>
+            <conv:HeadBoldConverter x:Key="HeadBold"/>
+            <conv:IntAboveZeroConverter x:Key="IntAboveZero"/>
+            <conv:ShaShortConverter x:Key="ShaShort"/>
+            <conv:HunkActionLabelConverter x:Key="HunkActionLabel"/>
+            <conv:BisectProgressTextConverter x:Key="BisectProgressText"/>
+            <conv:BisectMarkToColorConverter x:Key="BisectMarkToColor"/>
+            <conv:BisectMarkToLabelConverter x:Key="BisectMarkToLabel"/>
+            <conv:DiffLineBackgroundConverter x:Key="DiffLineBg"/>
+            <conv:DiffLineForegroundConverter x:Key="DiffLineFg"/>
+            <conv:ColorToSolidBrushConverter x:Key="ColorToBrush"/>
+            <conv:AuthorInitialsConverter x:Key="AuthorInitials"/>
+            <conv:AuthorAvatarColorConverter x:Key="AuthorAvatarColor"/>
+            <conv:BoolToGridLengthConverter x:Key="BoolToGridLength"/>
+            <conv:ConditionalGraphWidthConverter x:Key="ConditionalGraphWidth"/>
+            <conv:ShowHideWidthConverter x:Key="ShowHideWidth"/>
+            <conv:DateFormatConverter x:Key="DateFmt"/>
+            <conv:RefsOverflowConverter x:Key="RefsOverflow"/>
+            <conv:RefsTooltipConverter x:Key="RefsTooltip"/>
+            <conv:BulkActionLabelConverter x:Key="BulkActionLabel"/>
+            <conv:DiscardTooltipConverter x:Key="DiscardTooltip"/>
+            <conv:DiscardBadgeTextConverter x:Key="DiscardBadgeText"/>
+            <conv:IntAtLeastTwoToVisibilityConverter x:Key="IntAtLeastTwoToVis"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

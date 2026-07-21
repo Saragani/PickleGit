@@ -1,0 +1,77 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ── Palette (light) — same keys as PaletteDark.xaml ─────────────────── -->
+    <Color x:Key="BackgroundColor">#FFF7F8FA</Color>
+    <Color x:Key="SurfaceColor">#FFEDEFF2</Color>
+    <Color x:Key="SurfaceAltColor">#FFDFE3E9</Color>
+    <Color x:Key="BorderColor">#FFC8CED6</Color>
+    <Color x:Key="TextPrimaryColor">#FF1E242B</Color>
+    <Color x:Key="TextSecondaryColor">#FF5A6572</Color>
+    <Color x:Key="AccentColor">#FF6B4F97</Color>
+    <Color x:Key="AccentHoverColor">#FF7B5EA7</Color>
+    <Color x:Key="SelectionColor">#FFD3E2F7</Color>
+    <Color x:Key="SelectionBorderColor">#FF6B4F97</Color>
+    <Color x:Key="SuccessColor">#FF2E7D32</Color>
+    <!-- Same value as SuccessColor here (already dark enough for white text), kept as a distinct
+         key so DarkTheme.xaml's SuccessButton style doesn't depend on SuccessColor possibly being
+         re-tuned lighter later — see the longer note in PaletteDark.xaml. -->
+    <Color x:Key="SuccessButtonColor">#FF2E7D32</Color>
+    <Color x:Key="SuccessButtonHoverColor">#FF429146</Color>
+    <Color x:Key="DangerColor">#FFC03532</Color>
+    <Color x:Key="DangerHoverColor">#FFD0504D</Color>
+    <Color x:Key="WarningColor">#FFB26A00</Color>
+    <Color x:Key="AddedColor">#FFDCF2DC</Color>
+    <Color x:Key="DeletedColor">#FFF7DEDE</Color>
+    <Color x:Key="TagColor">#FFF0E2BC</Color>
+
+    <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}"/>
+    <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}"/>
+    <SolidColorBrush x:Key="SurfaceAltBrush" Color="{StaticResource SurfaceAltColor}"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}"/>
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}"/>
+    <SolidColorBrush x:Key="SelectionBrush" Color="{StaticResource SelectionColor}"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}"/>
+    <SolidColorBrush x:Key="SuccessButtonBrush" Color="{StaticResource SuccessButtonColor}"/>
+    <SolidColorBrush x:Key="SuccessButtonHoverBrush" Color="{StaticResource SuccessButtonHoverColor}"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}"/>
+    <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHoverColor}"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}"/>
+    <SolidColorBrush x:Key="AddedBrush" Color="{StaticResource AddedColor}"/>
+    <SolidColorBrush x:Key="DeletedBrush" Color="{StaticResource DeletedColor}"/>
+    <SolidColorBrush x:Key="TagBrush" Color="{StaticResource TagColor}"/>
+    <SolidColorBrush x:Key="TransparentBrush" Color="Transparent"/>
+
+    <!-- ── Extended palette ────────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="HunkHeaderBrush" Color="#FFD8E4F0"/>
+    <SolidColorBrush x:Key="BannerWarningBrush" Color="#FFFFF3D1"/>
+    <SolidColorBrush x:Key="ToolbarBackgroundBrush" Color="#FFEDEFF2"/>
+    <SolidColorBrush x:Key="DetachedBadgeBrush" Color="#FFB35C00"/>
+    <SolidColorBrush x:Key="OverlayScrimBrush" Color="#BBF7F8FA"/>
+    <SolidColorBrush x:Key="GhostBackgroundBrush" Color="#EEE1E5EA"/>
+    <SolidColorBrush x:Key="StagedTintBrush" Color="#2A2E7D32"/>
+    <SolidColorBrush x:Key="ScrollThumbBrush" Color="#FFB6BEC8"/>
+    <SolidColorBrush x:Key="ScrollThumbHoverBrush" Color="#FF98A2AE"/>
+    <SolidColorBrush x:Key="BandAltBrush" Color="#14000000"/>
+
+    <!-- Diff line colors (consumed by DiffLineBackground/ForegroundConverter). Translucent, same
+         rationale as the dark theme — see PaletteDark.xaml. -->
+    <SolidColorBrush x:Key="DiffAddedBgBrush" Color="#592EA043"/>
+    <SolidColorBrush x:Key="DiffDeletedBgBrush" Color="#59DC3C3C"/>
+    <SolidColorBrush x:Key="DiffHeaderBgBrush" Color="#FFD8E4F0"/>
+    <SolidColorBrush x:Key="DiffAddedFgBrush" Color="#FF1E6B23"/>
+    <SolidColorBrush x:Key="DiffDeletedFgBrush" Color="#FFA02C2A"/>
+    <SolidColorBrush x:Key="DiffHeaderFgBrush" Color="#FF2A6099"/>
+    <SolidColorBrush x:Key="DiffDefaultFgBrush" Color="#FF1E242B"/>
+
+    <!-- Line-selection overlay (click/shift/drag in the diff view) — deliberately a blue distinct
+         from both the green/red add/delete row backgrounds and the amber word-diff/search highlights. -->
+    <SolidColorBrush x:Key="LineSelectionBrush" Color="#402A6099"/>
+
+    <!-- Find-in-diff match highlight — amber, distinct from the green/red word-diff highlight hue. -->
+    <SolidColorBrush x:Key="DiffSearchMatchBrush" Color="#66E0B000"/>
+    <SolidColorBrush x:Key="DiffSearchCurrentMatchBrush" Color="#99FF9800"/>
+</ResourceDictionary>

@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\Version.props" />
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>PickleGit</RootNamespace>
+    <AssemblyName>PickleGit</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ApplicationIcon>Resources\pickle.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <!-- Stamps Version/AssemblyVersion/FileVersion from Version.props before AssemblyInfo is
+       generated. Release builds persist VersionBuild + 1 back to Version.props; Debug builds
+       just stamp the current (unincremented) number so F5 runs still show a real version. -->
+  <Target Name="ComputeAppVersion" BeforeTargets="BeforeBuild">
+    <XmlPeek XmlInputPath="$(MSBuildThisFileDirectory)..\Version.props" Query="/Project/PropertyGroup/VersionBuild/text()">
+      <Output TaskParameter="Result" ItemName="_CurrentBuildNumber" />
+    </XmlPeek>
+    <PropertyGroup>
+      <_CurrentBuild>@(_CurrentBuildNumber)</_CurrentBuild>
+      <_NextBuild Condition="'$(Configuration)'=='Release'">$([MSBuild]::Add($(_CurrentBuild), 1))</_NextBuild>
+      <_NextBuild Condition="'$(Configuration)'!='Release'">$(_CurrentBuild)</_NextBuild>
+    </PropertyGroup>
+    <XmlPoke XmlInputPath="$(MSBuildThisFileDirectory)..\Version.props" Query="/Project/PropertyGroup/VersionBuild" Value="$(_NextBuild)" Condition="'$(Configuration)'=='Release'" />
+    <PropertyGroup>
+      <Version>$(VersionMajor).$(VersionMinor).$(_NextBuild).0</Version>
+      <AssemblyVersion>$(Version)</AssemblyVersion>
+      <FileVersion>$(Version)</FileVersion>
+    </PropertyGroup>
+  </Target>
+
+  <ItemGroup>
+    <Resource Include="Resources\pickle.ico" />
+    <Resource Include="Resources\Help\**\*.md" />
+    <Resource Include="Resources\Help\Screenshots\*.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LibGit2Sharp" Version="0.27.2" />
+    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.77" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Markdig.Wpf" Version="0.5.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+</Project>
