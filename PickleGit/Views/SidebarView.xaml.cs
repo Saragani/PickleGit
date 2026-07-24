@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -35,7 +36,6 @@ namespace PickleGit.Views
             nameof(RepositoryViewModel.Tags),
             nameof(RepositoryViewModel.Stashes),
             nameof(RepositoryViewModel.Remotes),
-            nameof(RepositoryViewModel.Reflog),
             nameof(RepositoryViewModel.Submodules),
             nameof(RepositoryViewModel.Worktrees),
         };
@@ -103,74 +103,69 @@ namespace PickleGit.Views
                 case nameof(AppViewModel.SidebarTagsExpanded):
                 case nameof(AppViewModel.SidebarStashesExpanded):
                 case nameof(AppViewModel.SidebarRemotesExpanded):
-                case nameof(AppViewModel.SidebarReflogExpanded):
                     RebuildRows();
                     break;
             }
         }
 
+        /// <summary>Case-insensitive filter typed into the search box at the top of the sidebar;
+        /// null/empty means "show everything" (the original, unfiltered behavior).</summary>
+        private string _searchText;
+
         private void RebuildRows()
         {
             var rows = new List<SidebarRow>();
+            var search = string.IsNullOrWhiteSpace(_searchText) ? null : _searchText.Trim();
             if (_repo != null)
             {
                 bool localExpanded = _appVm?.SidebarLocalBranchesExpanded ?? true;
-                rows.Add(new SidebarRow { Kind = SidebarRowKind.LocalBranchesHeader, IsExpanded = localExpanded });
-                if (localExpanded)
-                    AppendBranchRows(rows, _repo.LocalBranchTree, 1, SidebarRowKind.LocalBranchGroup, SidebarRowKind.LocalBranchLeaf);
+                var localRows = new List<SidebarRow>();
+                bool localMatched = AppendBranchRows(localRows, _repo.LocalBranchTree, 1, SidebarRowKind.LocalBranchGroup, SidebarRowKind.LocalBranchLeaf, search);
+                if (search == null)
+                {
+                    rows.Add(new SidebarRow { Kind = SidebarRowKind.LocalBranchesHeader, IsExpanded = localExpanded });
+                    if (localExpanded) rows.AddRange(localRows);
+                }
+                else if (localMatched)
+                {
+                    rows.Add(new SidebarRow { Kind = SidebarRowKind.LocalBranchesHeader, IsExpanded = true });
+                    rows.AddRange(localRows);
+                }
 
                 bool remoteExpanded = _appVm?.SidebarRemoteBranchesExpanded ?? true;
-                rows.Add(new SidebarRow { Kind = SidebarRowKind.RemoteBranchesHeader, IsExpanded = remoteExpanded });
-                if (remoteExpanded)
-                    AppendBranchRows(rows, _repo.RemoteBranchTree, 1, SidebarRowKind.RemoteBranchGroup, SidebarRowKind.RemoteBranchLeaf);
+                var remoteBranchRows = new List<SidebarRow>();
+                bool remoteMatched = AppendBranchRows(remoteBranchRows, _repo.RemoteBranchTree, 1, SidebarRowKind.RemoteBranchGroup, SidebarRowKind.RemoteBranchLeaf, search);
+                if (search == null)
+                {
+                    rows.Add(new SidebarRow { Kind = SidebarRowKind.RemoteBranchesHeader, IsExpanded = remoteExpanded });
+                    if (remoteExpanded) rows.AddRange(remoteBranchRows);
+                }
+                else if (remoteMatched)
+                {
+                    rows.Add(new SidebarRow { Kind = SidebarRowKind.RemoteBranchesHeader, IsExpanded = true });
+                    rows.AddRange(remoteBranchRows);
+                }
 
-                bool tagsExpanded = _appVm?.SidebarTagsExpanded ?? false;
-                rows.Add(new SidebarRow { Kind = SidebarRowKind.TagsHeader, IsExpanded = tagsExpanded });
-                if (tagsExpanded)
-                    foreach (var tag in _repo.Tags)
-                        rows.Add(new SidebarRow { Kind = SidebarRowKind.Tag, IndentLevel = 1, Payload = tag });
+                AddSimpleSection(rows, _repo.Tags, t => t.Name,
+                    SidebarRowKind.TagsHeader, SidebarRowKind.Tag, _appVm?.SidebarTagsExpanded ?? false, search);
 
-                bool stashesExpanded = _appVm?.SidebarStashesExpanded ?? false;
-                rows.Add(new SidebarRow { Kind = SidebarRowKind.StashesHeader, IsExpanded = stashesExpanded });
-                if (stashesExpanded)
-                    foreach (var stash in _repo.Stashes)
-                        rows.Add(new SidebarRow { Kind = SidebarRowKind.Stash, IndentLevel = 1, Payload = stash });
+                AddSimpleSection(rows, _repo.Stashes, s => s.Message,
+                    SidebarRowKind.StashesHeader, SidebarRowKind.Stash, _appVm?.SidebarStashesExpanded ?? false, search);
 
-                bool remotesExpanded = _appVm?.SidebarRemotesExpanded ?? false;
-                rows.Add(new SidebarRow { Kind = SidebarRowKind.RemotesHeader, IsExpanded = remotesExpanded });
-                if (remotesExpanded)
-                    foreach (var remote in _repo.Remotes)
-                        rows.Add(new SidebarRow { Kind = SidebarRowKind.Remote, IndentLevel = 1, Payload = remote });
-
-                bool reflogExpanded = _appVm?.SidebarReflogExpanded ?? false;
-                rows.Add(new SidebarRow { Kind = SidebarRowKind.ReflogHeader, IsExpanded = reflogExpanded });
-                if (reflogExpanded)
-                    foreach (var entry in _repo.Reflog)
-                        rows.Add(new SidebarRow { Kind = SidebarRowKind.Reflog, IndentLevel = 1, Payload = entry });
+                AddSimpleSection(rows, _repo.Remotes, r => r.Name,
+                    SidebarRowKind.RemotesHeader, SidebarRowKind.Remote, _appVm?.SidebarRemotesExpanded ?? false, search);
 
                 if (_repo.Hosting?.HasHostingProvider == true)
-                {
-                    rows.Add(new SidebarRow { Kind = SidebarRowKind.PullRequestsHeader, IsExpanded = _pullRequestsExpanded });
-                    if (_pullRequestsExpanded)
-                        foreach (var pr in _repo.Hosting.PullRequests)
-                            rows.Add(new SidebarRow { Kind = SidebarRowKind.PullRequest, IndentLevel = 1, Payload = pr });
-                }
+                    AddSimpleSection(rows, _repo.Hosting.PullRequests, pr => pr.Title,
+                        SidebarRowKind.PullRequestsHeader, SidebarRowKind.PullRequest, _pullRequestsExpanded, search);
 
                 if (_repo.Submodules?.Count > 0)
-                {
-                    rows.Add(new SidebarRow { Kind = SidebarRowKind.SubmodulesHeader, IsExpanded = _submodulesExpanded });
-                    if (_submodulesExpanded)
-                        foreach (var sm in _repo.Submodules)
-                            rows.Add(new SidebarRow { Kind = SidebarRowKind.Submodule, IndentLevel = 1, Payload = sm });
-                }
+                    AddSimpleSection(rows, _repo.Submodules, sm => sm.Name,
+                        SidebarRowKind.SubmodulesHeader, SidebarRowKind.Submodule, _submodulesExpanded, search);
 
                 if (_repo.Worktrees?.Count > 0)
-                {
-                    rows.Add(new SidebarRow { Kind = SidebarRowKind.WorktreesHeader, IsExpanded = _worktreesExpanded });
-                    if (_worktreesExpanded)
-                        foreach (var wt in _repo.Worktrees)
-                            rows.Add(new SidebarRow { Kind = SidebarRowKind.Worktree, IndentLevel = 1, Payload = wt });
-                }
+                    AddSimpleSection(rows, _repo.Worktrees, wt => wt.Name,
+                        SidebarRowKind.WorktreesHeader, SidebarRowKind.Worktree, _worktreesExpanded, search);
             }
 
             // Preserve selection across a rebuild (the same BranchNodeViewModel instance may
@@ -193,26 +188,89 @@ namespace PickleGit.Views
             }
         }
 
-        private static void AppendBranchRows(
+        /// <summary>Flattens a branch tree into rows. When <paramref name="search"/> is null, behaves
+        /// exactly as before (groups always shown, children only when expanded). When searching, a
+        /// group is only included if its own name or some descendant matches — and once included, its
+        /// children are always shown (search results shouldn't stay hidden behind IsExpanded=false).
+        /// Returns whether anything was added, so callers can decide whether to show the section's
+        /// header at all while searching.</summary>
+        private static bool AppendBranchRows(
             List<SidebarRow> rows,
             IEnumerable<BranchNodeViewModel> nodes,
             int indentLevel,
             SidebarRowKind groupKind,
-            SidebarRowKind leafKind)
+            SidebarRowKind leafKind,
+            string search)
         {
+            bool anyAdded = false;
             foreach (var node in nodes)
             {
                 if (node.IsGroup)
                 {
-                    rows.Add(new SidebarRow { Kind = groupKind, IndentLevel = indentLevel, Payload = node });
-                    if (node.IsExpanded)
-                        AppendBranchRows(rows, node.Children, indentLevel + 1, groupKind, leafKind);
+                    if (search == null)
+                    {
+                        rows.Add(new SidebarRow { Kind = groupKind, IndentLevel = indentLevel, Payload = node });
+                        anyAdded = true;
+                        if (node.IsExpanded)
+                            AppendBranchRows(rows, node.Children, indentLevel + 1, groupKind, leafKind, search);
+                    }
+                    else
+                    {
+                        var childRows = new List<SidebarRow>();
+                        bool childMatched = AppendBranchRows(childRows, node.Children, indentLevel + 1, groupKind, leafKind, search);
+                        bool nameMatches = node.DisplayName != null &&
+                            node.DisplayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0;
+                        if (childMatched || nameMatches)
+                        {
+                            rows.Add(new SidebarRow { Kind = groupKind, IndentLevel = indentLevel, Payload = node });
+                            rows.AddRange(childRows);
+                            anyAdded = true;
+                        }
+                    }
                 }
                 else
                 {
-                    rows.Add(new SidebarRow { Kind = leafKind, IndentLevel = indentLevel, Payload = node });
+                    bool include = search == null || (node.DisplayName != null &&
+                        node.DisplayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0);
+                    if (include)
+                    {
+                        rows.Add(new SidebarRow { Kind = leafKind, IndentLevel = indentLevel, Payload = node });
+                        anyAdded = true;
+                    }
                 }
             }
+            return anyAdded;
+        }
+
+        /// <summary>Shared logic for the non-branch sections (Tags/Stashes/Remotes/Pull
+        /// Requests/Submodules/Worktrees): unfiltered, the header always shows and children show
+        /// only when expanded (original behavior); while searching, the header shows only if at
+        /// least one item's text matches, and matches are always shown regardless of the section's
+        /// own expand/collapse state.</summary>
+        private static void AddSimpleSection<T>(
+            List<SidebarRow> rows, IEnumerable<T> items, Func<T, string> textOf,
+            SidebarRowKind headerKind, SidebarRowKind leafKind, bool expanded, string search)
+        {
+            var leaves = (items ?? Enumerable.Empty<T>())
+                .Where(x => search == null || (textOf(x) ?? string.Empty).IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0)
+                .Select(x => new SidebarRow { Kind = leafKind, IndentLevel = 1, Payload = x })
+                .ToList();
+            if (search == null)
+            {
+                rows.Add(new SidebarRow { Kind = headerKind, IsExpanded = expanded });
+                if (expanded) rows.AddRange(leaves);
+            }
+            else if (leaves.Count > 0)
+            {
+                rows.Add(new SidebarRow { Kind = headerKind, IsExpanded = true });
+                rows.AddRange(leaves);
+            }
+        }
+
+        private void SidebarSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            _searchText = SidebarSearchBox.Text;
+            RebuildRows();
         }
 
         // ── Section header expand/collapse ──────────────────────────────────────────────────
@@ -244,12 +302,6 @@ namespace PickleGit.Views
         private void ToggleRemotesHeader(object sender, MouseButtonEventArgs e)
         {
             if (_appVm != null) _appVm.SidebarRemotesExpanded = !_appVm.SidebarRemotesExpanded;
-            RebuildRows();
-        }
-
-        private void ToggleReflogHeader(object sender, MouseButtonEventArgs e)
-        {
-            if (_appVm != null) _appVm.SidebarReflogExpanded = !_appVm.SidebarReflogExpanded;
             RebuildRows();
         }
 

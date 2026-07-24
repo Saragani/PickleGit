@@ -382,11 +382,13 @@
         </Grid>
 
         <!-- ═══ STATUS BAR ════════════════════════════════════════════════════ -->
+        <!-- MinHeight reserves space for the tallest possible content (Cancel/Undo buttons) so their
+             Visibility flipping to Visible doesn't grow this Auto row and shift the Tabs row above it. -->
         <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
-                Padding="12,4">
+                Padding="12,4" MinHeight="28">
             <Grid>
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="⎇ " Foreground="{DynamicResource AccentBrush}" FontSize="12"
                                Visibility="{Binding ActiveTab.CurrentBranch, Converter={StaticResource InvertDetachedVis}}"/>
                     <TextBlock Text="{Binding ActiveTab.CurrentBranch, FallbackValue=''}"
@@ -402,7 +404,7 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <Button Content="&#x2715; Cancel" FontSize="11" Padding="6,1" Margin="0,0,10,0"
                             Style="{StaticResource DangerButton}"
                             Command="{Binding ActiveTab.CancelOperationCommand}"

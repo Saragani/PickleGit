@@ -2,6 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- ── Palette (light) — same keys as PaletteDark.xaml ─────────────────── -->
+    <Color x:Key="ExtraBranchesColor">#FF2AC2C8</Color>
     <Color x:Key="BackgroundColor">#FFF7F8FA</Color>
     <Color x:Key="SurfaceColor">#FFEDEFF2</Color>
     <Color x:Key="SurfaceAltColor">#FFDFE3E9</Color>
@@ -25,6 +26,7 @@
     <Color x:Key="DeletedColor">#FFF7DEDE</Color>
     <Color x:Key="TagColor">#FFF0E2BC</Color>
 
+    <SolidColorBrush x:Key="ExtraBranchesBrush" Color="{StaticResource ExtraBranchesColor}"/>
     <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}"/>
     <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}"/>
     <SolidColorBrush x:Key="SurfaceAltBrush" Color="{StaticResource SurfaceAltColor}"/>

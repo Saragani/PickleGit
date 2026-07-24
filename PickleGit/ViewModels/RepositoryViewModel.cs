@@ -108,7 +108,6 @@ namespace PickleGit.ViewModels
         private ObservableCollection<TagInfo> _tags = new ObservableCollection<TagInfo>();
         private ObservableCollection<StashInfo> _stashes = new ObservableCollection<StashInfo>();
         private ObservableCollection<RemoteInfo> _remotes = new ObservableCollection<RemoteInfo>();
-        private ObservableCollection<ReflogEntry> _reflog = new ObservableCollection<ReflogEntry>();
         private ObservableCollection<BranchNodeViewModel> _localBranchTree = new ObservableCollection<BranchNodeViewModel>();
         private ObservableCollection<BranchNodeViewModel> _remoteBranchTree = new ObservableCollection<BranchNodeViewModel>();
 
@@ -117,7 +116,6 @@ namespace PickleGit.ViewModels
         public ObservableCollection<TagInfo> Tags { get => _tags; private set => Set(ref _tags, value); }
         public ObservableCollection<StashInfo> Stashes { get => _stashes; private set => Set(ref _stashes, value); }
         public ObservableCollection<RemoteInfo> Remotes { get => _remotes; private set => Set(ref _remotes, value); }
-        public ObservableCollection<ReflogEntry> Reflog { get => _reflog; private set => Set(ref _reflog, value); }
         public ObservableCollection<BranchNodeViewModel> LocalBranchTree  { get => _localBranchTree;  private set => Set(ref _localBranchTree,  value); }
         public ObservableCollection<BranchNodeViewModel> RemoteBranchTree { get => _remoteBranchTree; private set => Set(ref _remoteBranchTree, value); }
 
@@ -369,6 +367,72 @@ namespace PickleGit.ViewModels
         public IEnumerable<FileChange> ConflictedFileChanges => _workingDirFiles.Where(f => f.Kind == FileChangeKind.Conflicted);
         public ObservableCollection<FileChange> StagedFiles { get => _stagedFiles; private set => Set(ref _stagedFiles, value); }
 
+        // ── Staged/unstaged sort + flat/tree view — one shared setting for both panels ─────────
+        private FileSortMode _fileSortMode = AppSettings.LoadFileSortMode();
+        public FileSortMode FileSortMode
+        {
+            get => _fileSortMode;
+            set
+            {
+                if (!Set(ref _fileSortMode, value)) return;
+                AppSettings.SaveFileSortMode(value);
+                ReapplyFileOrder();
+            }
+        }
+
+        /// <summary>Options for the sort-mode ComboBox — <see cref="FileSortMode.Status"/> (the
+        /// default) sorts by status then path; the rest are plain path/filename ordering.</summary>
+        public static IReadOnlyList<FileSortModeOption> FileSortModeOptions { get; } = new[]
+        {
+            new FileSortModeOption { Mode = FileSortMode.Status, Label = "Status, then path" },
+            new FileSortModeOption { Mode = FileSortMode.PathAsc, Label = "Path (A → Z)" },
+            new FileSortModeOption { Mode = FileSortMode.PathDesc, Label = "Path (Z → A)" },
+            new FileSortModeOption { Mode = FileSortMode.NameAsc, Label = "Filename (A → Z)" },
+            new FileSortModeOption { Mode = FileSortMode.NameDesc, Label = "Filename (Z → A)" },
+        };
+
+        private FileViewMode _fileViewMode = AppSettings.LoadFileViewMode();
+        public FileViewMode FileViewMode
+        {
+            get => _fileViewMode;
+            set { if (Set(ref _fileViewMode, value)) AppSettings.SaveFileViewMode(value); }
+        }
+
+        private ObservableCollection<FileTreeRow> _stagedFileTreeRows = new ObservableCollection<FileTreeRow>();
+        public ObservableCollection<FileTreeRow> StagedFileTreeRows { get => _stagedFileTreeRows; private set => Set(ref _stagedFileTreeRows, value); }
+
+        private ObservableCollection<FileTreeRow> _workingFileTreeRows = new ObservableCollection<FileTreeRow>();
+        public ObservableCollection<FileTreeRow> WorkingFileTreeRows { get => _workingFileTreeRows; private set => Set(ref _workingFileTreeRows, value); }
+
+        /// <summary>Which tree-view folders are expanded, kept separately per panel (keyed by
+        /// relative folder path, e.g. "Services") — expanding a folder in Staged does NOT expand it
+        /// in Unstaged. Unlike sort mode/view mode (deliberately one shared setting), expand/collapse
+        /// is a per-panel navigation state, not a preference. Empty by default (all folders collapsed).</summary>
+        private readonly HashSet<string> _expandedStagedTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _expandedWorkingTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        private void SetFileViewMode(object param)
+        {
+            if (param is string s && Enum.TryParse(s, out FileViewMode mode))
+                FileViewMode = mode;
+        }
+
+        private void ToggleTreeFolder(object param)
+        {
+            // CommandParameter is "Staged:<path>" or "Working:<path>" (see the Grid.InputBindings in
+            // CommitDetailView.xaml's two FolderTemplates) so each panel's expand state stays independent.
+            if (!(param is string tagged) || string.IsNullOrEmpty(tagged)) return;
+            HashSet<string> set;
+            string path;
+            if (tagged.StartsWith("Staged:", StringComparison.Ordinal)) { set = _expandedStagedTreeFolders; path = tagged.Substring(7); }
+            else if (tagged.StartsWith("Working:", StringComparison.Ordinal)) { set = _expandedWorkingTreeFolders; path = tagged.Substring(8); }
+            else return;
+            if (string.IsNullOrEmpty(path)) return;
+            if (!set.Remove(path))
+                set.Add(path);
+            RebuildFileTreeRows();
+        }
+
         /// <summary>Bound to UnstagedListView via ListViewMultiSelectBehavior — the current multi-selection there.</summary>
         public ObservableCollection<FileChange> SelectedWorkingFiles => _selectedWorkingFiles;
         /// <summary>Bound to StagedListView via ListViewMultiSelectBehavior — the current multi-selection there.</summary>
@@ -431,6 +495,8 @@ namespace PickleGit.ViewModels
         public ICommand UnstageFileCommand { get; }
         public ICommand StageAllCommand { get; }
         public ICommand UnstageAllCommand { get; }
+        public ICommand SetFileViewModeCommand { get; private set; }
+        public ICommand ToggleTreeFolderCommand { get; private set; }
         public ICommand CommitCommand { get; }
         public ICommand OpenIdentitySettingsCommand { get; }
         public ICommand StashCommand { get; }
@@ -493,8 +559,6 @@ namespace PickleGit.ViewModels
         public ICommand RebaseOntoCommitCommand { get; }
         public ICommand InteractiveRebaseOntoBranchCommand { get; }
         public ICommand InteractiveRebaseOntoCommitCommand { get; }
-        public ICommand CheckoutReflogEntryCommand { get; }
-        public ICommand ResetToReflogEntryCommand { get; }
         public ICommand InitAllSubmodulesCommand { get; }
         public ICommand UpdateSubmoduleCommand { get; }
         public ICommand AddSubmoduleCommand { get; }
@@ -602,6 +666,8 @@ namespace PickleGit.ViewModels
             UnstageFileCommand = new RelayCommand(param => _ = UnstageFileAsync(param), _ => HasRepo);
             StageAllCommand = new RelayCommand(async () => await StageAllAsync(), () => HasRepo && WorkingDirFiles.Count > 0);
             UnstageAllCommand = new RelayCommand(async () => await UnstageAllAsync(), () => HasRepo && StagedFiles.Count > 0);
+            SetFileViewModeCommand = new RelayCommand(SetFileViewMode);
+            ToggleTreeFolderCommand = new RelayCommand(ToggleTreeFolder);
             CommitCommand = new RelayCommand(async () => await CommitAsync(),
                 () => HasRepo && !string.IsNullOrWhiteSpace(CommitMessage) && (StagedFiles.Count > 0 || IsAmend));
             OpenIdentitySettingsCommand = new RelayCommand(OpenIdentitySettings);
@@ -657,8 +723,6 @@ namespace PickleGit.ViewModels
             InteractiveRebaseOntoBranchCommand = new RelayCommand(InteractiveRebaseOntoBranch, _ => HasRepo);
             InteractiveRebaseOntoCommitCommand = new RelayCommand(InteractiveRebaseOntoCommit,
                 _ => HasRepo && SelectedNode?.Commit?.IsUncommitted != true);
-            CheckoutReflogEntryCommand = new RelayCommand(CheckoutReflogEntry, _ => HasRepo);
-            ResetToReflogEntryCommand = new RelayCommand(ResetToReflogEntry, _ => HasRepo);
             InitAllSubmodulesCommand = new RelayCommand(async () => await InitAllSubmodulesAsync(), () => HasRepo);
             UpdateSubmoduleCommand = new RelayCommand(async p => await UpdateSubmoduleAsync(p as SubmoduleInfo), _ => HasRepo);
             AddSubmoduleCommand = new RelayCommand(async () => await AddSubmoduleAsync(), () => HasRepo);
@@ -740,7 +804,6 @@ namespace PickleGit.ViewModels
                 var tags = _git.GetTags();
                 var stashes = _git.GetStashes();
                 var remotes = _git.GetRemotes();
-                var reflog = _git.GetReflog();
 
                 Application.Current.Dispatcher.Invoke(() =>
                 {
@@ -755,7 +818,6 @@ namespace PickleGit.ViewModels
                     Tags = new ObservableCollection<TagInfo>(tags);
                     Stashes = new ObservableCollection<StashInfo>(stashes);
                     Remotes = new ObservableCollection<RemoteInfo>(remotes);
-                    Reflog = new ObservableCollection<ReflogEntry>(reflog);
                     CurrentBranch = branch;
                 });
             });
@@ -835,6 +897,21 @@ namespace PickleGit.ViewModels
             {
                 await RunAsync($"Cloning {url}…", () =>
                 {
+                    // Blank credentials go straight into libgit2's CredentialsHandler as empty
+                    // strings, which a private/auth-required remote rejects repeatedly until
+                    // libgit2 gives up with "too many redirects or authentication replays" — so
+                    // before falling back to that, ask git's own configured credential helper
+                    // (same call Push/Pull already use) for cached creds, or to run its normal
+                    // interactive/browser prompt (e.g. GCM) if nothing is cached yet.
+                    if (string.IsNullOrEmpty(username) && string.IsNullOrEmpty(password))
+                    {
+                        var (helperUser, helperPass) = CredentialStore.LoadViaGitCredentialHelper(url);
+                        if (!string.IsNullOrEmpty(helperPass))
+                        {
+                            username = helperUser;
+                            password = helperPass;
+                        }
+                    }
                     GitService.Clone(url, localPath, username, password,
                         new Progress<string>(ReportProgress), OpToken, branch);
                 });

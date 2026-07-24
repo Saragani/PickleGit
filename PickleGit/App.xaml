@@ -14,6 +14,9 @@
             <conv:InverseBooleanConverter x:Key="InverseBool"/>
             <conv:ResolutionToVisibilityConverter x:Key="UnresolvedVis"/>
             <conv:ResolutionToVisibilityConverter x:Key="ResolvedVis" Invert="True"/>
+            <conv:EnumEqualsVisibilityConverter x:Key="EnumEqualsVis"/>
+            <conv:WidthMinusBudgetConverter x:Key="WidthMinusBudget"/>
+            <conv:IndentLevelToMarginConverter x:Key="IndentLevelToMargin"/>
             <conv:NullToVisibilityConverter x:Key="NullToVis"/>
             <conv:NullToVisibilityConverter x:Key="InvertNullToVis" Invert="True"/>
             <conv:DetachedHeadConverter x:Key="DetachedVis"/>
@@ -36,8 +39,8 @@
             <conv:ConditionalGraphWidthConverter x:Key="ConditionalGraphWidth"/>
             <conv:ShowHideWidthConverter x:Key="ShowHideWidth"/>
             <conv:DateFormatConverter x:Key="DateFmt"/>
-            <conv:RefsOverflowConverter x:Key="RefsOverflow"/>
             <conv:RefsTooltipConverter x:Key="RefsTooltip"/>
+            <conv:PrependConverter x:Key="Prepend"/>
             <conv:BulkActionLabelConverter x:Key="BulkActionLabel"/>
             <conv:DiscardTooltipConverter x:Key="DiscardTooltip"/>
             <conv:DiscardBadgeTextConverter x:Key="DiscardBadgeText"/>

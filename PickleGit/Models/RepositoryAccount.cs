@@ -70,6 +70,45 @@ namespace PickleGit.Models
         Conflicted
     }
 
+    /// <summary>Ordering applied to the Staged/Unstaged file panels — shared by both panels.
+    /// <see cref="Status"/> (the default) sorts by status first, then path — matching the app's
+    /// original hardcoded behavior before this became user-selectable.</summary>
+    public enum FileSortMode { Status, PathAsc, PathDesc, NameAsc, NameDesc }
+
+    /// <summary>Flat list vs folder-grouped tree — one shared setting for both the Staged and
+    /// Unstaged panels.</summary>
+    public enum FileViewMode { Flat, Tree }
+
+    public enum FileTreeRowKind { Folder, File }
+
+    /// <summary>One flattened row of a Staged/Unstaged panel in Tree view mode — either a folder
+    /// group header (no <see cref="File"/>) or a leaf wrapping the real <see cref="FileChange"/>.
+    /// Built by <see cref="PickleGit.Services.FileTreeBuilder"/>.</summary>
+    public class FileTreeRow
+    {
+        public FileTreeRowKind Kind { get; set; }
+        public int IndentLevel { get; set; }
+        public string DisplayName { get; set; }
+        public FileChange File { get; set; }
+
+        /// <summary>Folder rows only: the folder's full relative path (e.g. "Views/Dialogs"),
+        /// used as the expand/collapse state key — tracked independently per panel (Staged vs
+        /// Unstaged), see RepositoryViewModel's _expandedStagedTreeFolders/_expandedWorkingTreeFolders.</summary>
+        public string FullPath { get; set; }
+
+        /// <summary>Folder rows only: whether this folder is currently expanded — collapsed
+        /// (false) is the default, so a fresh tree starts fully collapsed.</summary>
+        public bool IsExpanded { get; set; }
+    }
+
+    /// <summary>One entry in the Staged/Unstaged sort-mode picker — pairs the enum value with the
+    /// friendly label shown in the ComboBox.</summary>
+    public class FileSortModeOption
+    {
+        public FileSortMode Mode { get; set; }
+        public string Label { get; set; }
+    }
+
     /// <summary>Parsed diff for one file: its hunks, plus whether the comparison was binary
     /// (no hunks — the view shows a "binary file" notice instead of a blank pane).</summary>
     public class FileDiffResult

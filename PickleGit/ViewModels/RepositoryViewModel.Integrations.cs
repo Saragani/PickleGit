@@ -32,16 +32,48 @@ namespace PickleGit.ViewModels
             await LoadWorkingDirAsync();
         }
 
-        /// <summary>Best-effort re-smudge of Git LFS pointer files after a checkout, using objects already
-        /// present in the local LFS cache (no network fetch — that's `git lfs pull`). LibGit2Sharp checkout
-        /// has no awareness of git-lfs's smudge filter, so a libgit2 checkout leaves LFS-tracked files as
-        /// raw pointer text; git-lfs missing, or the repo not using LFS at all, both degrade silently here —
-        /// this must never surface an error dialog for a plain non-LFS repo.</summary>
+        /// <summary>Best-effort fetch+re-smudge of Git LFS pointer files after a checkout or pull.
+        /// LibGit2Sharp checkout/fetch/pull have no awareness of git-lfs at all, so a libgit2 checkout
+        /// leaves LFS-tracked files as raw pointer text and nothing else in the app ever populates
+        /// .git/lfs/objects. `git lfs pull` (unlike the plain `git lfs checkout` this replaced) actually
+        /// fetches whatever LFS objects the current HEAD's tree needs before re-smudging — `lfs checkout`
+        /// alone only re-smudges from objects already cached locally, which was a guaranteed no-op here.
+        /// Gated on the repo actually declaring LFS filters, to skip a network round-trip on every
+        /// checkout/pull for the common non-LFS repo. Must never surface a blocking dialog — a missing
+        /// git-lfs extension or a fetch failure is only logged, not thrown at the caller.</summary>
         private async Task TryLfsCheckoutAsync()
         {
             if (_git.Cli == null || !_git.Cli.IsAvailable) return;
-            try { await _git.Cli.RunAsync("lfs checkout"); }
-            catch { /* best-effort only — must never affect the checkout that already succeeded */ }
+            if (!RepoUsesLfs()) return;
+            try
+            {
+                var result = await _git.Cli.RunAsync("lfs pull");
+                if (!result.Success)
+                    AppLog.Warn($"git lfs pull failed: {result.ErrorText}");
+            }
+            catch (Exception ex) { AppLog.Warn("git lfs pull threw", ex); }
+        }
+
+        /// <summary>Cheap check for whether this repo declares any Git LFS filters, so the LFS fetch
+        /// step above can skip entirely (no process spawn, no network) for the common non-LFS repo.</summary>
+        private bool RepoUsesLfs()
+        {
+            try
+            {
+                var candidates = new[]
+                {
+                    Path.Combine(RepoPath, ".gitattributes"),
+                    Path.Combine(RepoPath, ".git", "info", "attributes"),
+                };
+                foreach (var p in candidates)
+                {
+                    if (File.Exists(p) &&
+                        File.ReadAllText(p).IndexOf("filter=lfs", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+                }
+            }
+            catch { /* best-effort detection only */ }
+            return false;
         }
 
         // ── Submodules ───────────────────────────────────────────────────────

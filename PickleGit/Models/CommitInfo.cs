@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace PickleGit.Models
 {
@@ -25,6 +26,16 @@ namespace PickleGit.Models
         public DateTimeOffset CommitterDate { get; set; }
         public List<string> ParentShas { get; set; } = new List<string>();
         public List<string> Refs { get; set; } = new List<string>();
+
+        /// <summary>The one ref shown directly in the commit list's BRANCH/TAG column — prefers a
+        /// "HEAD -> " entry (the checked-out branch) when present, otherwise whatever ref sorts
+        /// first. The rest collapse into <see cref="OverflowRefCount"/>.</summary>
+        public string PrimaryRef => Refs.Count == 0 ? null
+            : Refs.FirstOrDefault(r => r.StartsWith("HEAD -> ", StringComparison.Ordinal)) ?? Refs[0];
+
+        /// <summary>How many additional refs beyond <see cref="PrimaryRef"/> exist — rendered as a
+        /// fixed "+N" pill that never shrinks, unlike the primary ref label.</summary>
+        public int OverflowRefCount => Math.Max(0, Refs.Count - 1);
         public bool IsHead { get; set; }
         public bool IsStash { get; set; }
         public bool IsUncommitted { get; set; }

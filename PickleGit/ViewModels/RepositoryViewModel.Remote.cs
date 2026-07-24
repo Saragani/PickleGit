@@ -149,6 +149,7 @@ namespace PickleGit.ViewModels
                 if (!conflict.HasConflicts)
                     await CaptureUndo(UndoKind.HeadHardMove, "Pull (rebase)", preHead);
                 await LoadWorkingDirAsync();
+                await TryLfsCheckoutAsync();
             }
             await RefreshAsync();
         }
@@ -188,6 +189,7 @@ namespace PickleGit.ViewModels
                     if (!conflict.HasConflicts)
                         await CaptureUndo(UndoKind.HeadHardMove, "Pull", preHead);
                     await LoadWorkingDirAsync();
+                    await TryLfsCheckoutAsync();
                 }
                 await RefreshAsync();
                 return;
@@ -200,6 +202,7 @@ namespace PickleGit.ViewModels
                     new Progress<string>(ReportProgress), OpToken);
             });
             if (pullOk && _credentialsFromDialog) SaveCredentials();
+            if (pullOk) await TryLfsCheckoutAsync();
             await RefreshAsync();
         }
 

@@ -53,7 +53,6 @@ namespace PickleGit.Services
             public bool SidebarTagsExpanded            { get; set; } = false;
             public bool SidebarStashesExpanded         { get; set; } = false;
             public bool SidebarRemotesExpanded         { get; set; } = false;
-            public bool SidebarReflogExpanded          { get; set; } = false;
 
             /// <summary>Applied as `git config --global rerere.enabled` when toggled.</summary>
             public bool RerereEnabled { get; set; } = false;
@@ -82,6 +81,13 @@ namespace PickleGit.Services
 
             /// <summary>Parent folder of the last successful clone — pre-fills the clone dialog.</summary>
             public string LastCloneParentDir { get; set; }
+
+            /// <summary>Shared by the Staged/Unstaged file panels — <see cref="Models.FileSortMode"/> name.</summary>
+            public string FileSortMode { get; set; } = "Status";
+
+            /// <summary>Shared by the Staged/Unstaged file panels — <see cref="Models.FileViewMode"/>
+            /// name (flat list vs folder tree).</summary>
+            public string FileViewMode { get; set; } = "Flat";
 
             /// <summary>Self-hosted provider mapping: domain → "github" or "gitlab"
             /// (GitHub Enterprise Server / self-managed GitLab).</summary>
@@ -218,12 +224,11 @@ namespace PickleGit.Services
             catch { }
         }
 
-        public static (bool local, bool remote, bool tags, bool stashes, bool remotes, bool reflog) LoadSidebarSectionStates()
+        public static (bool local, bool remote, bool tags, bool stashes, bool remotes) LoadSidebarSectionStates()
         {
             var d = Load() ?? new SettingsData();
             return (d.SidebarLocalBranchesExpanded, d.SidebarRemoteBranchesExpanded,
-                    d.SidebarTagsExpanded, d.SidebarStashesExpanded, d.SidebarRemotesExpanded,
-                    d.SidebarReflogExpanded);
+                    d.SidebarTagsExpanded, d.SidebarStashesExpanded, d.SidebarRemotesExpanded);
         }
 
         public static void SaveSidebarSectionState(string section, bool expanded)
@@ -239,7 +244,6 @@ namespace PickleGit.Services
                     case "tags":    data.SidebarTagsExpanded           = expanded; break;
                     case "stashes": data.SidebarStashesExpanded        = expanded; break;
                     case "remotes": data.SidebarRemotesExpanded        = expanded; break;
-                    case "reflog":  data.SidebarReflogExpanded         = expanded; break;
                 }
                 Save(data);
             }
@@ -347,6 +351,30 @@ namespace PickleGit.Services
         {
             var data = Load() ?? new SettingsData();
             data.LastCloneParentDir = dir;
+            Save(data);
+        }
+
+        public static Models.FileSortMode LoadFileSortMode()
+        {
+            var raw = (Load() ?? new SettingsData()).FileSortMode;
+            return Enum.TryParse(raw, out Models.FileSortMode mode) ? mode : Models.FileSortMode.Status;
+        }
+
+        public static void SaveFileSortMode(Models.FileSortMode mode)
+        {
+            var data = Load() ?? new SettingsData();
+            data.FileSortMode = mode.ToString();
+            Save(data);
+        }
+
+        public static Models.FileViewMode LoadFileViewMode() =>
+            Enum.TryParse((Load() ?? new SettingsData()).FileViewMode, out Models.FileViewMode mode)
+                ? mode : Models.FileViewMode.Flat;
+
+        public static void SaveFileViewMode(Models.FileViewMode mode)
+        {
+            var data = Load() ?? new SettingsData();
+            data.FileViewMode = mode.ToString();
             Save(data);
         }
 

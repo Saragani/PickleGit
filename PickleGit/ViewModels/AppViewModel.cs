@@ -59,7 +59,6 @@ namespace PickleGit.ViewModels
         private bool _sidebarTagsExpanded           = false;
         private bool _sidebarStashesExpanded        = false;
         private bool _sidebarRemotesExpanded        = false;
-        private bool _sidebarReflogExpanded         = false;
 
         public bool ShowBranchTag  { get => _showBranchTag;  set { if (Set(ref _showBranchTag,  value)) OnColumnChanged(); } }
         public bool ShowGraph      { get => _showGraph;       set { if (Set(ref _showGraph,      value)) OnColumnChanged(); } }
@@ -118,12 +117,6 @@ namespace PickleGit.ViewModels
             get => _sidebarRemotesExpanded;
             set { if (Set(ref _sidebarRemotesExpanded, value)) AppSettings.SaveSidebarSectionState("remotes", value); }
         }
-        public bool SidebarReflogExpanded
-        {
-            get => _sidebarReflogExpanded;
-            set { if (Set(ref _sidebarReflogExpanded, value)) AppSettings.SaveSidebarSectionState("reflog", value); }
-        }
-
         public GridLength EffectiveColWidthBranchTag  => GetEffectiveColumnWidth(0);
         public GridLength EffectiveColWidthGraph      => GetEffectiveColumnWidth(1);
         public GridLength EffectiveColWidthCommitDesc => GetEffectiveColumnWidth(2);
@@ -598,13 +591,12 @@ namespace PickleGit.ViewModels
             _colWidthDateTime   = wdt;
             _colWidthSha        = wsha;
 
-            var (sLocal, sRemote, sTags, sStashes, sRemotes, sReflog) = AppSettings.LoadSidebarSectionStates();
+            var (sLocal, sRemote, sTags, sStashes, sRemotes) = AppSettings.LoadSidebarSectionStates();
             _sidebarLocalBranchesExpanded  = sLocal;
             _sidebarRemoteBranchesExpanded = sRemote;
             _sidebarTagsExpanded           = sTags;
             _sidebarStashesExpanded        = sStashes;
             _sidebarRemotesExpanded        = sRemotes;
-            _sidebarReflogExpanded         = sReflog;
         }
 
         public void SaveSettings()
@@ -664,7 +656,9 @@ namespace PickleGit.ViewModels
         {
             var dlg = new Views.CloneDialog { Owner = Application.Current.MainWindow };
             if (dlg.ShowDialog() == true)
-                _ = CloneInNewTabAsync(dlg.RemoteUrl, dlg.LocalPath, dlg.Username, dlg.Password,
+                // No manual credential fields anymore — CloneRepoAsync falls back to git's
+                // configured credential helper (GCM etc.) when both are blank.
+                _ = CloneInNewTabAsync(dlg.RemoteUrl, dlg.LocalPath, string.Empty, string.Empty,
                     dlg.Branch, dlg.RecurseSubmodules);
         }
 

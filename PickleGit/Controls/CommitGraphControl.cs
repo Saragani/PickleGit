@@ -249,14 +249,20 @@ namespace PickleGit.Controls
         private const double VPad = 2.5;
         private const double BadgeHeight = 17.0;
         private const double FontSz = 10.5;
+        private const double IconGap = 3.0;
         private static readonly Typeface Tf = new Typeface(
             new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        private static readonly Typeface IconTf = new Typeface(
+            new FontFamily("Segoe Fluent Icons"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
 
         private static readonly SolidColorBrush s_brushHead;
         private static readonly SolidColorBrush s_brushTag;
         private static readonly SolidColorBrush s_brushRemote;
         private static readonly SolidColorBrush s_brushLocal;
         private static readonly Pen s_badgeBorderPen;
+        private static readonly Pen s_branchIconPen;
+        private const string TagGlyph = "";
+        private const double BranchIconSize = 10.0;
 
         static RefLabel()
         {
@@ -269,6 +275,9 @@ namespace PickleGit.Controls
             borderBr.Freeze();
             s_badgeBorderPen = new Pen(borderBr, 0.8);
             s_badgeBorderPen.Freeze();
+
+            s_branchIconPen = new Pen(Brushes.White, 1.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+            s_branchIconPen.Freeze();
         }
 
         public static readonly DependencyProperty RefNameProperty =
@@ -286,23 +295,57 @@ namespace PickleGit.Controls
         private double _dpi = 96;
         private string _cachedRef;
         private FormattedText _cachedFt;
+        private string _cachedIconChar;
+        private FormattedText _cachedIconFt;
 
         protected override void OnVisualParentChanged(DependencyObject oldParent)
         {
             base.OnVisualParentChanged(oldParent);
             _dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         }
-
-        private (string text, SolidColorBrush bg, bool isHead) Classify()
+        /// <summary>Branches (HEAD/local/remote) get a hand-drawn branch icon (see DrawBranchIcon) -
+        /// a plain single character was tried first (reusing the status bar's current-branch glyph)
+        /// but didn't read well at this badge's size/weight, so it's drawn as vector shapes instead,
+        /// the same reliable approach already used for the sidebar's branch icon. Tags get the Segoe
+        /// Fluent Icons Tag glyph (U+E8EC, verified against Microsoft's official icon list, and
+        /// already confirmed rendering correctly in this exact badge).</summary>
+        private (string text, SolidColorBrush bg, bool isHead, bool isBranch) Classify()
         {
-            if (RefName == null) return (string.Empty, s_brushLocal, false);
+            if (RefName == null) return (string.Empty, s_brushLocal, false, false);
             if (RefName.StartsWith("HEAD -> "))
-                return (RefName.Substring(8), s_brushHead, true);
+                return (RefName.Substring(8), s_brushHead, true, true);
             if (RefName.StartsWith("tag: "))
-                return (RefName.Substring(5), s_brushTag, false);
+                return (RefName.Substring(5), s_brushTag, false, false);
             if (RefName.Contains("/"))
-                return (RefName, s_brushRemote, false);
-            return (RefName, s_brushLocal, false);
+                return (RefName, s_brushRemote, false, true);
+            return (RefName, s_brushLocal, false, true);
+        }
+
+        /// <summary>Small git-branch glyph (trunk + fork to a branch tip), matching the sidebar's
+        /// Local Branches header icon shape, scaled down to fit inline in a ref badge.</summary>
+        private static void DrawBranchIcon(DrawingContext dc, double x, double yCenter, double size)
+        {
+            double r = size * 0.16;
+            double top = yCenter - size * 0.4;
+            double bottom = yCenter + size * 0.4;
+            double leftX = x + size * 0.3;
+            double rightX = x + size * 0.85;
+
+            dc.DrawLine(s_branchIconPen, new Point(leftX, bottom - r), new Point(leftX, top + r));
+
+            var curve = new StreamGeometry();
+            using (var ctx = curve.Open())
+            {
+                ctx.BeginFigure(new Point(leftX, bottom - r * 1.6), false, false);
+                ctx.BezierTo(new Point(leftX, yCenter), new Point(rightX, yCenter),
+                    new Point(rightX, top + r * 1.6), true, false);
+            }
+            curve.Freeze();
+            dc.DrawGeometry(null, s_branchIconPen, curve);
+
+            dc.DrawEllipse(Brushes.White, null, new Point(leftX, bottom), r, r);
+            dc.DrawEllipse(Brushes.White, null, new Point(leftX, top), r, r);
+            dc.DrawEllipse(Brushes.White, null, new Point(rightX, top), r, r);
         }
 
         private FormattedText GetText(string t)
@@ -315,23 +358,73 @@ namespace PickleGit.Controls
             return _cachedFt;
         }
 
+        private FormattedText GetIconText(string icon, bool fluent)
+        {
+            if (_cachedIconChar == icon && _cachedIconFt != null)
+                return _cachedIconFt;
+            _cachedIconChar = icon;
+            _cachedIconFt = new FormattedText(icon, CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight, fluent ? IconTf : Tf, FontSz, Brushes.White, _dpi);
+            return _cachedIconFt;
+        }
+
         protected override Size MeasureOverride(Size avail)
         {
-            var (text, _, _) = Classify();
-            if (string.IsNullOrEmpty(text)) return new Size(0, 0);
-            var ft = GetText(text);
-            return new Size(ft.Width + HPad * 2 + 2, BadgeHeight + 2);
+            var c = Classify();
+            if (string.IsNullOrEmpty(c.text)) return new Size(0, 0);
+            var ft = GetText(c.text);
+            // OnRender mutates this same cached FormattedText's MaxTextWidth down to whatever fit
+            // last time (e.g. when the column was narrow) and never resets it — reading ft.Width
+            // without resetting first would report that stale truncated width forever after, even
+            // once the column is widened back out. 0 is FormattedText's own "unconstrained" value.
+            ft.MaxTextWidth = 0;
+            double iconW = (c.isBranch ? BranchIconSize : GetIconText(TagGlyph, true).Width) + IconGap;
+            double desired = ft.Width + HPad * 2 + 2 + iconW;
+            // Respect a real (finite) width constraint from the parent — e.g. the commit list's
+            // BRANCH/TAG column, which now shrinks this label under width pressure instead of
+            // measuring/rendering it at full natural size regardless of available space.
+            if (!double.IsInfinity(avail.Width))
+                desired = Math.Min(desired, Math.Max(avail.Width, iconW + HPad * 2 + 8));
+            return new Size(desired, BadgeHeight + 2);
         }
 
         protected override void OnRender(DrawingContext dc)
         {
-            var (text, bgBrush, _) = Classify();
-            if (string.IsNullOrEmpty(text)) return;
-            var ft = GetText(text);
-            double w = ft.Width + HPad * 2;
+            var c = Classify();
+            if (string.IsNullOrEmpty(c.text)) return;
+
+            FormattedText tagIconFt = c.isBranch ? null : GetIconText(TagGlyph, true);
+            double iconW = (c.isBranch ? BranchIconSize : tagIconFt.Width) + IconGap;
+
+            var ft = GetText(c.text);
+            ft.MaxTextWidth = 0; // reset before reading .Width below — see MeasureOverride's comment
+
+            // Use the actually-arranged width (which can be less than what MeasureOverride asked
+            // for, once the parent Grid's overflow-count column claims its own space) so the name
+            // shrinks with an ellipsis instead of just being measured/clipped at full size.
+            double w = !double.IsNaN(ActualWidth) && ActualWidth > 0
+                ? ActualWidth : ft.Width + HPad * 2 + iconW;
+            ft.MaxTextWidth = Math.Max(10, w - HPad * 2 - iconW);
+            // Without this, FormattedText wraps the name across multiple lines to stay within
+            // MaxTextWidth instead of truncating a single line — Trimming only takes effect once
+            // the text is also capped to one line.
+            ft.MaxLineCount = 1;
+            ft.Trimming = TextTrimming.CharacterEllipsis;
+
             var rect = new Rect(1, 1, w, BadgeHeight);
-            dc.DrawRoundedRectangle(bgBrush, s_badgeBorderPen, rect, 4, 4);
-            dc.DrawText(ft, new Point(1 + HPad, 1 + (BadgeHeight - ft.Height) / 2));
+            dc.DrawRoundedRectangle(c.bg, s_badgeBorderPen, rect, 4, 4);
+            double x = 1 + HPad;
+            if (c.isBranch)
+            {
+                DrawBranchIcon(dc, x, 1 + BadgeHeight / 2, BranchIconSize);
+                x += BranchIconSize + IconGap;
+            }
+            else
+            {
+                dc.DrawText(tagIconFt, new Point(x, 1 + (BadgeHeight - tagIconFt.Height) / 2));
+                x += tagIconFt.Width + IconGap;
+            }
+            dc.DrawText(ft, new Point(x, 1 + (BadgeHeight - ft.Height) / 2));
         }
     }
 }

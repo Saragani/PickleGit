@@ -6,10 +6,8 @@ namespace PickleGit.Views
     {
         public string RemoteUrl { get; set; } = string.Empty;
         public string LocalPath { get; set; } = string.Empty;
-        public string Username { get; set; } = string.Empty;
         public string Branch { get; set; } = string.Empty;
         public bool RecurseSubmodules { get; set; }
-        public string Password { get; private set; } = string.Empty;
 
         public CloneDialog()
         {
@@ -21,7 +19,10 @@ namespace PickleGit.Views
 
         private void AutoFillLocalPath()
         {
-            var parent = Services.AppSettings.LoadLastCloneParentDir();
+            // Always default to Documents rather than the last folder the user cloned/browsed
+            // into — that previously made the suggested path look like it was tracking whatever
+            // repo happened to be open most recently, which isn't an intentional default.
+            var parent = System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments);
             if (string.IsNullOrEmpty(parent) || !System.IO.Directory.Exists(parent)) return;
             // Only auto-fill while the user hasn't typed a path of their own
             if (!string.IsNullOrEmpty(LocalPath) && !LocalPath.StartsWith(parent, System.StringComparison.OrdinalIgnoreCase))
@@ -51,9 +52,6 @@ namespace PickleGit.Views
                 PathBox.Text = LocalPath;
             }
         }
-
-        private void PassBox_PasswordChanged(object sender, RoutedEventArgs e)
-            => Password = PassBox.Password;
 
         private void Clone_Click(object sender, RoutedEventArgs e)
         {

@@ -57,6 +57,20 @@ namespace PickleGit.Converters
             value is Visibility v && v == Visibility.Visible;
     }
 
+    /// <summary>Visible when the bound enum value's name matches ConverterParameter (case-insensitive),
+    /// e.g. <c>Visibility="{Binding StagedFileViewMode, Converter={StaticResource EnumEqualsVis},
+    /// ConverterParameter=Tree}"</c> — used to switch between the Flat and Tree file-list ListViews.</summary>
+    public class EnumEqualsVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type t, object p, CultureInfo c)
+        {
+            if (value == null || p == null) return Visibility.Collapsed;
+            return string.Equals(value.ToString(), p.ToString(), StringComparison.OrdinalIgnoreCase)
+                ? Visibility.Visible : Visibility.Collapsed;
+        }
+        public object ConvertBack(object value, Type t, object p, CultureInfo c) => throw new NotSupportedException();
+    }
+
     /// <summary>Shows/hides a conflict block's "unresolved" (inline accept buttons) vs "resolved"
     /// (collapsed strip) sub-panel based on MergeConflictBlock.Resolution. A fresh ConflictViewItem
     /// is rebuilt for every block on every resolve, so this never needs to react to the same
@@ -224,29 +238,6 @@ namespace PickleGit.Converters
         public object ConvertBack(object value, Type t, object p, CultureInfo c) => null;
     }
 
-    public class RefsToLabelsConverter : IValueConverter
-    {
-        public object Convert(object value, Type t, object p, CultureInfo c)
-            => value as List<string> ?? new List<string>();
-        public object ConvertBack(object value, Type t, object p, CultureInfo c) => null;
-    }
-
-    /// <summary>Caps the ref badges shown per row at MaxVisible, appending a "+N" overflow
-    /// badge instead of silently clipping the rest (hover the row's badges for the full list).</summary>
-    public class RefsOverflowConverter : IValueConverter
-    {
-        public int MaxVisible { get; set; } = 3;
-        public object Convert(object value, Type t, object p, CultureInfo c)
-        {
-            var refs = value as List<string>;
-            if (refs == null || refs.Count <= MaxVisible) return refs ?? new List<string>();
-            var shown = refs.Take(MaxVisible).ToList();
-            shown.Add($"+{refs.Count - MaxVisible}");
-            return shown;
-        }
-        public object ConvertBack(object value, Type t, object p, CultureInfo c) => null;
-    }
-
     /// <summary>All refs joined for a tooltip; null (no tooltip) when the commit has no refs.</summary>
     public class RefsTooltipConverter : IValueConverter
     {
@@ -255,6 +246,16 @@ namespace PickleGit.Converters
             var refs = value as List<string>;
             return refs != null && refs.Count > 0 ? string.Join("\n", refs) : null;
         }
+        public object ConvertBack(object value, Type t, object p, CultureInfo c) => null;
+    }
+
+    /// <summary>Prepends ConverterParameter to the bound value — used instead of Binding.StringFormat
+    /// where the target is a non-String DP (e.g. CommandParameter, typed object): WPF only applies
+    /// StringFormat when the target property's type is exactly String, so a "{0}"-style format on a
+    /// CommandParameter binding is silently ignored and the raw unformatted value passes through.</summary>
+    public class PrependConverter : IValueConverter
+    {
+        public object Convert(object value, Type t, object p, CultureInfo c) => $"{p}{value}";
         public object ConvertBack(object value, Type t, object p, CultureInfo c) => null;
     }
 
@@ -277,6 +278,22 @@ namespace PickleGit.Converters
             return above ? Visibility.Visible : Visibility.Collapsed;
         }
         public object ConvertBack(object value, Type t, object p, CultureInfo c) => null;
+    }
+
+    /// <summary>Subtracts a fixed budget (ConverterParameter, default 40) from a bound column
+    /// width, floored at 20 — used to give the primary ref label in the commit list's BRANCH/TAG
+    /// column a MaxWidth that leaves room for the "+N" overflow pill, so the two sit packed
+    /// together (via a plain StackPanel) instead of the label sitting in its own Star-sized Grid
+    /// cell with a gap before the pill's Auto column.</summary>
+    public class WidthMinusBudgetConverter : IValueConverter
+    {
+        public object Convert(object value, Type t, object p, CultureInfo c)
+        {
+            double budget = p is string s && double.TryParse(s, out var parsed) ? parsed : 40;
+            double width = value is double d ? d : value is GridLength gl ? gl.Value : 0;
+            return Math.Max(20, width - budget);
+        }
+        public object ConvertBack(object value, Type t, object p, CultureInfo c) => throw new NotSupportedException();
     }
 
     /// <summary>Truncates a full commit sha to its short 7-char form — for BisectState's raw
@@ -514,6 +531,21 @@ namespace PickleGit.Converters
         }
     }
 
+    /// <summary>Picks the DataTemplate for one flattened Staged/Unstaged Tree-view row by
+    /// FileTreeRowKind — Folder (group header) vs File (leaf, wraps the real FileChange).</summary>
+    public class FileTreeRowTemplateSelector : DataTemplateSelector
+    {
+        public DataTemplate FolderTemplate { get; set; }
+        public DataTemplate FileTemplate { get; set; }
+
+        public override DataTemplate SelectTemplate(object item, DependencyObject container)
+        {
+            if (item is FileTreeRow row)
+                return row.Kind == FileTreeRowKind.Folder ? FolderTemplate : FileTemplate;
+            return null;
+        }
+    }
+
     /// <summary>Turns a SidebarRow.IndentLevel into a left Margin, applied to a row's inner
     /// content only — never the ListViewItem container — so selection/hover highlighting always
     /// spans the full row width regardless of nesting depth.</summary>
@@ -535,7 +567,6 @@ namespace PickleGit.Converters
         public DataTemplate TagsHeaderTemplate { get; set; }
         public DataTemplate StashesHeaderTemplate { get; set; }
         public DataTemplate RemotesHeaderTemplate { get; set; }
-        public DataTemplate ReflogHeaderTemplate { get; set; }
         public DataTemplate PullRequestsHeaderTemplate { get; set; }
         public DataTemplate SubmodulesHeaderTemplate { get; set; }
         public DataTemplate WorktreesHeaderTemplate { get; set; }
@@ -546,7 +577,6 @@ namespace PickleGit.Converters
         public DataTemplate TagTemplate { get; set; }
         public DataTemplate StashTemplate { get; set; }
         public DataTemplate RemoteTemplate { get; set; }
-        public DataTemplate ReflogTemplate { get; set; }
         public DataTemplate PullRequestTemplate { get; set; }
         public DataTemplate SubmoduleTemplate { get; set; }
         public DataTemplate WorktreeTemplate { get; set; }
@@ -561,7 +591,6 @@ namespace PickleGit.Converters
                 case SidebarRowKind.TagsHeader: return TagsHeaderTemplate;
                 case SidebarRowKind.StashesHeader: return StashesHeaderTemplate;
                 case SidebarRowKind.RemotesHeader: return RemotesHeaderTemplate;
-                case SidebarRowKind.ReflogHeader: return ReflogHeaderTemplate;
                 case SidebarRowKind.PullRequestsHeader: return PullRequestsHeaderTemplate;
                 case SidebarRowKind.SubmodulesHeader: return SubmodulesHeaderTemplate;
                 case SidebarRowKind.WorktreesHeader: return WorktreesHeaderTemplate;
@@ -572,7 +601,6 @@ namespace PickleGit.Converters
                 case SidebarRowKind.Tag: return TagTemplate;
                 case SidebarRowKind.Stash: return StashTemplate;
                 case SidebarRowKind.Remote: return RemoteTemplate;
-                case SidebarRowKind.Reflog: return ReflogTemplate;
                 case SidebarRowKind.PullRequest: return PullRequestTemplate;
                 case SidebarRowKind.Submodule: return SubmoduleTemplate;
                 case SidebarRowKind.Worktree: return WorktreeTemplate;
