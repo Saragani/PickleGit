@@ -61,7 +61,7 @@
                         </Canvas>
                         <TextBlock Grid.Column="2" Text="LOCAL BRANCHES" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </Grid>
                 </DataTemplate>
             </conv:SidebarRowTemplateSelector.LocalBranchesHeaderTemplate>
@@ -80,7 +80,7 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="2" Text="REMOTE BRANCHES" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </Grid>
                 </DataTemplate>
             </conv:SidebarRowTemplateSelector.RemoteBranchesHeaderTemplate>
@@ -99,7 +99,7 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="2" Text="TAGS" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </Grid>
                 </DataTemplate>
             </conv:SidebarRowTemplateSelector.TagsHeaderTemplate>
@@ -118,7 +118,7 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="2" Text="STASHES" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </Grid>
                 </DataTemplate>
             </conv:SidebarRowTemplateSelector.StashesHeaderTemplate>
@@ -138,7 +138,7 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="2" Text="REMOTES" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         <Grid.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Add remote…"
@@ -166,7 +166,7 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="2" Text="PULL REQUESTS" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         <!-- Only shown when the last load genuinely failed (auth/network/rate-limit) —
                              an empty list from zero open PRs never sets this. -->
                         <TextBlock Grid.Column="2" Text="&#x26A0;" FontSize="10" Margin="0,0,4,0"
@@ -202,7 +202,7 @@
                         <Path Grid.Column="0" Style="{StaticResource SidebarChevron}"/>
                         <TextBlock Grid.Column="1" Text="SUBMODULES" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         <Grid.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Init and update all"
@@ -232,7 +232,7 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="2" Text="WORKTREES" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         <Grid.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Add worktree…"
@@ -319,14 +319,26 @@
                                         Visibility="{Binding HasOpenPr, Converter={StaticResource BoolToVis}}">
                                     <TextBlock Text="PR" FontSize="9" FontWeight="Bold" Foreground="White"/>
                                 </Border>
-                                <TextBlock Foreground="{DynamicResource SuccessBrush}" FontSize="10" FontWeight="SemiBold" Margin="0,0,4,0"
-                                           Visibility="{Binding HasAhead, Converter={StaticResource BoolToVis}}">
-                                    <Run Text="&#x2191;"/><Run Text=" "/><Run Text="{Binding AheadBy, Mode=OneWay}"/>
-                                </TextBlock>
-                                <TextBlock Foreground="{DynamicResource DangerBrush}" FontSize="10" FontWeight="SemiBold"
-                                           Visibility="{Binding HasBehind, Converter={StaticResource BoolToVis}}">
-                                    <Run Text="&#x2193;"/><Run Text=" "/><Run Text="{Binding BehindBy, Mode=OneWay}"/>
-                                </TextBlock>
+                                <!-- Hand-drawn filled triangles instead of the Unicode ↑/↓ glyphs or a
+                                     Segoe Fluent Icons codepoint — this session already hit a Fluent
+                                     Icons glyph that rendered as an unrecognizable sliver despite being
+                                     the officially-correct codepoint, and the plain ↑/↓ characters read
+                                     as thin/small even at a larger FontSize. A solid vector triangle
+                                     scales to any size cleanly and can't suffer a font-rendering miss. -->
+                                <StackPanel Orientation="Horizontal" Margin="0,0,8,0"
+                                            Visibility="{Binding HasAhead, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="&#xF0AD;" FontSize="9" FontFamily="Segoe Fluent Icons"
+                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                                    <TextBlock Text="{Binding AheadBy, Mode=OneWay}" FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal"
+                                            Visibility="{Binding HasBehind, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="&#xF0AE;" FontSize="9" FontFamily="Segoe Fluent Icons"
+                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                                    <TextBlock Text="{Binding BehindBy, Mode=OneWay}" FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
                             </StackPanel>
 
                             <Grid.ContextMenu>

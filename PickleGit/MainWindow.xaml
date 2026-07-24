@@ -317,7 +317,7 @@
                 <TabControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:RepositoryViewModel}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding RepoName}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding RepoName}" VerticalAlignment="Center" FontSize="15"/>
                             <Path Style="{StaticResource TabBusyIndicator}"
                                   Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
                             <Button Content="✕"
@@ -437,7 +437,7 @@
                 </Border.Effect>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock x:Name="TabDragGhostLabel" Foreground="{DynamicResource TextPrimaryBrush}"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Center" FontSize="15"/>
                     <TextBlock Text="✕" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="10"
                                Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
