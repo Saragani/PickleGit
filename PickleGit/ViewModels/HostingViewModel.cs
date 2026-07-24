@@ -104,23 +104,6 @@ namespace PickleGit.ViewModels
             var provider = HostingProvider;
             if (provider == null || string.IsNullOrEmpty(source)) return;
 
-            // Only the checked-out branch can be pushed via PushAsync (it pushes CurrentBranch,
-            // not an arbitrary branch name) — for a different, non-checked-out source branch
-            // (e.g. dragged onto a target), skip the push-first prompt rather than risk pushing
-            // the wrong branch.
-            if (string.Equals(source, _repo.CurrentBranch, StringComparison.Ordinal))
-            {
-                var current = _repo.LocalBranches.FirstOrDefault(b => b.IsHead);
-                if (current != null && current.AheadBy > 0)
-                {
-                    var word = current.AheadBy == 1 ? "commit" : "commits";
-                    if (!DialogService.Confirm("Push Before Creating PR",
-                            $"This branch has {current.AheadBy} unpushed {word}. Push now?", okText: "Push"))
-                        return;
-                    if (!await _repo.PushAsync()) return;
-                }
-            }
-
             var targets = _repo.RemoteBranches.Select(b => b.DisplayName).Distinct()
                 .Where(n => !string.Equals(n, source, StringComparison.Ordinal))
                 .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
@@ -142,6 +125,25 @@ namespace PickleGit.ViewModels
                 SupportsDraft = !(provider is BitbucketCloudProvider)
             };
             if (dlg.ShowDialog() != true) return;
+
+            // Only pushed AFTER the user confirms the dialog (not while it's still being filled
+            // in), and only the checked-out branch can be pushed via PushAsync (it pushes
+            // CurrentBranch, not an arbitrary branch name) — for a different, non-checked-out
+            // source branch (e.g. dragged onto a target), skip the push-first step rather than
+            // risk pushing the wrong branch. Everything below (API create / browser compose page)
+            // must not run unless this push actually succeeds — a PR page for a branch the remote
+            // has never heard of is worse than not opening one at all.
+            if (string.Equals(source, _repo.CurrentBranch, StringComparison.Ordinal))
+            {
+                var current = _repo.LocalBranches.FirstOrDefault(b => b.IsHead);
+                // A brand-new branch has no upstream tracking ref at all, so AheadBy has nothing
+                // to compare against and stays 0 — checking AheadBy alone missed this case entirely.
+                bool neverPushed = current != null && string.IsNullOrEmpty(current.TrackedBranchName);
+                if (current != null && (current.AheadBy > 0 || neverPushed))
+                {
+                    if (!await _repo.PushAsync()) return;
+                }
+            }
 
             if (provider.IsConfigured)
             {
