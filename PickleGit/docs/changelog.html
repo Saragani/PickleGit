@@ -449,6 +449,7 @@
         <li><a href="#phase-4"><span class="num mono">04</span>Rebase &amp; Drag-Drop</a></li>
         <li><a href="#phase-5"><span class="num mono">05</span>UX Platform</a></li>
         <li><a href="#phase-6"><span class="num mono">06</span>Hosting &amp; Ecosystem</a></li>
+        <li><a href="#phase-7"><span class="num mono">07</span>Staging &amp; Workflow Polish</a></li>
       </ol>
       <ol class="rail-extra">
         <li><a href="#architecture"><span class="num mono">—</span>Architecture</a></li>
@@ -467,8 +468,8 @@
          and a fair number of things that broke along the way and got fixed before they shipped.</p>
 
       <div class="stats">
-        <div class="stat"><div class="n mono">7</div><div class="l">phases, 00 → 06</div></div>
-        <div class="stat"><div class="n mono">8</div><div class="l">bugs caught live, not just in review</div></div>
+        <div class="stat"><div class="n mono">8</div><div class="l">phases, 00 → 07</div></div>
+        <div class="stat"><div class="n mono">11</div><div class="l">bugs caught live, not just in review</div></div>
         <div class="stat"><div class="n mono">3</div><div class="l">hosting providers, one abstraction</div></div>
         <div class="stat"><div class="n mono">1</div><div class="l">theme — dark, start to finish</div></div>
       </div>
@@ -805,6 +806,66 @@
       </div>
     </section>
 
+    <!-- ══════════════════════ PHASE 7 ══════════════════════ -->
+    <section class="phase" id="phase-7">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 07</span>
+        <h2 class="phase-title display">Staging &amp; Workflow Polish</h2>
+      </div>
+      <p class="thesis">Since <span class="mono">PickleGit_1.0.17</span>: a pass on the two surfaces used on
+         every single commit — the staging panel and the sidebar — plus two workflow bugs that only
+         surface once you actually push toward a hosting provider, where a silent mistake is expensive
+         rather than cosmetic.</p>
+
+      <ul class="feature-list">
+        <li><div><b>Staged/Unstaged tree view</b> — <span class="desc">a Path/Tree toggle and one
+            shared sort mode for both panels, with folders collapsed by default and expand/collapse
+            state tracked independently per panel (expanding a folder in Staged no longer expands the
+            same folder in Unstaged).</span></div></li>
+        <li><div><b>Sidebar section icons and search</b> — <span class="desc">an icon on every
+            section header (branches, tags, stashes, remotes, pull requests, worktrees), plus a live
+            filter box that narrows the whole tree as you type. The unused Reflog section was
+            removed.</span></div></li>
+        <li><div><b>Pull Request load failures surfaced</b> — <span class="desc">a warning icon and
+            tooltip on the Pull Requests header when the last fetch genuinely failed (auth, network,
+            rate-limit) — previously indistinguishable from a repo that just has zero open PRs.</span></div></li>
+        <li><div><b>Commit-list ref badges reworked</b> — <span class="desc">one ref shown per commit
+            (icon-prefixed, branch or tag), a fixed "+N" pill for the rest, ellipsis-shrink under
+            column resize, and a hover preview of other branches passing through the same
+            commit.</span></div></li>
+        <li><div><b>Bigger, calmer indicators</b> — <span class="desc">larger repo-tab and
+            sidebar-header text, and a redesigned ahead/behind indicator on local branches — bigger
+            hand-drawn arrows, one neutral color instead of green/red.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Caught in testing — the workflow-critical ones</p>
+          <p><b>Creating a branch never checked it out.</b> <code>CreateBranch</code> called
+             <code>_git.CreateBranch()</code> and stopped there — the previous branch stayed checked
+             out with nothing in the UI signaling it. A commit made right after "creating" a branch
+             landed on the wrong branch entirely, and a PR opened from it targeted the wrong source.
+             Fixed to check out the new branch immediately, through the same checkout/undo path every
+             other checkout uses (so <kbd>Ctrl+Z</kbd> also undoes it).</p>
+          <p><b>The push-before-PR check missed brand-new branches.</b> The guard that pushes before
+             opening a Create Pull Request dialog only checked <code>AheadBy &gt; 0</code> — but a
+             branch that's never been pushed has no upstream ref to compare against at all, so
+             <code>AheadBy</code> stays 0 forever. The PR compose page opened for a branch the remote
+             had never heard of. Fixed to also detect "no upstream ref yet," moved the push to run
+             only after the dialog is confirmed (not before it's even shown), and gated the API
+             call/browser hand-off so it only runs once that push has actually succeeded.</p>
+          <p><b>Ref badges stayed truncated after a resize.</b> The BRANCH/TAG column's ref label
+             cached a <code>FormattedText</code> keyed only by name, but <code>OnRender</code> mutated
+             its <code>MaxTextWidth</code> down to fit a narrow column and never reset it — widening
+             the column back out still read the stale, truncated width. A related miss let the name
+             wrap onto two lines instead of trimming with an ellipsis. Fixed by resetting
+             <code>MaxTextWidth</code> before every measure/render pass and capping to one line before
+             trimming kicks in.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- ══════════════════════ ARCHITECTURE ══════════════════════ -->
     <section class="phase" id="architecture">
       <div class="phase-head">
@@ -851,7 +912,7 @@
             commits before a rebase runs. Deferred out of Phase 04.</span></li>
         <li><span class="tag mono">L</span><span><b>Side-by-side diff</b>, <b>syntax highlighting</b>,
             <b>image diff</b>, and <b>file history &amp; blame</b> — scoped for Phase 03, not yet built.</span></li>
-        <li><span class="tag mono">P7</span><span><b>Provider-native PR creation</b> and richer hosting
+        <li><span class="tag mono">NEXT</span><span><b>Provider-native PR creation</b> and richer hosting
             integration beyond browser hand-off — the natural next step after Phase 06's read-only sidebar.</span></li>
       </ul>
     </section>
