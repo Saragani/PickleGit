@@ -18,7 +18,7 @@ namespace PickleGit.ViewModels
     {
         // ── Branch operations ─────────────────────────────────────────────────
 
-        private void CreateBranch(object param)
+        private async void CreateBranch(object param)
         {
             // "here" = context-menu invocation → branch from the selected commit, not HEAD
             var startPoint = (param as string) == "here" ? SelectedNode?.Commit?.Sha : null;
@@ -27,7 +27,14 @@ namespace PickleGit.ViewModels
             if (dlg.ShowDialog() == true)
             {
                 var name = dlg.BranchName;
-                _ = RunThenRefresh($"Creating branch {name}…", () => _git.CreateBranch(name, startPoint));
+                // Every other git GUI (and git checkout -b) switches to a newly created branch
+                // immediately — staying on the old branch meant new commits (and a PR) could
+                // silently land on the wrong branch since nothing else in the UI signals that
+                // the "new" branch was created but never actually checked out.
+                var (preHead, preBranch) = await CaptureCheckoutStateAsync();
+                if (await RunThenRefreshCheckout($"Creating branch {name}…",
+                        () => { _git.CreateBranch(name, startPoint); _git.Checkout(name); }))
+                    await CaptureCheckoutUndo($"Create branch '{name}'", preHead, preBranch);
             }
         }
 
