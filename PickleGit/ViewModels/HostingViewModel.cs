@@ -49,6 +49,13 @@ namespace PickleGit.ViewModels
         private bool _isLoadingPullRequests;
         public bool IsLoadingPullRequests { get => _isLoadingPullRequests; private set => Set(ref _isLoadingPullRequests, value); }
 
+        private string _pullRequestsLoadError;
+        /// <summary>Null when the last load succeeded (including "zero open PRs") — set only when the
+        /// request itself failed (auth/network/rate-limit/etc.), so the sidebar can distinguish a
+        /// genuine failure from a repo that simply has no open PRs, instead of both looking identical
+        /// (an empty list either way).</summary>
+        public string PullRequestsLoadError { get => _pullRequestsLoadError; private set => Set(ref _pullRequestsLoadError, value); }
+
         public ICommand RefreshPullRequestsCommand { get; }
         public ICommand OpenPullRequestCommand { get; }
         public ICommand CreatePullRequestCommand { get; }
@@ -179,6 +186,7 @@ namespace PickleGit.ViewModels
             if (HostingProvider == null)
             {
                 PullRequests = new ObservableCollection<PullRequestInfo>();
+                PullRequestsLoadError = null;
                 UpdateBranchPrBadges();
                 return;
             }
@@ -188,8 +196,16 @@ namespace PickleGit.ViewModels
             {
                 var prs = await HostingProvider.GetPullRequestsAsync();
                 PullRequests = new ObservableCollection<PullRequestInfo>(prs);
+                PullRequestsLoadError = null;
             }
-            catch { PullRequests = new ObservableCollection<PullRequestInfo>(); }
+            catch (Exception ex)
+            {
+                // Swallowing this used to leave a genuine failure (auth/network/rate-limit) looking
+                // identical to "this repo just has no open PRs" — surface it instead.
+                PullRequests = new ObservableCollection<PullRequestInfo>();
+                PullRequestsLoadError = ex.Message;
+                AppLog.Warn("Pull request load failed", ex);
+            }
             finally
             {
                 IsLoadingPullRequests = false;

@@ -324,8 +324,18 @@ namespace PickleGit.ViewModels
 
         private async Task LoadWorkingDiffAsync(FileChange fc)
         {
-            FlatDiffItems = Array.Empty<DiffItem>();
-            SideBySideItems = Array.Empty<SideBySideItem>();
+            // Only clear the panes when the file identity actually changed. A same-file refresh
+            // (e.g. the watcher re-loading the currently-viewed file after an external edit) instead
+            // swaps straight from old content to new content via ApplyDiffResult below — clearing
+            // first here produced a visible blank flash on every such refresh.
+            var isSameFile = _currentDiffFile != null
+                && string.Equals(_currentDiffFile.Path, fc.Path, StringComparison.OrdinalIgnoreCase)
+                && _currentDiffFile.IsStaged == fc.IsStaged;
+            if (!isSameFile)
+            {
+                FlatDiffItems = Array.Empty<DiffItem>();
+                SideBySideItems = Array.Empty<SideBySideItem>();
+            }
             DetailCommit = null;
             _currentDiffFile = fc;
             IsDiffFromStagedFile = fc.IsStaged;

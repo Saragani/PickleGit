@@ -280,40 +280,57 @@
                             <ColumnDefinition Width="{Binding DataContext.EffectiveColWidthSha, RelativeSource={RelativeSource AncestorType=Window}}"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- BRANCH / TAG: ref badges (capped, "+N" overflow; hover for all),
-                             plus a "ghost refs" overlay populated only while hovering this row's
-                             message/author/date/sha (Feature B) — half-opacity, non-interactive. -->
-                        <StackPanel Grid.Column="0" Orientation="Horizontal"
-                                    VerticalAlignment="Center" Margin="4,0"
-                                    ClipToBounds="True">
-                            <ItemsControl ItemsSource="{Binding Commit.Refs, Converter={StaticResource RefsOverflow}}"
-                                          ToolTip="{Binding Commit.Refs, Converter={StaticResource RefsTooltip}}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal"/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <ctrl:RefLabel RefName="{Binding}" Margin="0,0,3,0"
-                                                       MouseEnter="RefLabel_MouseEnter"
-                                                       MouseLeave="RefLabel_MouseLeave"/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <ItemsControl x:Name="GhostRefsHost" Opacity="0.5" IsHitTestVisible="False">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal"/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <ctrl:RefLabel RefName="{Binding}" Margin="0,0,3,0"/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
+                        <!-- BRANCH / TAG: exactly one ref shown (icon-prefixed, shrinks with an
+                             ellipsis under width pressure), the rest collapsed into a fixed "+N"
+                             pill that never shrinks — plus a "ghost refs" overlay populated only
+                             while hovering this row's message/author/date/sha (Feature B),
+                             half-opacity, non-interactive. -->
+                        <Grid Grid.Column="0" Margin="4,0" ClipToBounds="True">
+                            <!-- Packed tightly (StackPanel, not a Star+Auto Grid split) so the "+N"
+                                 pill sits right next to the label instead of at the far edge of a
+                                 wide Star cell. RefLabel's MaxWidth (column width minus a fixed
+                                 budget for the pill) is what lets it still shrink-with-ellipsis
+                                 under pressure, since a plain StackPanel offers unconstrained
+                                 measure space to its children. -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                <ctrl:RefLabel RefName="{Binding Commit.PrimaryRef}"
+                                               MaxWidth="{Binding DataContext.EffectiveColWidthBranchTag,
+                                                          RelativeSource={RelativeSource AncestorType=Window},
+                                                          Converter={StaticResource WidthMinusBudget}, ConverterParameter=40}"
+                                               ToolTip="{Binding Commit.Refs, Converter={StaticResource RefsTooltip}}"
+                                               MouseEnter="RefLabel_MouseEnter"
+                                               MouseLeave="RefLabel_MouseLeave"/>
+                                <Border Background="{DynamicResource ExtraBranchesBrush}"
+                                        CornerRadius="4" Padding="5,2" Margin="3,0,0,0" VerticalAlignment="Center"
+                                        ToolTip="{Binding Commit.Refs, Converter={StaticResource RefsTooltip}}"
+                                        Visibility="{Binding Commit.OverflowRefCount, Converter={StaticResource IntAboveZero}}">
+                                    <TextBlock Text="{Binding Commit.OverflowRefCount, StringFormat='+{0}'}"
+                                               FontSize="10" FontWeight="SemiBold"
+                                               Foreground="White"/>
+                                </Border>
+                                <!-- Ghost refs (Feature B) now live inside the same packed StackPanel as the
+                                     primary label/pill, right after them, instead of a separate ItemsControl
+                                     overlapping from the cell's left edge — that previously rendered on top of
+                                     the primary badge instead of alongside it, and defaulted to top-aligned
+                                     (Stretch) instead of centered with everything else in the row. Uses the
+                                     exact same RefLabel badge (colors/icon included) as the primary ref, just
+                                     dimmed to 0.5 opacity as a group, so a hovered ghost ref looks like a
+                                     translucent version of a real badge rather than a differently-styled pill. -->
+                                <ItemsControl x:Name="GhostRefsHost" Opacity="0.5" IsHitTestVisible="False"
+                                              VerticalAlignment="Center">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <ctrl:RefLabel RefName="{Binding}" Margin="3,0,0,0"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Grid>
 
                         <!-- GRAPH: commit node + lines, clipped to column width -->
                         <Grid Grid.Column="1" ClipToBounds="True">

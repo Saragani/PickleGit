@@ -16,15 +16,19 @@
              while branch-group rows bind live through Payload (BranchNodeViewModel.IsExpanded). -->
         <Style x:Key="SidebarChevron" TargetType="Path">
             <Setter Property="Width" Value="8"/>
-            <Setter Property="Height" Value="12"/>
+            <Setter Property="Height" Value="8"/>
             <Setter Property="Stretch" Value="Uniform"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Fill" Value="{DynamicResource TextSecondaryBrush}"/>
-            <Setter Property="Data" Value="M 4 2 L 12 8 L 4 14 Z"/>
+            <!-- Both triangles share an identical 6x6 bounding box (x:1-7, y:1-7) — the expanded
+                 one is the collapsed one rotated 90°. Uniform stretch previously scaled the two
+                 states differently because their bounding boxes had swapped (not matching)
+                 width/height, making the expanded glyph render visibly smaller. -->
+            <Setter Property="Data" Value="M 1 1 L 7 4 L 1 7 Z"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                    <Setter Property="Data" Value="M 2 4 L 14 4 L 8 12 Z"/>
+                    <Setter Property="Data" Value="M 1 1 L 7 1 L 4 7 Z"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -38,10 +42,24 @@
                     <Grid Background="Transparent" MouseLeftButtonDown="ToggleLocalBranchesHeader">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="16"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Path Grid.Column="0" Style="{StaticResource SidebarChevron}"/>
-                        <TextBlock Grid.Column="1" Text="LOCAL BRANCHES" Margin="0,4,0,4"
+                        <!-- Hand-drawn (no font glyph for "git branch" exists in Segoe Fluent Icons,
+                             confirmed via the official icon list) so it can't suffer a font-mapping
+                             mismatch the way a wrong/missing codepoint would. -->
+                        <!-- Long trunk (top-left to bottom) with a short branch curving off to the
+                             right partway down — an asymmetric shape reads more clearly as "git
+                             branch" than a symmetric wishbone/fork did. -->
+                        <Canvas Grid.Column="1" Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center">
+                            <Line X1="3.5" Y1="4.6" X2="3.5" Y2="9.4" Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1.4"/>
+                            <Path Data="M3.5,8.5 C4.5,7 7,6.5 8.9,6" Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1.4"/>
+                            <Ellipse Canvas.Left="1.9" Canvas.Top="1.4" Width="3.2" Height="3.2" Fill="{DynamicResource TextSecondaryBrush}"/>
+                            <Ellipse Canvas.Left="1.9" Canvas.Top="9.4" Width="3.2" Height="3.2" Fill="{DynamicResource TextSecondaryBrush}"/>
+                            <Ellipse Canvas.Left="8.9" Canvas.Top="4.4" Width="3.2" Height="3.2" Fill="{DynamicResource TextSecondaryBrush}"/>
+                        </Canvas>
+                        <TextBlock Grid.Column="2" Text="LOCAL BRANCHES" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
                                    FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </Grid>
@@ -53,10 +71,14 @@
                     <Grid Background="Transparent" MouseLeftButtonDown="ToggleRemoteBranchesHeader">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="16"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Path Grid.Column="0" Style="{StaticResource SidebarChevron}"/>
-                        <TextBlock Grid.Column="1" Text="REMOTE BRANCHES" Margin="0,4,0,4"
+                        <TextBlock Grid.Column="1" Text="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="REMOTE BRANCHES" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
                                    FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </Grid>
@@ -68,10 +90,14 @@
                     <Grid Background="Transparent" MouseLeftButtonDown="ToggleTagsHeader">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="16"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Path Grid.Column="0" Style="{StaticResource SidebarChevron}"/>
-                        <TextBlock Grid.Column="1" Text="TAGS" Margin="0,4,0,4"
+                        <TextBlock Grid.Column="1" Text="&#xE8EC;" FontFamily="Segoe Fluent Icons" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="TAGS" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
                                    FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </Grid>
@@ -83,10 +109,14 @@
                     <Grid Background="Transparent" MouseLeftButtonDown="ToggleStashesHeader">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="16"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Path Grid.Column="0" Style="{StaticResource SidebarChevron}"/>
-                        <TextBlock Grid.Column="1" Text="STASHES" Margin="0,4,0,4"
+                        <TextBlock Grid.Column="1" Text="&#xE74E;" FontFamily="Segoe Fluent Icons" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="STASHES" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
                                    FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </Grid>
@@ -99,10 +129,14 @@
                           Background="Transparent" MouseLeftButtonDown="ToggleRemotesHeader">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="16"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Path Grid.Column="0" Style="{StaticResource SidebarChevron}"/>
-                        <TextBlock Grid.Column="1" Text="REMOTES" Margin="0,4,0,4"
+                        <TextBlock Grid.Column="1" Text="&#xE71B;" FontFamily="Segoe Fluent Icons" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="REMOTES" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
                                    FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         <Grid.ContextMenu>
@@ -116,20 +150,6 @@
                 </DataTemplate>
             </conv:SidebarRowTemplateSelector.RemotesHeaderTemplate>
 
-            <conv:SidebarRowTemplateSelector.ReflogHeaderTemplate>
-                <DataTemplate>
-                    <Grid Background="Transparent" MouseLeftButtonDown="ToggleReflogHeader">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="16"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Path Grid.Column="0" Style="{StaticResource SidebarChevron}"/>
-                        <TextBlock Grid.Column="1" Text="REFLOG" Margin="0,4,0,4"
-                                   Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    </Grid>
-                </DataTemplate>
-            </conv:SidebarRowTemplateSelector.ReflogHeaderTemplate>
 
             <conv:SidebarRowTemplateSelector.PullRequestsHeaderTemplate>
                 <DataTemplate>
@@ -137,12 +157,23 @@
                           Background="Transparent" MouseLeftButtonDown="TogglePullRequestsHeader">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="16"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Path Grid.Column="0" Style="{StaticResource SidebarChevron}"/>
-                        <TextBlock Grid.Column="1" Text="PULL REQUESTS" Margin="0,4,0,4"
+                        <TextBlock Grid.Column="1" Text="&#xE751;" FontFamily="Segoe Fluent Icons" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="PULL REQUESTS" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
                                    FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <!-- Only shown when the last load genuinely failed (auth/network/rate-limit) —
+                             an empty list from zero open PRs never sets this. -->
+                        <TextBlock Grid.Column="2" Text="&#x26A0;" FontSize="10" Margin="0,0,4,0"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource DangerBrush}"
+                                   ToolTip="{Binding Tag.Hosting.PullRequestsLoadError, RelativeSource={RelativeSource AncestorType=Grid}}"
+                                   Visibility="{Binding Tag.Hosting.PullRequestsLoadError, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource NullToVis}}"/>
                         <Grid.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Refresh"
@@ -192,10 +223,14 @@
                           Background="Transparent" MouseLeftButtonDown="ToggleWorktreesHeader">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="16"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Path Grid.Column="0" Style="{StaticResource SidebarChevron}"/>
-                        <TextBlock Grid.Column="1" Text="WORKTREES" Margin="0,4,0,4"
+                        <TextBlock Grid.Column="1" Text="&#xE8C8;" FontFamily="Segoe Fluent Icons" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="WORKTREES" Margin="0,4,0,4"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
                                    FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         <Grid.ContextMenu>
@@ -570,43 +605,6 @@
                 </DataTemplate>
             </conv:SidebarRowTemplateSelector.RemoteTemplate>
 
-            <!-- ══════════════════════════ Reflog ══════════════════════════ -->
-
-            <conv:SidebarRowTemplateSelector.ReflogTemplate>
-                <DataTemplate>
-                    <Border Margin="{Binding IndentLevel, Converter={StaticResource IndentToMargin}}">
-                        <Grid DataContext="{Binding Payload}"
-                              Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}"
-                              Background="Transparent">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{Binding ShortNewSha}"
-                                       FontFamily="Consolas" FontSize="10" Margin="4,3,6,3"
-                                       Foreground="{DynamicResource AccentBrush}"/>
-                            <TextBlock Grid.Column="1" Text="{Binding Message}" Margin="0,3,4,3"
-                                       TextTrimming="CharacterEllipsis"
-                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
-                            <Grid.ContextMenu>
-                                <ContextMenu>
-                                    <MenuItem Header="Checkout (detached)"
-                                              Command="{Binding PlacementTarget.Tag.CheckoutReflogEntryCommand,
-                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                              CommandParameter="{Binding PlacementTarget.DataContext,
-                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                    <MenuItem Header="Reset current branch to here (hard)"
-                                              Command="{Binding PlacementTarget.Tag.ResetToReflogEntryCommand,
-                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                              CommandParameter="{Binding PlacementTarget.DataContext,
-                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                </ContextMenu>
-                            </Grid.ContextMenu>
-                        </Grid>
-                    </Border>
-                </DataTemplate>
-            </conv:SidebarRowTemplateSelector.ReflogTemplate>
-
             <!-- ══════════════════════════ Pull requests ══════════════════════════ -->
 
             <conv:SidebarRowTemplateSelector.PullRequestTemplate>
@@ -747,7 +745,28 @@
     </UserControl.Resources>
 
     <Grid>
-    <Border Background="{DynamicResource SurfaceBrush}"
+    <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+    </Grid.RowDefinitions>
+
+    <Border Grid.Row="0" Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,1" Padding="6,4">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
+                       Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+            <TextBox Grid.Column="1" x:Name="SidebarSearchBox"
+                     Style="{StaticResource DarkTextBox}"
+                     ToolTip="Filter branches, tags, stashes, remotes…"
+                     TextChanged="SidebarSearchBox_TextChanged"/>
+        </Grid>
+    </Border>
+
+    <Border Grid.Row="1" Background="{DynamicResource SurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
         <ListView x:Name="SidebarList"
                   Style="{StaticResource DarkListView}"
@@ -763,7 +782,7 @@
     </Border>
 
     <!-- Busy overlay: blocks interaction and shows a spinner while git ops run -->
-    <Border Background="{DynamicResource OverlayScrimBrush}"
+    <Border Grid.Row="1" Background="{DynamicResource OverlayScrimBrush}"
             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
             <ProgressBar IsIndeterminate="True" Width="120" Height="3"

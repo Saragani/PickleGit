@@ -14,7 +14,6 @@ namespace PickleGit.Models
         TagsHeader,
         StashesHeader,
         RemotesHeader,
-        ReflogHeader,
         PullRequestsHeader,
         SubmodulesHeader,
         WorktreesHeader,
@@ -25,7 +24,6 @@ namespace PickleGit.Models
         Tag,
         Stash,
         Remote,
-        Reflog,
         PullRequest,
         Submodule,
         Worktree
@@ -43,7 +41,7 @@ namespace PickleGit.Models
 
         /// <summary>
         /// The underlying model for item rows: BranchNodeViewModel (branch/group kinds), TagInfo,
-        /// StashInfo, RemoteInfo, ReflogEntry, PullRequestInfo, SubmoduleInfo, or WorktreeInfo.
+        /// StashInfo, RemoteInfo, PullRequestInfo, SubmoduleInfo, or WorktreeInfo.
         /// Null for section-header rows, which have no single backing model.
         /// </summary>
         public object Payload { get; set; }

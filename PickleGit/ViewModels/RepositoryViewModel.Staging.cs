@@ -81,10 +81,13 @@ namespace PickleGit.ViewModels
                 var selectedWorkingPaths = new HashSet<string>(_selectedWorkingFiles.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
                 var selectedStagedPaths = new HashSet<string>(_selectedStagedFiles.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
 
-                WorkingDirFiles = new ObservableCollection<FileChange>(
-                    changes.Where(f => !f.IsStaged).OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase));
-                StagedFiles = new ObservableCollection<FileChange>(
-                    changes.Where(f => f.IsStaged).OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase));
+                var cmp = BuildFileComparer();
+                var working = changes.Where(f => !f.IsStaged).ToList();
+                working.Sort(cmp);
+                var staged = changes.Where(f => f.IsStaged).ToList();
+                staged.Sort(cmp);
+                WorkingDirFiles = new ObservableCollection<FileChange>(working);
+                StagedFiles = new ObservableCollection<FileChange>(staged);
 
                 _selectedWorkingFiles.Clear();
                 foreach (var f in WorkingDirFiles.Where(f => selectedWorkingPaths.Contains(f.Path)))
@@ -93,6 +96,7 @@ namespace PickleGit.ViewModels
                 foreach (var f in StagedFiles.Where(f => selectedStagedPaths.Contains(f.Path)))
                     _selectedStagedFiles.Add(f);
 
+                RebuildFileTreeRows();
                 RaisePropertyChanged(nameof(ConflictedFileChanges));
                 // Stage All/Unstage All/discard-all's CanExecute depends on these lists' Count.
                 // CommandManager only re-queries ICommand.CanExecute on certain input events (mouse
@@ -113,6 +117,66 @@ namespace PickleGit.ViewModels
                 }
             }
             return contentChanged;
+        }
+
+        /// <summary>Builds the ordering for the current <see cref="FileSortMode"/> — shared by
+        /// ApplyWorkingDirStatus (fresh status) and ReapplyFileOrder/RebuildFileTreeRows (re-sorting
+        /// already-loaded files with no new git call needed).</summary>
+        private Comparison<FileChange> BuildFileComparer()
+        {
+            switch (FileSortMode)
+            {
+                case FileSortMode.PathAsc:
+                    return (a, b) => string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase);
+                case FileSortMode.PathDesc:
+                    return (a, b) => string.Compare(b.Path, a.Path, StringComparison.OrdinalIgnoreCase);
+                case FileSortMode.NameAsc:
+                    return (a, b) => string.Compare(Path.GetFileName(a.Path), Path.GetFileName(b.Path), StringComparison.OrdinalIgnoreCase);
+                case FileSortMode.NameDesc:
+                    return (a, b) => string.Compare(Path.GetFileName(b.Path), Path.GetFileName(a.Path), StringComparison.OrdinalIgnoreCase);
+                case FileSortMode.Status:
+                default:
+                    return (a, b) =>
+                    {
+                        var byKind = ((int)a.Kind).CompareTo((int)b.Kind);
+                        return byKind != 0 ? byKind : string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase);
+                    };
+            }
+        }
+
+        /// <summary>Re-sorts the already-loaded WorkingDirFiles/StagedFiles in place when the user
+        /// changes FileSortMode — no fresh status read needed, the FileChange objects are unchanged.</summary>
+        private void ReapplyFileOrder()
+        {
+            var cmp = BuildFileComparer();
+            var selectedWorkingPaths = new HashSet<string>(_selectedWorkingFiles.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
+            var selectedStagedPaths = new HashSet<string>(_selectedStagedFiles.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
+
+            var working = WorkingDirFiles.ToList();
+            working.Sort(cmp);
+            var staged = StagedFiles.ToList();
+            staged.Sort(cmp);
+            WorkingDirFiles = new ObservableCollection<FileChange>(working);
+            StagedFiles = new ObservableCollection<FileChange>(staged);
+
+            _selectedWorkingFiles.Clear();
+            foreach (var f in WorkingDirFiles.Where(f => selectedWorkingPaths.Contains(f.Path)))
+                _selectedWorkingFiles.Add(f);
+            _selectedStagedFiles.Clear();
+            foreach (var f in StagedFiles.Where(f => selectedStagedPaths.Contains(f.Path)))
+                _selectedStagedFiles.Add(f);
+
+            RebuildFileTreeRows();
+        }
+
+        /// <summary>Rebuilds the flattened folder-tree rows for both panels' Tree view mode. Cheap
+        /// enough (file counts are small) to always keep both up to date regardless of which view
+        /// mode is currently active, so switching Flat→Tree never shows a stale tree.</summary>
+        private void RebuildFileTreeRows()
+        {
+            var cmp = BuildFileComparer();
+            StagedFileTreeRows = new ObservableCollection<FileTreeRow>(FileTreeBuilder.Build(StagedFiles, cmp, _expandedStagedTreeFolders));
+            WorkingFileTreeRows = new ObservableCollection<FileTreeRow>(FileTreeBuilder.Build(WorkingDirFiles, cmp, _expandedWorkingTreeFolders));
         }
 
         private async Task StageFileAsync(object param)

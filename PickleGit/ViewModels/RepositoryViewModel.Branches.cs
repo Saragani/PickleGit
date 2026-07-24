@@ -297,31 +297,6 @@ namespace PickleGit.ViewModels
                 await CaptureCheckoutUndo($"Checkout tag '{ti.Name}'", preHead, preBranch);
         }
 
-        private async void CheckoutReflogEntry(object param)
-        {
-            if (!(param is ReflogEntry re) || string.IsNullOrEmpty(re.NewSha)) return;
-            if (!DialogService.Confirm("Checkout",
-                    $"Check out {re.ShortNewSha} ({re.Selector}) in detached HEAD state?",
-                    "Checkout"))
-                return;
-            var (preHead, preBranch) = await CaptureCheckoutStateAsync();
-            if (await RunThenRefreshCheckout($"Checking out {re.ShortNewSha}…", () => _git.CheckoutCommit(re.NewSha)))
-                await CaptureCheckoutUndo($"Checkout {re.ShortNewSha}", preHead, preBranch);
-        }
-
-        private async void ResetToReflogEntry(object param)
-        {
-            if (!(param is ReflogEntry re) || string.IsNullOrEmpty(re.NewSha)) return;
-            if (!DialogService.Confirm("Reset (hard)",
-                    $"Hard-reset '{CurrentBranch}' to {re.ShortNewSha} ({re.Selector})?\n\n" +
-                    "ALL local changes and commits after it are DISCARDED.",
-                    "Reset", danger: true))
-                return;
-            var preHead = await _git.Executor.RunAsync(() => _git.GetHeadSha());
-            if (await RunThenRefreshWorkingDir($"Resetting to {re.ShortNewSha}…", () => _git.ResetTo(re.NewSha, "hard")))
-                await CaptureUndo(UndoKind.HeadHardMove, $"Reset to {re.ShortNewSha}", preHead);
-        }
-
         private async Task PushTagAsync(object param)
         {
             if (!(param is TagInfo ti)) return;
