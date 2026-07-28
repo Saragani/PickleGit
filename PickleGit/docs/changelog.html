@@ -450,6 +450,7 @@
         <li><a href="#phase-5"><span class="num mono">05</span>UX Platform</a></li>
         <li><a href="#phase-6"><span class="num mono">06</span>Hosting &amp; Ecosystem</a></li>
         <li><a href="#phase-7"><span class="num mono">07</span>Staging &amp; Workflow Polish</a></li>
+        <li><a href="#phase-8"><span class="num mono">08</span>Performance &amp; Git LFS Workflow</a></li>
       </ol>
       <ol class="rail-extra">
         <li><a href="#architecture"><span class="num mono">—</span>Architecture</a></li>
@@ -468,8 +469,8 @@
          and a fair number of things that broke along the way and got fixed before they shipped.</p>
 
       <div class="stats">
-        <div class="stat"><div class="n mono">8</div><div class="l">phases, 00 → 07</div></div>
-        <div class="stat"><div class="n mono">11</div><div class="l">bugs caught live, not just in review</div></div>
+        <div class="stat"><div class="n mono">9</div><div class="l">phases, 00 → 08</div></div>
+        <div class="stat"><div class="n mono">16</div><div class="l">bugs caught live, not just in review</div></div>
         <div class="stat"><div class="n mono">3</div><div class="l">hosting providers, one abstraction</div></div>
         <div class="stat"><div class="n mono">1</div><div class="l">theme — dark, start to finish</div></div>
       </div>
@@ -862,6 +863,100 @@
              wrap onto two lines instead of trimming with an ellipsis. Fixed by resetting
              <code>MaxTextWidth</code> before every measure/render pass and capping to one line before
              trimming kicks in.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ PHASE 8 ══════════════════════ -->
+    <section class="phase" id="phase-8">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 08</span>
+        <h2 class="phase-title display">Performance &amp; Git LFS Workflow</h2>
+      </div>
+      <p class="thesis">Since <span class="mono">PickleGit_1.0.18</span>: two threads running in parallel — a
+         rewrite of how the sidebar and commit graph refresh themselves on repositories large enough for the old
+         approach to actually hurt, and a full pass on Git LFS, tab management, and cloning that turns "it sort
+         of works if you restart the app" into a workflow that just works.</p>
+
+      <ul class="feature-list">
+        <li><div><b>CLI-backed branch/tag/history refresh</b> — <span class="desc"><code>GetBranches</code>,
+            <code>GetTags</code>, and <code>GetHistory</code> now run a single <code>git for-each-ref</code> /
+            <code>git log</code> process instead of enumerating LibGit2Sharp objects one at a time, falling back
+            to the original implementation if <code>git.exe</code> is unavailable. Measured on a real 800+ branch
+            repository: <code>GetBranches</code> dropped from ~2.6–3.5s to ~250ms, <code>GetHistory</code> from
+            ~4.7s to ~1.5s on 10,000 commits.</span></div></li>
+        <li><div><b>Self-coalescing, scoped refresh</b> — <span class="desc">overlapping refresh requests
+            collapse into one extra pass instead of running redundantly; a new <code>RefreshScope</code> lets
+            Fetch/Push/"Update branch"/checkout re-query only what they can actually affect instead of always
+            paying for a full history walk, workdir scan, and tag/stash reload; a cheap branch-tip fingerprint
+            skips <code>GetHistory</code>'s walk entirely when a refresh turns out to be redundant.</span></div></li>
+        <li><div><b>Diff text selection</b> — <span class="desc">click-drag selection across diff lines
+            (Ctrl+C to copy), additive via a new <code>DiffTextSelectionController</code> that leaves the
+            existing staging-drag gutter and virtualization untouched; the diff pane also resets its scroll
+            position when switching files.</span></div></li>
+        <li><div><b>Tab strip stays in one row</b> — <span class="desc">a <code>ScrollViewer</code> with
+            left/right arrows (shown only when the strip actually overflows) replaces the old wrap-to-a-second-row
+            behavior; selecting or adding a tab scrolls it into view automatically.</span></div></li>
+        <li><div><b>"+" replaces the toolbar Open/Clone/Init buttons</b> — <span class="desc">a single
+            button after the tab strip opens a placeholder landing tab; picking Open, Clone, or Init populates
+            that same tab instead of spawning a new one.</span></div></li>
+        <li><div><b>Cloning shows its work immediately</b> — <span class="desc">the tab is renamed to the
+            destination folder and the landing page hides the moment a clone starts, not when it finishes; a
+            failed clone on a reused tab brings the landing page back instead of leaving an empty shell.</span></div></li>
+        <li><div><b>Git LFS: detect-and-suggest instead of silent auto-pull</b> — <span class="desc">the old
+            best-effort background <code>git lfs pull</code> after every checkout is replaced by an offline
+            check for un-smudged pointer files and a suggestion banner (diff view and working-directory view),
+            plus a proactive "pull now?" prompt right after a successful clone. The manual "Pull LFS objects"
+            action gets real progress and error reporting for free through the normal CLI-run plumbing — including
+            a working, moving progress bar (see below).</span></div></li>
+        <li><div><b>Files-changed lists match the staging panel</b> — <span class="desc">the single-commit
+            and multi-select aggregated file lists now share the same status-based sort and Flat/Tree toggle as
+            the Staged/Unstaged panels, instead of an unsorted, toggle-less list.</span></div></li>
+        <li><div><b>Smaller fixes</b> — <span class="desc">a clear (✕) button on the sidebar branch search
+            box; Sort-by-status corrected to Modified → Added → Deleted → Untracked; a plain-language message
+            instead of a raw exception when "Update branch" hits a non-fast-forward rejection; real Bitbucket/
+            GitHub/GitLab PR-load failures are now surfaced instead of quietly returning an empty list.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Caught in testing — five, this round</p>
+          <p><b>Diff text selection crashed on almost every drag.</b> The selection-highlight overlay is
+             deliberately a visual sibling of the diff <code>ListView</code>, not a descendant, so it can share
+             its coordinate space without living in its subtree — but row positions were computed with
+             <code>TransformToAncestor</code>, which requires a strict ancestor relationship and throws
+             <i>"The specified Visual is not an ancestor of this Visual"</i> otherwise. Fixed by switching to
+             <code>TransformToVisual</code>, which works between any two visuals in the same tree regardless of
+             their relationship.</p>
+          <p><b>A watcher bug caused a second, pointless refresh after every git operation.</b>
+             <code>RepositoryWatcher</code>'s grace-period suppression was meant to discard a pending
+             external-change signal that arrived during an app-initiated operation — instead it was resuming
+             that signal once the suppression scope ended, firing a redundant full refresh a fixed delay after
+             every single Fetch, Push, or checkout.</p>
+          <p><b>Pull requests and worktrees stayed empty until the app was restarted.</b>
+             <code>CloneInNewTabAsync</code> never called <code>EnsureLoadedAsync</code> after a successful
+             clone — that's what actually starts pull-request loading, worktrees, submodules, the commit
+             template, the file watcher, and auto-refresh. The <code>ActiveTab</code> setter fires it earlier,
+             but the repo isn't open yet at that point, so it silently no-ops and nothing re-triggers it once
+             the clone actually finishes.</p>
+          <p><b>Stale credentials kept replaying after Bitbucket retired username/password auth.</b> A raw,
+             host-only Windows Credential Manager read couldn't tell multiple cached accounts for the same host
+             apart, and was silently winning over git's own, more accurate credential-helper resolution. This
+             was masked by a second bug: Bitbucket's retirement of app passwords surfaces as a plain HTTP 410,
+             which wasn't recognized as an authentication failure at all, so the stale credential was never
+             purged and kept replaying forever. Fixed by trying git's own configured helper first, and treating
+             a bare 401/403/410 the same as libgit2's "authentication replays" failure.</p>
+          <p><b>Git LFS pull progress never appeared in the status bar.</b> Two compounding bugs: (1)
+             <code>Process.ErrorDataReceived</code> only splits output on <code>'\n'</code>, but git and
+             git-lfs overwrite their progress line in place using a bare <code>'\r'</code> — so an update never
+             fired until the whole operation finished, if ever; (2) git-lfs additionally suppresses its own
+             progress meter outright when its output isn't attached to a real terminal, which a redirected child
+             process never is — and, unlike plain git, writes that meter to <i>stdout</i>, not stderr. Fixed with
+             a manual stream pump that treats <code>'\r'</code> as a line terminator, an unconditional
+             <code>GIT_LFS_FORCE_PROGRESS=1</code>, and progress reporting wired to both output streams. Verified
+             live: the status bar now climbs from "Downloading LFS objects: 0% (0/1)" to "100% (5/5)" with the
+             progress bar filling in step.</p>
         </div>
       </div>
     </section>

@@ -184,8 +184,8 @@ namespace PickleGit.Services.Git
                 // stdout — so progress has to be reported from both streams, not just stderr.
                 var stdoutTask = PumpStreamAsync(proc.StandardOutput, line =>
                 {
-                    lock (stdout) stdout.AppendLine(line);
-                    opts?.Progress?.Report(line);
+                    lock (stdout) stdout.AppendLine(line.TrimEnd());
+                    opts?.Progress?.Report(line.TrimEnd());
                 });
                 var stderrTask = PumpStreamAsync(proc.StandardError, line =>
                 {
