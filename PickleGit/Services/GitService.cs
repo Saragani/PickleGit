@@ -113,6 +113,8 @@ namespace PickleGit.Services
             // Seed mask bits at the branch tips. Bit 0 = HEAD/current branch;
             // remaining branches get bits 1..63. Branches past 64 get no bit —
             // only per-branch filtering is affected, and bit 0 is always exact.
+            // This part stays on LibGit2Sharp: it only reads `.Tip`/`.FriendlyName`
+            // per branch (no ahead/behind resolution), which isn't the expensive part.
             var pendingMasks = new Dictionary<string, ulong>();
             var headTip = _repo.Head?.Tip;
             if (headTip != null)
@@ -143,6 +145,35 @@ namespace PickleGit.Services
             }
             history.BranchMasks = branchBits;
 
+            var refMap = BuildRefMap();
+
+            // The walk itself (the actual bottleneck — confirmed by logging: ~4.7s to emit 10,000
+            // commits over 800 tips) prefers a single `git log` process call over LibGit2Sharp's
+            // CommitFilter.QueryBy, whose per-commit managed-object marshaling dominates at this
+            // scale. Falls back to the original LibGit2Sharp walk when git.exe isn't available or
+            // the CLI parse fails for any reason.
+            List<CommitInfo> commits = null;
+            if (Cli != null && Cli.IsAvailable)
+            {
+                try { commits = GetCommitsViaCli(maxCount, refMap, out var reachedLimit); history.ReachedLimit = reachedLimit; }
+                catch (Exception ex) { AppLog.Warn("GetCommitsViaCli failed, falling back to LibGit2Sharp walk", ex); }
+            }
+
+            int count;
+            if (commits != null)
+            {
+                count = commits.Count;
+                foreach (var info in commits)
+                {
+                    if (bisectState != null && bisectState.InProgress)
+                        info.BisectMark = ClassifyBisectMark(info.Sha, bisectState);
+                    ApplyRefMask(info, info.ParentShas, pendingMasks);
+                    history.Commits.Add(info);
+                }
+                AppLog.Info($"GetHistory (CLI): {count} commits emitted, reachedLimit={history.ReachedLimit} in {sw.ElapsedMilliseconds}ms (in {_repoPath})");
+                return history;
+            }
+
             var tips = _repo.Branches
                 .Select(b => (object)b.Tip)
                 .Where(t => t != null)
@@ -156,32 +187,95 @@ namespace PickleGit.Services
                 IncludeReachableFrom = tips
             };
 
-            var refMap = BuildRefMap();
-
-            int count = 0;
+            count = 0;
             foreach (var commit in _repo.Commits.QueryBy(filter))
             {
                 if (count++ >= maxCount) { history.ReachedLimit = true; break; }
                 var info = MapCommit(commit, refMap);
                 if (bisectState != null && bisectState.InProgress)
                     info.BisectMark = ClassifyBisectMark(commit.Sha, bisectState);
-                if (pendingMasks.TryGetValue(commit.Sha, out var mask))
-                {
-                    pendingMasks.Remove(commit.Sha);
-                    info.RefMask = mask;
-                    if (mask != 0)
-                    {
-                        foreach (var p in commit.Parents)
-                        {
-                            pendingMasks.TryGetValue(p.Sha, out var pm);
-                            pendingMasks[p.Sha] = pm | mask;
-                        }
-                    }
-                }
+                ApplyRefMask(info, info.ParentShas, pendingMasks);
                 history.Commits.Add(info);
             }
             AppLog.Info($"GetHistory: {tips.Count} tips, {count} commits emitted, reachedLimit={history.ReachedLimit} in {sw.ElapsedMilliseconds}ms (in {_repoPath})");
             return history;
+        }
+
+        private static void ApplyRefMask(CommitInfo info, List<string> parentShas, Dictionary<string, ulong> pendingMasks)
+        {
+            if (!pendingMasks.TryGetValue(info.Sha, out var mask)) return;
+            pendingMasks.Remove(info.Sha);
+            info.RefMask = mask;
+            if (mask == 0) return;
+            foreach (var p in parentShas)
+            {
+                pendingMasks.TryGetValue(p, out var pm);
+                pendingMasks[p] = pm | mask;
+            }
+        }
+
+        /// <summary>Walks history via `git log --branches --remotes HEAD` — matches
+        /// `_repo.Branches`' unfiltered tip set (including orphaned remote-tracking refs whose
+        /// remote no longer exists, same as the original LibGit2Sharp walk) plus HEAD explicitly,
+        /// so a detached HEAD not coinciding with any branch tip is still walked. Deliberately does
+        /// NOT enumerate individual tip SHAs as positional args or via `--stdin`: with 800+
+        /// branches that risks the ~32K Windows command-line limit, and `--stdin` was found (via
+        /// scratch-repo testing) to receive a leading UTF-8 BOM through this codebase's
+        /// StandardInput writer, which git's `--stdin` parser rejects as "bad revision". Using
+        /// git's own ref-pattern revision specifiers sidesteps both problems entirely.
+        /// -z NUL-terminates each record; every internal `\n` (including the mandatory trailing
+        /// one `%B` always emits) survives this project's line-oriented STDOUT capture
+        /// (`GitCli.RunAsync`'s OutputDataReceived/AppendLine) as `\r\n` instead — verified against
+        /// a real repo with a root commit, a merge commit, and a multi-paragraph message. Undoing
+        /// that substitution (`Replace("\r\n", "\n")`) before splitting on '\x1f' reproduces
+        /// byte-for-byte the same Message string LibGit2Sharp's own Commit.Message returns
+        /// (single trailing '\n', internal blank lines intact).</summary>
+        private List<CommitInfo> GetCommitsViaCli(int maxCount, Dictionary<string, List<string>> refMap, out bool reachedLimit)
+        {
+            reachedLimit = false;
+            const string Format = "%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%ce%x1f%cI%x1f%B";
+            var args = $"log --branches --remotes HEAD --topo-order -z -n {maxCount + 1} --format={Format}";
+            var result = Cli.RunAsync(args).GetAwaiter().GetResult();
+            if (!result.Success) throw new InvalidOperationException(result.ErrorText);
+
+            var list = new List<CommitInfo>();
+            foreach (var rawChunk in result.StdOut.Split('\0'))
+            {
+                var chunk = rawChunk.Replace("\r\n", "\n");
+                if (chunk.Trim().Length == 0) continue;
+                var fields = chunk.Split(new[] { '\x1f' }, 9);
+                if (fields.Length < 9) continue;
+
+                DateTimeOffset.TryParse(fields[4], System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var authorWhen);
+                DateTimeOffset.TryParse(fields[7], System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var committerWhen);
+                var sha = fields[0];
+                refMap.TryGetValue(sha, out var refs);
+
+                list.Add(new CommitInfo
+                {
+                    Sha = sha,
+                    Message = fields[8],
+                    AuthorName = fields[2],
+                    AuthorEmail = fields[3],
+                    AuthorDate = authorWhen,
+                    CommitterName = fields[5],
+                    CommitterEmail = fields[6],
+                    CommitterDate = committerWhen,
+                    ParentShas = string.IsNullOrEmpty(fields[1])
+                        ? new List<string>()
+                        : fields[1].Split(' ').ToList(),
+                    Refs = refs ?? new List<string>()
+                });
+            }
+
+            if (list.Count > maxCount)
+            {
+                reachedLimit = true;
+                list = list.Take(maxCount).ToList();
+            }
+            return list;
         }
 
         private static BisectMark ClassifyBisectMark(string sha, BisectState s)
@@ -235,9 +329,119 @@ namespace PickleGit.Services
 
         // ── Branches ──────────────────────────────────────────────────────────
 
+        /// <summary>Prefers a single `git for-each-ref` process call over enumerating
+        /// LibGit2Sharp's `_repo.Branches` — confirmed via logging that resolving `.Tip`/
+        /// `.TrackedBranch` per branch through LibGit2Sharp is the actual bottleneck on a repo with
+        /// many branches (800+), NOT the ahead/behind divergence walk the existing cache already
+        /// avoids: timing showed ~2.6-3.5s regardless of cache hit/miss ratio, meaning the cost was
+        /// in just iterating/resolving branch objects, paid unconditionally before the cache
+        /// decision even happens. `for-each-ref` gets every branch's tip, upstream, and ahead/behind
+        /// (git's own native, non-per-object-resolving computation) in one call. Falls back to the
+        /// original LibGit2Sharp walk when git.exe isn't available.</summary>
         public List<BranchInfo> GetBranches()
         {
             EnsureOpen();
+            if (Cli != null && Cli.IsAvailable)
+            {
+                try { return GetBranchesViaCli(); }
+                catch (Exception ex) { AppLog.Warn("GetBranchesViaCli failed, falling back to LibGit2Sharp", ex); }
+            }
+            return GetBranchesViaLibGit2();
+        }
+
+        private List<BranchInfo> GetBranchesViaCli()
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var remoteNames = new HashSet<string>(
+                _repo.Network.Remotes.Select(r => r.Name), StringComparer.OrdinalIgnoreCase);
+
+            const string Format = "%(refname)\t%(objectname)\t%(upstream:short)\t%(upstream:track)\t%(HEAD)";
+            var args = $"for-each-ref --format={Git.CliGitService.Quote(Format)} refs/heads refs/remotes";
+            var result = Cli.RunAsync(args).GetAwaiter().GetResult();
+            if (!result.Success) throw new InvalidOperationException(result.ErrorText);
+
+            var list = new List<BranchInfo>();
+            int localCount = 0;
+            foreach (var rawLine in result.StdOut.Split('\n'))
+            {
+                var line = rawLine.TrimEnd('\r');
+                if (line.Length == 0) continue;
+                var fields = line.Split('\t');
+                if (fields.Length < 5) continue;
+
+                var refname = fields[0];
+                var objectname = fields[1];
+                var upstreamShort = fields[2];
+                var track = fields[3];
+                var headMarker = fields[4];
+
+                bool isRemote = refname.StartsWith("refs/remotes/", StringComparison.Ordinal);
+                string friendlyName, remoteName = null;
+                if (isRemote)
+                {
+                    var afterPrefix = refname.Substring("refs/remotes/".Length);
+                    // A symbolic ref to the remote's own default branch, not a real branch.
+                    if (afterPrefix.EndsWith("/HEAD", StringComparison.Ordinal)) continue;
+                    var slash = afterPrefix.IndexOf('/');
+                    remoteName = slash > 0 ? afterPrefix.Substring(0, slash) : afterPrefix;
+                    if (!remoteNames.Contains(remoteName)) continue;
+                    friendlyName = afterPrefix;
+                }
+                else
+                {
+                    friendlyName = refname.Substring("refs/heads/".Length);
+                }
+
+                var info = new BranchInfo
+                {
+                    Name = friendlyName,
+                    FullName = refname,
+                    IsRemote = isRemote,
+                    IsHead = headMarker == "*",
+                    RemoteName = remoteName,
+                    TipSha = objectname
+                };
+
+                if (!isRemote && !string.IsNullOrEmpty(upstreamShort))
+                {
+                    localCount++;
+                    info.TrackedBranchName = upstreamShort;
+                    var upstreamSlash = upstreamShort.IndexOf('/');
+                    if (upstreamSlash > 0) info.RemoteName = upstreamShort.Substring(0, upstreamSlash);
+                    ParseAheadBehind(track, out var ahead, out var behind);
+                    info.AheadBy = ahead;
+                    info.BehindBy = behind;
+                }
+
+                list.Add(info);
+            }
+
+            list = list.OrderBy(b => b.Name).ToList();
+            AppLog.Info($"GetBranches (CLI): {list.Count} total, {localCount} local, in {sw.ElapsedMilliseconds}ms (in {_repoPath})");
+            return list;
+        }
+
+        /// <summary>Parses `%(upstream:track)`'s exact output shapes (verified against a real repo,
+        /// not guessed): "[ahead N]", "[behind N]", "[ahead N, behind M]", "[gone]", or empty when
+        /// up to date / no upstream at all.</summary>
+        private static void ParseAheadBehind(string track, out int ahead, out int behind)
+        {
+            ahead = 0; behind = 0;
+            if (string.IsNullOrEmpty(track) || track == "[gone]") return;
+            foreach (var part in track.Trim('[', ']').Split(','))
+            {
+                var p = part.Trim();
+                if (p.StartsWith("ahead ", StringComparison.Ordinal))
+                    int.TryParse(p.Substring(6), out ahead);
+                else if (p.StartsWith("behind ", StringComparison.Ordinal))
+                    int.TryParse(p.Substring(7), out behind);
+            }
+        }
+
+        private List<BranchInfo> GetBranchesViaLibGit2()
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            int localCount = 0, cacheHits = 0, cacheMisses = 0;
             var list = new List<BranchInfo>();
             var remoteNames = new HashSet<string>(
                 _repo.Network.Remotes.Select(r => r.Name),
@@ -258,17 +462,20 @@ namespace PickleGit.Services
                 };
                 if (b.TrackingDetails != null && !b.IsRemote)
                 {
+                    localCount++;
                     info.TrackedBranchName = b.TrackedBranch?.FriendlyName;
                     var localSha = b.Tip?.Sha;
                     var upstreamSha = b.TrackedBranch?.Tip?.Sha;
                     if (_aheadBehindCache.TryGetValue(b.CanonicalName, out var cached)
                         && cached.LocalSha == localSha && cached.UpstreamSha == upstreamSha)
                     {
+                        cacheHits++;
                         info.AheadBy = cached.Ahead;
                         info.BehindBy = cached.Behind;
                     }
                     else
                     {
+                        cacheMisses++;
                         var ahead = b.TrackingDetails.AheadBy ?? 0;
                         var behind = b.TrackingDetails.BehindBy ?? 0;
                         info.AheadBy = ahead;
@@ -278,6 +485,7 @@ namespace PickleGit.Services
                 }
                 list.Add(info);
             }
+            AppLog.Info($"GetBranches: {list.Count} total, {localCount} local, {cacheHits} ahead/behind cache hits, {cacheMisses} misses, in {sw.ElapsedMilliseconds}ms (in {_repoPath})");
             return list;
         }
 
@@ -1061,6 +1269,62 @@ namespace PickleGit.Services
         public List<TagInfo> GetTags()
         {
             EnsureOpen();
+            if (Cli != null && Cli.IsAvailable)
+            {
+                try { return GetTagsViaCli(); }
+                catch (Exception ex) { AppLog.Warn("GetTagsViaCli failed, falling back to LibGit2Sharp", ex); }
+            }
+            return GetTagsViaLibGit2();
+        }
+
+        private List<TagInfo> GetTagsViaCli()
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            const string Format = "%(refname)\t%(objectname)\t%(*objectname)\t%(objecttype)\t"
+                + "%(authordate:iso-strict)\t%(*authordate:iso-strict)\t%(contents:subject)";
+            var args = $"for-each-ref --format={Git.CliGitService.Quote(Format)} refs/tags";
+            var result = Cli.RunAsync(args).GetAwaiter().GetResult();
+            if (!result.Success) throw new InvalidOperationException(result.ErrorText);
+
+            var entries = new List<(TagInfo Tag, DateTimeOffset SortDate)>();
+            foreach (var rawLine in result.StdOut.Split('\n'))
+            {
+                var line = rawLine.TrimEnd('\r');
+                if (line.Length == 0) continue;
+                // contents:subject can itself legally contain tabs; only the first 6 are ours.
+                var fields = line.Split(new[] { '\t' }, 7);
+                if (fields.Length < 7) continue;
+
+                var refname = fields[0];
+                var objectname = fields[1];
+                var peeledObjectname = fields[2];
+                var objecttype = fields[3];
+                var authorDate = fields[4];
+                var peeledAuthorDate = fields[5];
+                var subject = fields[6];
+
+                bool isAnnotated = objecttype == "tag";
+                var sortDateText = isAnnotated ? peeledAuthorDate : authorDate;
+                DateTimeOffset.TryParse(sortDateText, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var sortDate);
+
+                var tag = new TagInfo
+                {
+                    Name = refname.Substring("refs/tags/".Length),
+                    TargetSha = isAnnotated ? peeledObjectname : objectname,
+                    IsAnnotated = isAnnotated,
+                    Message = isAnnotated ? subject : null
+                };
+                entries.Add((tag, sortDate));
+            }
+
+            var list = entries.OrderByDescending(e => e.SortDate).Select(e => e.Tag).ToList();
+            AppLog.Info($"GetTags (CLI): {list.Count} total, in {sw.ElapsedMilliseconds}ms (in {_repoPath})");
+            return list;
+        }
+
+        private List<TagInfo> GetTagsViaLibGit2()
+        {
             return _repo.Tags
                 .OrderByDescending(t => (t.Target as Commit)?.Author.When ?? DateTimeOffset.MinValue)
                 .Select(t => new TagInfo
@@ -1068,7 +1332,7 @@ namespace PickleGit.Services
                     Name = t.FriendlyName,
                     TargetSha = t.Target?.Sha,
                     IsAnnotated = t.IsAnnotated,
-                    Message = (t.Target as TagAnnotation)?.Message
+                    Message = t.Annotation?.Message
                 }).ToList();
         }
 
