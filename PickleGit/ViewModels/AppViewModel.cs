@@ -730,6 +730,25 @@ namespace PickleGit.ViewModels
                 }
                 catch { }
                 SaveSettings();
+                // Commits/branches already loaded via CloneRepoAsync's own RefreshAsync call, but
+                // pull requests, worktrees, submodules, the commit-message template, the file
+                // watcher, and the auto-refresh timer only ever start via EnsureLoadedAsync — normally
+                // triggered by the ActiveTab setter, but that fired earlier (ActiveTab = tab, above),
+                // before the repo was actually open, so it no-op'd without marking the tab loaded.
+                // Nothing else re-triggers it once the clone finishes, which is why those sidebar
+                // sections stayed empty until the app was restarted.
+                if (!tab.IsLoaded)
+                    _ = tab.EnsureLoadedAsync();
+                // A banner buried in the working-directory panel is easy to miss right after a
+                // clone, since the user isn't necessarily looking at that panel yet — ask directly.
+                if (tab.LfsUnpulledCount > 0)
+                {
+                    var pull = DialogService.Confirm("Git LFS",
+                        $"This repository uses Git LFS and {tab.LfsUnpulledCount} file(s) haven't been " +
+                        "downloaded yet.\n\nPull them now?",
+                        "Pull LFS Objects");
+                    if (pull) tab.PullLfsObjectsCommand.Execute(null);
+                }
             }
         }
 
