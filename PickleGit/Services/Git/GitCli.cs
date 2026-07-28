@@ -145,6 +145,12 @@ namespace PickleGit.Services.Git
             // Never let git spawn an interactive editor from inside the app
             if (!psi.EnvironmentVariables.ContainsKey("GIT_EDITOR"))
                 psi.EnvironmentVariables["GIT_EDITOR"] = "true";
+            // Git LFS detects isatty on its own stdout and silently suppresses its "Downloading/
+            // Uploading LFS objects: NN%" progress meter entirely (not just switching format) when
+            // it isn't connected to a real terminal — which our redirected pipe never is. Force it
+            // on unconditionally; the variable is a no-op for any invocation that never shells out
+            // to git-lfs (plain git commands, or repos with no LFS filters configured).
+            psi.EnvironmentVariables["GIT_LFS_FORCE_PROGRESS"] = "1";
             if (opts?.Env != null)
             {
                 foreach (var kv in opts.Env)
@@ -158,25 +164,34 @@ namespace PickleGit.Services.Git
             PickleGit.Services.AppLog.Info($"git {args} (in {workDir})");
 
             var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
-            proc.OutputDataReceived += (s, e) =>
-            {
-                if (e.Data == null) return;
-                lock (stdout) stdout.AppendLine(e.Data);
-            };
-            proc.ErrorDataReceived += (s, e) =>
-            {
-                if (e.Data == null) return;
-                lock (stderr) stderr.AppendLine(e.Data);
-                opts?.Progress?.Report(e.Data); // git writes progress to stderr
-            };
             proc.Exited += (s, e) => tcs.TrySetResult(proc.ExitCode);
 
             using (proc)
             {
                 if (!proc.Start())
                     throw new InvalidOperationException("Failed to start git.exe.");
-                proc.BeginOutputReadLine();
-                proc.BeginErrorReadLine();
+
+                // Process.OutputDataReceived/ErrorDataReceived only splits on '\n' — git and
+                // git-lfs write their live progress meters ("Filtering content: 45% (…)") using a
+                // bare '\r' so a terminal can overwrite the line in place, with no '\n' until the
+                // whole operation finishes. The built-in event-based reader buffers all of those
+                // \r-separated updates and delivers them as one giant blob only at the very end
+                // (or not at all), so the progress bar never moves. Pumping the streams manually
+                // and treating '\r' as a line terminator too delivers each update as soon as it
+                // arrives.
+                // Plain git writes its own progress meter ("Receiving objects: 45%…") to stderr,
+                // but git-lfs writes its transfer meter ("Downloading LFS objects: 45%…") to
+                // stdout — so progress has to be reported from both streams, not just stderr.
+                var stdoutTask = PumpStreamAsync(proc.StandardOutput, line =>
+                {
+                    lock (stdout) stdout.AppendLine(line);
+                    opts?.Progress?.Report(line);
+                });
+                var stderrTask = PumpStreamAsync(proc.StandardError, line =>
+                {
+                    lock (stderr) stderr.AppendLine(line);
+                    opts?.Progress?.Report(line);
+                });
 
                 if (opts?.StdIn != null)
                 {
@@ -191,8 +206,9 @@ namespace PickleGit.Services.Git
                 }))
                 {
                     var exitCode = await tcs.Task.ConfigureAwait(false);
-                    // Ensure async output readers have flushed
-                    proc.WaitForExit();
+                    // Ensure both pumps have drained (EOF) before reading stdout/stderr below.
+                    try { await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false); }
+                    catch { /* pump can fault on Kill() tearing down the pipe mid-read */ }
                     ct.ThrowIfCancellationRequested();
                     PickleGit.Services.AppLog.Info($"git {args} exit={exitCode} in {sw.ElapsedMilliseconds}ms (in {workDir})");
                     return new GitCliResult
@@ -203,6 +219,42 @@ namespace PickleGit.Services.Git
                     };
                 }
             }
+        }
+
+        /// <summary>Reads <paramref name="reader"/> to EOF, invoking <paramref name="onLine"/> for each
+        /// chunk terminated by '\r', '\n', or '\r\n' (unlike <see cref="Process.BeginErrorReadLine"/>,
+        /// which only recognizes '\n' and so never fires mid-operation for a bare-'\r' progress meter).</summary>
+        private static async Task PumpStreamAsync(StreamReader reader, Action<string> onLine)
+        {
+            var buffer = new char[4096];
+            var line = new StringBuilder();
+            try
+            {
+                int read;
+                while ((read = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
+                {
+                    for (int i = 0; i < read; i++)
+                    {
+                        var c = buffer[i];
+                        if (c == '\r' || c == '\n')
+                        {
+                            if (line.Length > 0)
+                            {
+                                onLine(line.ToString());
+                                line.Clear();
+                            }
+                        }
+                        else
+                        {
+                            line.Append(c);
+                        }
+                    }
+                }
+            }
+            catch (ObjectDisposedException) { }
+            catch (IOException) { }
+            if (line.Length > 0)
+                onLine(line.ToString());
         }
     }
 }
