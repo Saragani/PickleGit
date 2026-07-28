@@ -337,20 +337,17 @@ namespace PickleGit.ViewModels
                                 var pw = Services.CredentialStore.Load(host, user);
                                 if (pw != null) { RemoteUsername = user; RemotePassword = pw; return true; }
                             }
-
-                            // 3. Check Git Credential Manager (used by git CLI, VS, etc.)
-                            var (gcmUser, gcmPass) = Services.CredentialStore.LoadFromGitCredentialManager(remoteUrl);
-                            if (!string.IsNullOrEmpty(gcmUser) && !string.IsNullOrEmpty(gcmPass))
-                            {
-                                RemoteUsername = gcmUser;
-                                RemotePassword = gcmPass;
-                                return true;
-                            }
                         }
                     }
                     catch { }
 
-                    // 4. Try git's configured credential helper off the UI thread
+                    // 3. Ask git's own configured credential helper (GCM, wincred, store, ...) — the
+                    // exact same resolution git.exe itself performs, including any per-host/per-path
+                    // username config. Tried before the raw Credential Manager read below because
+                    // that raw read just grabs whatever's cached under one fixed generic key and
+                    // can't disambiguate between multiple accounts stored for the same host (e.g. a
+                    // shared machine where a build service has also authenticated) the way the
+                    // helper's own credential matching can.
                     try
                     {
                         var (gitUser, gitPass) = await Task.Run(
@@ -359,6 +356,20 @@ namespace PickleGit.ViewModels
                         {
                             RemoteUsername = gitUser;
                             RemotePassword = gitPass;
+                            return true;
+                        }
+                    }
+                    catch { }
+
+                    // 4. Fall back to a raw Windows Credential Manager read — only reachable when
+                    // git.exe isn't on PATH, since step 3 already covers this same store when it is.
+                    try
+                    {
+                        var (gcmUser, gcmPass) = Services.CredentialStore.LoadFromGitCredentialManager(remoteUrl);
+                        if (!string.IsNullOrEmpty(gcmUser) && !string.IsNullOrEmpty(gcmPass))
+                        {
+                            RemoteUsername = gcmUser;
+                            RemotePassword = gcmPass;
                             return true;
                         }
                     }

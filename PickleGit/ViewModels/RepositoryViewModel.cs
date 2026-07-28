@@ -1660,9 +1660,18 @@ namespace PickleGit.ViewModels
                 }
                 var msg = ex.Message;
                 // libgit2 reports genuine credential rejection as "authentication replays" — the
-                // server kept rejecting the same credentials until libgit2 gave up. Purge them and
-                // force a fresh prompt next attempt.
-                if (msg.IndexOf("authentication replays", StringComparison.OrdinalIgnoreCase) >= 0)
+                // server kept rejecting the same credentials until libgit2 gave up. A single HTTP
+                // 401/403/410 response (no retry loop involved at all) is the same underlying
+                // problem — wrong, expired, or (for hosts like Bitbucket that have retired
+                // Basic-Auth passwords/app-passwords entirely) fundamentally unusable credentials
+                // — so it gets the same treatment: purge the stale credential and force a fresh
+                // prompt next attempt instead of silently replaying the same broken one forever.
+                var isRejectedAuthStatus =
+                    msg.IndexOf("status code: 401", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    msg.IndexOf("status code: 403", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    msg.IndexOf("status code: 410", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (msg.IndexOf("authentication replays", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    isRejectedAuthStatus)
                 {
                     // Purge the stale PickleGit entry so it won't shadow a fresh credential
                     var failedUser = RemoteUsername;
@@ -1691,7 +1700,12 @@ namespace PickleGit.ViewModels
                         if (!string.IsNullOrEmpty(failedUrl))
                             Services.CredentialStore.RejectViaGitCredentialHelper(failedUrl, failedUser, failedPassword);
                     }
-                    msg = "Authentication failed. Check that your username and password (or app password) are correct.";
+                    msg = isRejectedAuthStatus
+                        ? "Authentication failed (the server rejected the request). If this remote no " +
+                          "longer accepts a plain username/password — e.g. Bitbucket has retired app " +
+                          "passwords — use a personal access token as the password instead. " +
+                          "You'll be prompted to re-enter credentials next attempt."
+                        : "Authentication failed. Check that your username and password (or app password) are correct.";
                 }
                 // "Too many redirects" on its own (not paired with "authentication replays") is
                 // libgit2's other trigger for the same underlying cap, but it's frequently a genuine
