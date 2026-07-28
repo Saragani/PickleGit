@@ -546,6 +546,21 @@ namespace PickleGit.Converters
         }
     }
 
+    /// <summary>Same shape as <see cref="FileTreeRowTemplateSelector"/>, for the multi-select
+    /// "Files changed" panel's <see cref="AggregatedFileTreeRow"/> rows.</summary>
+    public class AggregatedFileTreeRowTemplateSelector : DataTemplateSelector
+    {
+        public DataTemplate FolderTemplate { get; set; }
+        public DataTemplate FileTemplate { get; set; }
+
+        public override DataTemplate SelectTemplate(object item, DependencyObject container)
+        {
+            if (item is AggregatedFileTreeRow row)
+                return row.Kind == FileTreeRowKind.Folder ? FolderTemplate : FileTemplate;
+            return null;
+        }
+    }
+
     /// <summary>Turns a SidebarRow.IndentLevel into a left Margin, applied to a row's inner
     /// content only — never the ListViewItem container — so selection/hover highlighting always
     /// spans the full row width regardless of nesting depth.</summary>

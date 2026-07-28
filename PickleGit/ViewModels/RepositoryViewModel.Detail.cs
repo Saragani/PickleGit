@@ -81,8 +81,9 @@ namespace PickleGit.ViewModels
                 // node disappears mid-merge (e.g. a resolved file now matches HEAD exactly).
                 if (!HasConflict) ShowWorkingDir = false;
                 DetailCommit = null;
-                CommitFiles.Clear();
+                CommitFiles = new ObservableCollection<FileChange>();
                 _aggregatedFiles.Clear();
+                RebuildAggregatedFileTreeRows();
                 RaiseDetailPanelPropertiesChanged();
                 return;
             }
@@ -93,6 +94,7 @@ namespace PickleGit.ViewModels
             if (_selectedNodes.Count == 1)
             {
                 _aggregatedFiles.Clear();
+                RebuildAggregatedFileTreeRows();
                 var node = _selectedNodes[0];
                 if (node.Commit?.IsUncommitted == true) { ShowWorkingDir = true; _ = LoadWorkingDirAsync(); }
                 else { ShowWorkingDir = false; LoadCommitDetail(node.Commit.Sha); }
@@ -100,7 +102,7 @@ namespace PickleGit.ViewModels
             else
             {
                 DetailCommit = null;
-                CommitFiles.Clear();
+                CommitFiles = new ObservableCollection<FileChange>();
                 ShowWorkingDir = false;
                 ComputeAggregatedFiles();
             }
@@ -149,16 +151,17 @@ namespace PickleGit.ViewModels
 
             if (version != _aggregationVersion) return; // selection changed while computing
 
-            _aggregatedFiles.Clear();
-            foreach (var kv in map.OrderByDescending(x => x.Value.count).ThenBy(x => x.Key))
+            var ordered = map.Select(kv => new AggregatedFileChange
             {
-                _aggregatedFiles.Add(new AggregatedFileChange
-                {
-                    Path = kv.Key,
-                    CommitCount = kv.Value.count,
-                    Kind = kv.Value.kind
-                });
-            }
+                Path = kv.Key,
+                CommitCount = kv.Value.count,
+                Kind = kv.Value.kind
+            }).ToList();
+            ordered.Sort(BuildAggregatedFileComparer());
+
+            _aggregatedFiles.Clear();
+            foreach (var f in ordered) _aggregatedFiles.Add(f);
+            RebuildAggregatedFileTreeRows();
         }
 
         private async Task CherryPickSelectedAsync()

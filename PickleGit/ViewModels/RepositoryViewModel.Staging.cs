@@ -185,6 +185,18 @@ namespace PickleGit.ViewModels
                 _selectedStagedFiles.Add(f);
 
             RebuildFileTreeRows();
+
+            // Keep the commit-detail "Files changed" panels on the same sort-mode choice —
+            // CommitFiles' setter re-sorts + rebuilds its tree rows on any reassignment.
+            if (CommitFiles.Count > 0) CommitFiles = new ObservableCollection<FileChange>(CommitFiles);
+            if (_aggregatedFiles.Count > 0)
+            {
+                var sortedAgg = _aggregatedFiles.ToList();
+                sortedAgg.Sort(BuildAggregatedFileComparer());
+                _aggregatedFiles.Clear();
+                foreach (var f in sortedAgg) _aggregatedFiles.Add(f);
+                RebuildAggregatedFileTreeRows();
+            }
         }
 
         /// <summary>Rebuilds the flattened folder-tree rows for both panels' Tree view mode. Cheap
@@ -195,6 +207,47 @@ namespace PickleGit.ViewModels
             var cmp = BuildFileComparer();
             StagedFileTreeRows = new ObservableCollection<FileTreeRow>(FileTreeBuilder.Build(StagedFiles, cmp, _expandedStagedTreeFolders));
             WorkingFileTreeRows = new ObservableCollection<FileTreeRow>(FileTreeBuilder.Build(WorkingDirFiles, cmp, _expandedWorkingTreeFolders));
+        }
+
+        /// <summary>Tree-mode rows for the single-commit "Files changed" panel — see CommitFiles'
+        /// setter, which calls this on every assignment so it never goes stale.</summary>
+        private void RebuildCommitFileTreeRows()
+        {
+            var cmp = BuildFileComparer();
+            CommitFilesTreeRows = new ObservableCollection<FileTreeRow>(FileTreeBuilder.Build(CommitFiles, cmp, _expandedCommitFilesTreeFolders));
+        }
+
+        /// <summary>Tree-mode rows for the multi-select "Files changed" panel — callers must call
+        /// this explicitly after mutating AggregatedFiles (it's a plain ObservableCollection with no
+        /// custom setter to hook, unlike CommitFiles).</summary>
+        private void RebuildAggregatedFileTreeRows()
+        {
+            var cmp = BuildAggregatedFileComparer();
+            AggregatedFilesTreeRows = new ObservableCollection<AggregatedFileTreeRow>(FileTreeBuilder.BuildAggregated(AggregatedFiles, cmp, _expandedAggregatedFilesTreeFolders));
+        }
+
+        /// <summary>Same ordering convention as <see cref="BuildFileComparer"/>, for the
+        /// multi-select "Files changed" panel's <see cref="AggregatedFileChange"/> rows.</summary>
+        private Comparison<AggregatedFileChange> BuildAggregatedFileComparer()
+        {
+            switch (FileSortMode)
+            {
+                case FileSortMode.PathAsc:
+                    return (a, b) => string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase);
+                case FileSortMode.PathDesc:
+                    return (a, b) => string.Compare(b.Path, a.Path, StringComparison.OrdinalIgnoreCase);
+                case FileSortMode.NameAsc:
+                    return (a, b) => string.Compare(Path.GetFileName(a.Path), Path.GetFileName(b.Path), StringComparison.OrdinalIgnoreCase);
+                case FileSortMode.NameDesc:
+                    return (a, b) => string.Compare(Path.GetFileName(b.Path), Path.GetFileName(a.Path), StringComparison.OrdinalIgnoreCase);
+                case FileSortMode.Status:
+                default:
+                    return (a, b) =>
+                    {
+                        var byKind = StatusSortRank(a.Kind).CompareTo(StatusSortRank(b.Kind));
+                        return byKind != 0 ? byKind : string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase);
+                    };
+            }
         }
 
         private async Task StageFileAsync(object param)

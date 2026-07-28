@@ -1,0 +1,35 @@
+<UserControl x:Class="PickleGit.Views.NewTabPlaceholderView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:PickleGit.ViewModels"
+             Background="{DynamicResource BackgroundBrush}">
+
+    <!-- Shown instead of the normal 3-panel layout for a tab created via the "+" button, before
+         the user has picked Open/Clone/Init — mirrors SourceTree/GitKraken's empty-tab landing
+         page. DataContext is the placeholder RepositoryViewModel itself; Open/Clone/Init are
+         AppViewModel commands, reached via the same AncestorType=Window trick the tab close
+         button already uses, passing this tab (via CommandParameter="{Binding}") so the command
+         populates this same tab instead of creating a new one. -->
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360">
+        <TextBlock Text="New Tab" FontSize="22" FontWeight="Light"
+                   Foreground="{DynamicResource TextPrimaryBrush}"
+                   HorizontalAlignment="Center"/>
+        <TextBlock Text="Open an existing repository, clone one, or start a new one."
+                   FontSize="13" Margin="0,8,0,24"
+                   Foreground="{DynamicResource TextSecondaryBrush}"
+                   HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+
+        <Button Content="📂  Open repository" Style="{StaticResource AccentButton}"
+                Padding="16,10" Margin="0,0,0,10" HorizontalAlignment="Stretch"
+                Command="{Binding DataContext.OpenRepoCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                CommandParameter="{Binding}"/>
+        <Button Content="⬇  Clone repository" Style="{StaticResource ToolbarButton}"
+                Padding="16,10" Margin="0,0,0,10" HorizontalAlignment="Stretch"
+                Command="{Binding DataContext.CloneRepoCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                CommandParameter="{Binding}"/>
+        <Button Content="＋  Initialize new repository" Style="{StaticResource ToolbarButton}"
+                Padding="16,10" HorizontalAlignment="Stretch"
+                Command="{Binding DataContext.InitRepoCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                CommandParameter="{Binding}"/>
+    </StackPanel>
+</UserControl>

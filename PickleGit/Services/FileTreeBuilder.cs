@@ -79,5 +79,78 @@ namespace PickleGit.Services
                 });
             }
         }
+
+        // ── Aggregated (multi-select) variant ───────────────────────────────────────────────
+        // Same flatten-a-tree algorithm as above, duplicated rather than made generic: the two
+        // models (FileChange vs AggregatedFileChange) are XAML-bound through separate
+        // DataTemplateSelectors (a generic row type doesn't map cleanly onto XAML's DataType
+        // template matching), and the two panels' actions differ (stage/unstage vs read-only).
+
+        private class AggregatedNode
+        {
+            public readonly Dictionary<string, AggregatedNode> Children =
+                new Dictionary<string, AggregatedNode>(StringComparer.OrdinalIgnoreCase);
+            public readonly List<AggregatedFileChange> Files = new List<AggregatedFileChange>();
+        }
+
+        public static List<AggregatedFileTreeRow> BuildAggregated(IEnumerable<AggregatedFileChange> files,
+            Comparison<AggregatedFileChange> leafComparer, ISet<string> expandedFolders)
+        {
+            var root = new AggregatedNode();
+            foreach (var f in files)
+            {
+                var parts = (f.Path ?? string.Empty).Split('/');
+                var node = root;
+                for (int i = 0; i < parts.Length - 1; i++)
+                {
+                    var part = parts[i];
+                    if (!node.Children.TryGetValue(part, out var child))
+                    {
+                        child = new AggregatedNode();
+                        node.Children[part] = child;
+                    }
+                    node = child;
+                }
+                node.Files.Add(f);
+            }
+
+            var rows = new List<AggregatedFileTreeRow>();
+            FlattenAggregated(root, 0, string.Empty, rows, leafComparer, expandedFolders);
+            return rows;
+        }
+
+        private static void FlattenAggregated(AggregatedNode node, int indent, string pathPrefix,
+            List<AggregatedFileTreeRow> rows, Comparison<AggregatedFileChange> leafComparer,
+            ISet<string> expandedFolders)
+        {
+            foreach (var kvp in node.Children.OrderBy(c => c.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var folderPath = pathPrefix.Length == 0 ? kvp.Key : pathPrefix + "/" + kvp.Key;
+                bool expanded = expandedFolders.Contains(folderPath);
+                rows.Add(new AggregatedFileTreeRow
+                {
+                    Kind = FileTreeRowKind.Folder,
+                    IndentLevel = indent,
+                    DisplayName = kvp.Key,
+                    FullPath = folderPath,
+                    IsExpanded = expanded
+                });
+                if (expanded)
+                    FlattenAggregated(kvp.Value, indent + 1, folderPath, rows, leafComparer, expandedFolders);
+            }
+
+            var files = node.Files.ToList();
+            files.Sort(leafComparer);
+            foreach (var f in files)
+            {
+                rows.Add(new AggregatedFileTreeRow
+                {
+                    Kind = FileTreeRowKind.File,
+                    IndentLevel = indent,
+                    DisplayName = System.IO.Path.GetFileName(f.Path),
+                    File = f
+                });
+            }
+        }
     }
 }

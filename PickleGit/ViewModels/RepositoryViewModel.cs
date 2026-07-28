@@ -27,7 +27,24 @@ namespace PickleGit.ViewModels
         private bool _isBusy;
 
         public string RepoPath { get => _repoPath; private set => Set(ref _repoPath, value); }
-        public string RepoName => RepoPath != null ? Path.GetFileName(RepoPath.TrimEnd('\\', '/')) : "(no repository)";
+        public string RepoName => RepoPath != null ? Path.GetFileName(RepoPath.TrimEnd('\\', '/'))
+            : IsPlaceholder ? "New Tab" : "(no repository)";
+
+        private bool _isPlaceholder;
+        /// <summary>True for a tab created via the "+" button before the user has picked
+        /// Open/Clone/Init yet — shown with <see cref="Views.NewTabPlaceholderView"/> instead of the
+        /// normal 3-panel layout. Unlike the transient "tab added, still loading" window every
+        /// Open/Clone call briefly passes through, a placeholder tab is deliberately left open with
+        /// no repo and must never be auto-removed.</summary>
+        public bool IsPlaceholder
+        {
+            get => _isPlaceholder;
+            set
+            {
+                if (Set(ref _isPlaceholder, value))
+                    RaisePropertyChanged(nameof(RepoName));
+            }
+        }
         public string CurrentBranch { get => _currentBranch; private set => Set(ref _currentBranch, value); }
         public string StatusMessage { get => _statusMessage; set => Set(ref _statusMessage, value); }
         public bool IsBusy
@@ -195,7 +212,21 @@ namespace PickleGit.ViewModels
         /// is meaningless for a different file's content.</summary>
         public event EventHandler DiffFileSwitched;
 
-        public ObservableCollection<FileChange> CommitFiles { get => _commitFiles; private set => Set(ref _commitFiles, value); }
+        /// <summary>Sorts to the same convention (and rebuilds the Tree-mode rows) on every
+        /// assignment, so the "Files changed" panel always matches whatever ordering/view choice
+        /// governs the Staged/Unstaged panels — see FileSortMode/FileViewMode, shared across all
+        /// three file lists.</summary>
+        public ObservableCollection<FileChange> CommitFiles
+        {
+            get => _commitFiles;
+            private set
+            {
+                var sorted = new List<FileChange>(value ?? Enumerable.Empty<FileChange>());
+                sorted.Sort(BuildFileComparer());
+                if (Set(ref _commitFiles, new ObservableCollection<FileChange>(sorted)))
+                    RebuildCommitFileTreeRows();
+            }
+        }
         public FileChange SelectedFile
         {
             get => _selectedFile;
@@ -418,12 +449,20 @@ namespace PickleGit.ViewModels
         private ObservableCollection<FileTreeRow> _workingFileTreeRows = new ObservableCollection<FileTreeRow>();
         public ObservableCollection<FileTreeRow> WorkingFileTreeRows { get => _workingFileTreeRows; private set => Set(ref _workingFileTreeRows, value); }
 
+        private ObservableCollection<FileTreeRow> _commitFilesTreeRows = new ObservableCollection<FileTreeRow>();
+        public ObservableCollection<FileTreeRow> CommitFilesTreeRows { get => _commitFilesTreeRows; private set => Set(ref _commitFilesTreeRows, value); }
+
+        private ObservableCollection<AggregatedFileTreeRow> _aggregatedFilesTreeRows = new ObservableCollection<AggregatedFileTreeRow>();
+        public ObservableCollection<AggregatedFileTreeRow> AggregatedFilesTreeRows { get => _aggregatedFilesTreeRows; private set => Set(ref _aggregatedFilesTreeRows, value); }
+
         /// <summary>Which tree-view folders are expanded, kept separately per panel (keyed by
         /// relative folder path, e.g. "Services") — expanding a folder in Staged does NOT expand it
         /// in Unstaged. Unlike sort mode/view mode (deliberately one shared setting), expand/collapse
         /// is a per-panel navigation state, not a preference. Empty by default (all folders collapsed).</summary>
         private readonly HashSet<string> _expandedStagedTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _expandedWorkingTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _expandedCommitFilesTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _expandedAggregatedFilesTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private void SetFileViewMode(object param)
         {
@@ -433,18 +472,26 @@ namespace PickleGit.ViewModels
 
         private void ToggleTreeFolder(object param)
         {
-            // CommandParameter is "Staged:<path>" or "Working:<path>" (see the Grid.InputBindings in
-            // CommitDetailView.xaml's two FolderTemplates) so each panel's expand state stays independent.
+            // CommandParameter is "Staged:<path>", "Working:<path>", "CommitFiles:<path>", or
+            // "Aggregated:<path>" (see the Grid.InputBindings in CommitDetailView.xaml's
+            // FolderTemplates) so each panel's expand state stays independent.
             if (!(param is string tagged) || string.IsNullOrEmpty(tagged)) return;
             HashSet<string> set;
             string path;
-            if (tagged.StartsWith("Staged:", StringComparison.Ordinal)) { set = _expandedStagedTreeFolders; path = tagged.Substring(7); }
-            else if (tagged.StartsWith("Working:", StringComparison.Ordinal)) { set = _expandedWorkingTreeFolders; path = tagged.Substring(8); }
+            Action rebuild;
+            if (tagged.StartsWith("Staged:", StringComparison.Ordinal))
+            { set = _expandedStagedTreeFolders; path = tagged.Substring(7); rebuild = RebuildFileTreeRows; }
+            else if (tagged.StartsWith("Working:", StringComparison.Ordinal))
+            { set = _expandedWorkingTreeFolders; path = tagged.Substring(8); rebuild = RebuildFileTreeRows; }
+            else if (tagged.StartsWith("CommitFiles:", StringComparison.Ordinal))
+            { set = _expandedCommitFilesTreeFolders; path = tagged.Substring(12); rebuild = RebuildCommitFileTreeRows; }
+            else if (tagged.StartsWith("Aggregated:", StringComparison.Ordinal))
+            { set = _expandedAggregatedFilesTreeFolders; path = tagged.Substring(11); rebuild = RebuildAggregatedFileTreeRows; }
             else return;
             if (string.IsNullOrEmpty(path)) return;
             if (!set.Remove(path))
                 set.Add(path);
-            RebuildFileTreeRows();
+            rebuild();
         }
 
         /// <summary>Bound to UnstagedListView via ListViewMultiSelectBehavior — the current multi-selection there.</summary>
@@ -495,6 +542,7 @@ namespace PickleGit.ViewModels
         public ICommand FetchCommand { get; }
         public ICommand PullCommand { get; }
         public ICommand PushCommand { get; }
+        public ICommand PullLfsObjectsCommand { get; }
         public ICommand CreateBranchCommand { get; }
         public ICommand CheckoutBranchCommand { get; }
         public ICommand DeleteBranchCommand { get; }
@@ -621,6 +669,7 @@ namespace PickleGit.ViewModels
             FetchCommand = new RelayCommand(async () => await FetchAsync(), () => HasRepo);
             PullCommand = new RelayCommand(async () => await PullAsync(), () => HasRepo);
             PushCommand = new RelayCommand(async () => await PushAsync(), () => HasRepo);
+            PullLfsObjectsCommand = new RelayCommand(async () => await PullLfsObjectsAsync(), () => HasRepo && LfsUnpulledCount > 0);
             FetchPruneCommand = new RelayCommand(async () => await FetchAsync(prune: true), () => HasRepo);
             FetchAllCommand = new RelayCommand(async () => await FetchAsync(allRemotes: true), () => HasRepo);
             PullRebaseCommand = new RelayCommand(async () => await PullRebaseAsync(), () => HasRepo);
@@ -866,6 +915,10 @@ namespace PickleGit.ViewModels
             _ = LoadSubmodulesAsync();
             _ = LoadWorktreesAsync();
             _ = LoadCommitTemplateAsync();
+            // Detect un-pulled LFS objects on first load too, not just after checkout/pull/reset —
+            // a repo opened straight from disk (already checked out outside PickleGit) needs this
+            // same check to show the "Pull LFS objects" suggestion.
+            _ = RefreshLfsStatusAsync();
         }
 
         /// <summary>Pre-fills the commit box from `commit.template` when one is configured and the box is empty.</summary>
@@ -936,9 +989,10 @@ namespace PickleGit.ViewModels
                 RemoteUsername = username;
                 RemotePassword = password;
                 // The libgit2 clone path above has no LFS awareness, so a freshly-cloned LFS repo
-                // is left with raw pointer files until this runs (see TryLfsCheckoutAsync). Harmless
-                // no-op for the git.exe clone path, which already smudged real content itself.
-                await TryLfsCheckoutAsync();
+                // is left with raw pointer files — detect that here so the "Pull LFS objects"
+                // suggestion shows up immediately (see RefreshLfsStatusAsync). Harmless no-op for
+                // the git.exe clone path, which already smudged real content itself.
+                await RefreshLfsStatusAsync();
                 await RefreshAsync();
                 SaveCredentials(); // Remotes are populated after refresh
             }
@@ -970,7 +1024,7 @@ namespace PickleGit.ViewModels
 
         /// <summary>Self-coalescing wrapper around <see cref="RefreshOnceAsync"/>. Most git-mutating
         /// operations call this as a separate step *after* their own busy scope/watcher-suppression
-        /// has already closed (see RunThenRefresh*'s "gap" — TryLfsCheckoutAsync and the explicit
+        /// has already closed (see RunThenRefresh*'s "gap" — RefreshLfsStatusAsync and the explicit
         /// refresh both run unsuppressed and often with IsBusy already false), so the
         /// RepositoryWatcher's own debounced refresh can legitimately fire independently around the
         /// same time — this was confirmed to cause a genuine second, redundant refresh (not just a
@@ -1475,14 +1529,18 @@ namespace PickleGit.ViewModels
             {
                 var ok = await RunWorkAsync(status, work);
                 await LoadWorkingDirAsync();
+                // Reset/revert/stash-pop/undo can all restore LFS-tracked files to raw pointer
+                // content — this was previously undetected for these operations entirely (only
+                // checkout/clone/pull ever checked). See RefreshLfsStatusAsync.
+                if (ok) await RefreshLfsStatusAsync();
                 await RefreshAsync();
                 return ok;
             }
             finally { IsBusy = false; }
         }
 
-        /// <summary>Like RunThenRefresh, for checkouts — also re-smudges any now-stale LFS pointer files
-        /// before refreshing (see TryLfsCheckoutAsync).</summary>
+        /// <summary>Like RunThenRefresh, for checkouts — also re-checks for now-stale LFS pointer
+        /// files before refreshing (see RefreshLfsStatusAsync).</summary>
         /// <summary>HEAD and the working tree genuinely change on every checkout and must stay
         /// full-cost, but tags/stashes don't — worth skipping given GetTags is an uncached
         /// peel-and-sort over every tag in the repo, every refresh.</summary>
@@ -1495,7 +1553,7 @@ namespace PickleGit.ViewModels
             try
             {
                 var ok = await RunWorkAsync(status, work);
-                if (ok) await TryLfsCheckoutAsync();
+                if (ok) await RefreshLfsStatusAsync();
                 await RefreshAsync(false, CheckoutRefreshScope);
                 return ok;
             }

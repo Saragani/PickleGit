@@ -101,6 +101,20 @@ namespace PickleGit.Models
         public bool IsExpanded { get; set; }
     }
 
+    /// <summary>Tree-mode row for the multi-select "Files changed" panel — mirrors <see cref="FileTreeRow"/>
+    /// but wraps <see cref="AggregatedFileChange"/> instead of <see cref="FileChange"/>, since that
+    /// panel shows a different underlying model (path + per-commit count, not a single change).
+    /// Built by <see cref="PickleGit.Services.FileTreeBuilder"/>.</summary>
+    public class AggregatedFileTreeRow
+    {
+        public FileTreeRowKind Kind { get; set; }
+        public int IndentLevel { get; set; }
+        public string DisplayName { get; set; }
+        public AggregatedFileChange File { get; set; }
+        public string FullPath { get; set; }
+        public bool IsExpanded { get; set; }
+    }
+
     /// <summary>One entry in the Staged/Unstaged sort-mode picker — pairs the enum value with the
     /// friendly label shown in the ComboBox.</summary>
     public class FileSortModeOption

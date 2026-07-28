@@ -551,8 +551,15 @@
             <Border Grid.Row="2" Background="{DynamicResource BannerWarningBrush}" Padding="8,6"
                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
                     Visibility="{Binding IsLfsPointerDiff, Converter={StaticResource BoolToVis}}">
-                <TextBlock Text="📦 This file is tracked by Git LFS — the diff below is the pointer file, not the actual content."
-                           FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="📦 This file is tracked by Git LFS — the diff below is the pointer file, not the actual content."
+                               FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,10,0"/>
+                    <Button Content="Pull LFS objects" FontSize="10" Padding="8,2"
+                            Style="{StaticResource ToolbarButton}"
+                            Command="{Binding PullLfsObjectsCommand}"
+                            Visibility="{Binding LfsUnpulledCount, Converter={StaticResource IntAboveZero}}"/>
+                </StackPanel>
             </Border>
 
             <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" Padding="8,6"

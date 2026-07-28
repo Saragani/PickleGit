@@ -16,6 +16,20 @@ namespace PickleGit.ViewModels
     /// <summary>Git LFS, submodules and worktrees.</summary>
     public partial class RepositoryViewModel
     {
+        private int _lfsUnpulledCount;
+        /// <summary>Count of LFS-tracked files currently sitting as raw pointer text in the working
+        /// tree — drives the "Pull LFS objects" suggestion banner and PullLfsObjectsCommand's
+        /// CanExecute. 0 hides the banner. See RefreshLfsStatusAsync.</summary>
+        public int LfsUnpulledCount
+        {
+            get => _lfsUnpulledCount;
+            private set
+            {
+                if (Set(ref _lfsUnpulledCount, value))
+                    System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+            }
+        }
+
         private async Task TrackWithLfsAsync(FileChange fc)
         {
             if (fc == null) return;
@@ -32,26 +46,62 @@ namespace PickleGit.ViewModels
             await LoadWorkingDirAsync();
         }
 
-        /// <summary>Best-effort fetch+re-smudge of Git LFS pointer files after a checkout or pull.
-        /// LibGit2Sharp checkout/fetch/pull have no awareness of git-lfs at all, so a libgit2 checkout
-        /// leaves LFS-tracked files as raw pointer text and nothing else in the app ever populates
-        /// .git/lfs/objects. `git lfs pull` (unlike the plain `git lfs checkout` this replaced) actually
-        /// fetches whatever LFS objects the current HEAD's tree needs before re-smudging — `lfs checkout`
-        /// alone only re-smudges from objects already cached locally, which was a guaranteed no-op here.
-        /// Gated on the repo actually declaring LFS filters, to skip a network round-trip on every
-        /// checkout/pull for the common non-LFS repo. Must never surface a blocking dialog — a missing
-        /// git-lfs extension or a fetch failure is only logged, not thrown at the caller.</summary>
-        private async Task TryLfsCheckoutAsync()
+        /// <summary>Cheap, network-free scan for LFS-tracked files that are still raw pointer text
+        /// after a checkout/pull/stash-restore — replaces the old silent, best-effort `git lfs pull`
+        /// auto-run (which fetched over the network on every such operation and swallowed failures
+        /// into a log line only). `git lfs ls-files --json`'s "checkout" field tells us, per file,
+        /// whether the working tree currently holds the real content (true) or just the pointer
+        /// (false) — verified against a real repo in both states rather than assumed, since a
+        /// same-named "downloaded" field in that JSON turned out to mean something different
+        /// (whether it was ever fetched from a remote this session, not whether the working copy is
+        /// smudged right now). Populates <see cref="LfsUnpulledCount"/> so the UI can offer a "Pull
+        /// LFS objects" button; the actual pull only runs when the user clicks it (see
+        /// PullLfsObjectsCommand), which goes through the normal RunCliAsync path and so gets
+        /// progress-bar and error-dialog handling for free — no bespoke handling needed here.</summary>
+        private async Task RefreshLfsStatusAsync()
         {
-            if (_git.Cli == null || !_git.Cli.IsAvailable) return;
-            if (!RepoUsesLfs()) return;
+            if (_git.Cli == null || !_git.Cli.IsAvailable || !RepoUsesLfs())
+            {
+                LfsUnpulledCount = 0;
+                return;
+            }
             try
             {
-                var result = await _git.Cli.RunAsync("lfs pull");
-                if (!result.Success)
-                    AppLog.Warn($"git lfs pull failed: {result.ErrorText}");
+                var result = await _git.Cli.RunAsync("lfs ls-files --json");
+                if (!result.Success) { LfsUnpulledCount = 0; return; }
+                var parsed = Newtonsoft.Json.Linq.JObject.Parse(result.StdOut);
+                int count = 0;
+                if (parsed["files"] is Newtonsoft.Json.Linq.JArray files)
+                {
+                    foreach (var f in files)
+                    {
+                        var checkoutToken = f["checkout"];
+                        if (checkoutToken != null && (bool)checkoutToken == false)
+                            count++;
+                    }
+                }
+                LfsUnpulledCount = count;
             }
-            catch (Exception ex) { AppLog.Warn("git lfs pull threw", ex); }
+            catch (Exception ex)
+            {
+                AppLog.Warn("RefreshLfsStatusAsync failed", ex);
+                LfsUnpulledCount = 0;
+            }
+        }
+
+        /// <summary>Runs the actual `git lfs pull` — only ever user-initiated (the "Pull LFS
+        /// objects" banner button), unlike the old automatic background pull this replaced.</summary>
+        private async Task PullLfsObjectsAsync()
+        {
+            if (!await RunCliAsync("Pulling LFS objects…", "lfs pull", "Git LFS")) return;
+            await RefreshLfsStatusAsync();
+            // A commit's diff always shows the pointer (it diffs git's own object store, which
+            // never holds anything but the pointer for an LFS path — pulling only affects the
+            // working tree) so that banner is expected to persist; reloading here just clears the
+            // "Pull LFS objects" button/suggestion state once there's nothing left to pull, and
+            // picks up real working-tree content for the working-directory view.
+            if (ShowWorkingDir) await LoadWorkingDirAsync();
+            else if (DetailCommit != null) LoadCommitDetail(DetailCommit.Sha);
         }
 
         /// <summary>Cheap check for whether this repo declares any Git LFS filters, so the LFS fetch

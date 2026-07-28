@@ -187,6 +187,145 @@
                 </DataTemplate>
             </conv:FileTreeRowTemplateSelector.FileTemplate>
         </conv:FileTreeRowTemplateSelector>
+
+        <!-- Read-only variant for the single-commit "Files changed" panel — same row shape as the
+             flat CommitFiles ListView (status badge + path + file-navigation context menu), no
+             stage/unstage action since these files aren't stageable. -->
+        <conv:FileTreeRowTemplateSelector x:Key="CommitFilesTreeSelector">
+            <conv:FileTreeRowTemplateSelector.FolderTemplate>
+                <DataTemplate DataType="{x:Type models:FileTreeRow}">
+                    <Grid Height="24" Background="Transparent"
+                          Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}">
+                        <Grid.InputBindings>
+                            <MouseBinding MouseAction="LeftClick"
+                                          Command="{Binding Tag.ToggleTreeFolderCommand, RelativeSource={RelativeSource AncestorType=Grid}}"
+                                          CommandParameter="{Binding FullPath, Converter={StaticResource Prepend}, ConverterParameter='CommitFiles:'}"/>
+                        </Grid.InputBindings>
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="{Binding IndentLevel, Converter={StaticResource IndentLevelToMargin}}">
+                            <Grid Width="8" Height="8" Margin="0,0,4,0" VerticalAlignment="Center">
+                                <Path Data="M 1 1 L 7 4 L 1 7 Z" Fill="{DynamicResource TextSecondaryBrush}"
+                                      Visibility="{Binding IsExpanded, Converter={StaticResource InvertBoolToVis}}"/>
+                                <Path Data="M 1 1 L 7 1 L 4 7 Z" Fill="{DynamicResource TextSecondaryBrush}"
+                                      Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}"/>
+                            </Grid>
+                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="{Binding DisplayName}" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </conv:FileTreeRowTemplateSelector.FolderTemplate>
+            <conv:FileTreeRowTemplateSelector.FileTemplate>
+                <DataTemplate DataType="{x:Type models:FileTreeRow}">
+                    <Grid Height="26" ToolTip="{Binding File.Path}"
+                          Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="18"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Margin="{Binding IndentLevel, Converter={StaticResource IndentLevelToMargin}}"/>
+                        <Border Grid.Column="1" Width="14" Height="14"
+                            Background="{Binding File.Kind, Converter={StaticResource KindToColor}}"
+                            CornerRadius="2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding File.StatusLabel}" FontSize="9" FontWeight="Bold"
+                                   Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Grid.Column="2" Text="{Binding DisplayName}" VerticalAlignment="Center"
+                                   Margin="6,0" TextTrimming="CharacterEllipsis" FontSize="11"/>
+                        <Grid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Open"
+                                          Command="{Binding PlacementTarget.Tag.OpenFileCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.File,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="Reveal in Explorer"
+                                          Command="{Binding PlacementTarget.Tag.RevealFileCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.File,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="Copy path"
+                                          Command="{Binding PlacementTarget.Tag.CopyFilePathCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.File,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <Separator/>
+                                <MenuItem Header="View File History"
+                                          Command="{Binding PlacementTarget.Tag.ShowHistoryModeCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.File,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="Blame"
+                                          Command="{Binding PlacementTarget.Tag.ShowBlameModeCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.File,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            </ContextMenu>
+                        </Grid.ContextMenu>
+                    </Grid>
+                </DataTemplate>
+            </conv:FileTreeRowTemplateSelector.FileTemplate>
+        </conv:FileTreeRowTemplateSelector>
+
+        <!-- Read-only variant for the multi-select "Files changed" panel — mirrors the flat
+             AggregatedFiles row (status badge + path + ×N commit-count badge), no context menu
+             (the flat list doesn't have one either). -->
+        <conv:AggregatedFileTreeRowTemplateSelector x:Key="AggregatedFilesTreeSelector">
+            <conv:AggregatedFileTreeRowTemplateSelector.FolderTemplate>
+                <DataTemplate DataType="{x:Type models:AggregatedFileTreeRow}">
+                    <Grid Height="24" Background="Transparent"
+                          Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}">
+                        <Grid.InputBindings>
+                            <MouseBinding MouseAction="LeftClick"
+                                          Command="{Binding Tag.ToggleTreeFolderCommand, RelativeSource={RelativeSource AncestorType=Grid}}"
+                                          CommandParameter="{Binding FullPath, Converter={StaticResource Prepend}, ConverterParameter='Aggregated:'}"/>
+                        </Grid.InputBindings>
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="{Binding IndentLevel, Converter={StaticResource IndentLevelToMargin}}">
+                            <Grid Width="8" Height="8" Margin="0,0,4,0" VerticalAlignment="Center">
+                                <Path Data="M 1 1 L 7 4 L 1 7 Z" Fill="{DynamicResource TextSecondaryBrush}"
+                                      Visibility="{Binding IsExpanded, Converter={StaticResource InvertBoolToVis}}"/>
+                                <Path Data="M 1 1 L 7 1 L 4 7 Z" Fill="{DynamicResource TextSecondaryBrush}"
+                                      Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}"/>
+                            </Grid>
+                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="{Binding DisplayName}" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </conv:AggregatedFileTreeRowTemplateSelector.FolderTemplate>
+            <conv:AggregatedFileTreeRowTemplateSelector.FileTemplate>
+                <DataTemplate DataType="{x:Type models:AggregatedFileTreeRow}">
+                    <Grid Height="26" ToolTip="{Binding File.Path}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="18"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Margin="{Binding IndentLevel, Converter={StaticResource IndentLevelToMargin}}"/>
+                        <Border Grid.Column="1" Width="14" Height="14"
+                            Background="{Binding File.Kind, Converter={StaticResource KindToColor}}"
+                            CornerRadius="2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding File.StatusLabel}" FontSize="9" FontWeight="Bold"
+                                   Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Grid.Column="2" Text="{Binding DisplayName}" VerticalAlignment="Center"
+                                   Margin="6,0" TextTrimming="CharacterEllipsis" FontSize="11"/>
+                        <TextBlock Grid.Column="3" VerticalAlignment="Center"
+                                   Margin="4,0,6,0" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondaryBrush}">
+                            <Run Text="&#xD7;"/><Run Text="{Binding File.CommitCount, Mode=OneWay}"/>
+                        </TextBlock>
+                    </Grid>
+                </DataTemplate>
+            </conv:AggregatedFileTreeRowTemplateSelector.FileTemplate>
+        </conv:AggregatedFileTreeRowTemplateSelector>
     </UserControl.Resources>
 
     <Grid Background="{DynamicResource SurfaceBrush}">
@@ -307,21 +446,76 @@
                        Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13"
                        Visibility="{Binding ShowCommitFilesPanel, Converter={StaticResource InvertBoolToVis}}"/>
 
-            <Border Grid.Row="2" Padding="12,6"
-                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
-                    Background="{DynamicResource BackgroundBrush}"
-                    Visibility="{Binding ShowCommitFilesPanel, Converter={StaticResource BoolToVis}}">
-                <TextBlock Text="{Binding CommitFiles.Count, StringFormat='Files changed ({0})'}"
-                           FontSize="11" FontWeight="SemiBold"
-                           Foreground="{DynamicResource TextSecondaryBrush}"/>
-            </Border>
+            <StackPanel Grid.Row="2" Visibility="{Binding ShowCommitFilesPanel, Converter={StaticResource BoolToVis}}">
+                <Border Padding="12,6"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                        Background="{DynamicResource BackgroundBrush}">
+                    <TextBlock Text="{Binding CommitFiles.Count, StringFormat='Files changed ({0})'}"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                </Border>
+                <!-- Same shared Sort-mode + Flat/Tree toggle as the Staged/Unstaged panels
+                     (FileSortMode/FileViewMode) — one setting governs all "Files changed" lists. -->
+                <Border Padding="10,6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal">
+                        <ComboBox Width="120" FontSize="10" Margin="0,0,8,0" VerticalAlignment="Center"
+                                  ToolTip="Sort order (shared by all Files changed panels)"
+                                  ItemsSource="{x:Static vm:RepositoryViewModel.FileSortModeOptions}"
+                                  DisplayMemberPath="Label" SelectedValuePath="Mode"
+                                  SelectedValue="{Binding FileSortMode}"/>
+                        <Button Padding="8,4" Margin="0,0,2,0"
+                                Command="{Binding SetFileViewModeCommand}" CommandParameter="Flat"
+                                ToolTip="Flat list, sorted by path">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8FD;" FontFamily="Segoe Fluent Icons" FontSize="12" VerticalAlignment="Center"/>
+                                <TextBlock Text="Path" FontSize="11" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding FileViewMode}" Value="Flat">
+                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Padding="8,4"
+                                Command="{Binding SetFileViewModeCommand}" CommandParameter="Tree"
+                                ToolTip="Tree view (group by folder)">
+                            <StackPanel Orientation="Horizontal">
+                                <Canvas Width="12" Height="12" VerticalAlignment="Center">
+                                    <Rectangle Canvas.Left="4.5" Canvas.Top="1" Width="3" Height="3" Fill="{DynamicResource TextSecondaryBrush}"/>
+                                    <Rectangle Canvas.Left="1" Canvas.Top="8" Width="3" Height="3" Fill="{DynamicResource TextSecondaryBrush}"/>
+                                    <Rectangle Canvas.Left="8" Canvas.Top="8" Width="3" Height="3" Fill="{DynamicResource TextSecondaryBrush}"/>
+                                    <Line X1="6" Y1="4" X2="6" Y2="6.5" Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1"/>
+                                    <Line X1="2.5" Y1="6.5" X2="9.5" Y2="6.5" Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1"/>
+                                    <Line X1="2.5" Y1="6.5" X2="2.5" Y2="8" Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1"/>
+                                    <Line X1="9.5" Y1="6.5" X2="9.5" Y2="8" Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1"/>
+                                </Canvas>
+                                <TextBlock Text="Tree" FontSize="11" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding FileViewMode}" Value="Tree">
+                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
 
-            <ListView Grid.Row="3"
+            <Grid Grid.Row="3" Visibility="{Binding ShowCommitFilesPanel, Converter={StaticResource BoolToVis}}">
+            <ListView
                       Style="{StaticResource DarkListView}"
                       ItemContainerStyle="{StaticResource DarkListViewItem}"
                       ItemsSource="{Binding CommitFiles}"
                       SelectedItem="{Binding SelectedFile}"
-                      Visibility="{Binding ShowCommitFilesPanel, Converter={StaticResource BoolToVis}}"
+                      Visibility="{Binding FileViewMode, Converter={StaticResource EnumEqualsVis}, ConverterParameter=Flat}"
                       VirtualizingStackPanel.IsVirtualizing="True"
                       VirtualizingStackPanel.VirtualizationMode="Recycling">
                 <ListView.ItemTemplate>
@@ -376,6 +570,20 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
+            <ListView
+                      Style="{StaticResource DarkListView}"
+                      ItemContainerStyle="{StaticResource DarkListViewItem}"
+                      ItemsSource="{Binding CommitFilesTreeRows}"
+                      ItemTemplateSelector="{StaticResource CommitFilesTreeSelector}"
+                      SelectionMode="Single"
+                      Visibility="{Binding FileViewMode, Converter={StaticResource EnumEqualsVis}, ConverterParameter=Tree}">
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel/>
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
+            </ListView>
+            </Grid>
 
             <Border Grid.Row="4" Padding="12,8"
                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
@@ -406,21 +614,77 @@
                     </TextBlock>
                 </Border>
 
-                <!-- Files changed count -->
-                <Border Grid.Row="1" Padding="12,6"
+                <!-- Files changed count + shared Sort-mode/Flat-Tree toggle, stacked in row 1 so
+                     row 2 (the list) doesn't need re-indexing. -->
+                <StackPanel Grid.Row="1">
+                <Border Padding="12,6"
                         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
                         Background="{DynamicResource BackgroundBrush}">
                     <TextBlock Text="{Binding AggregatedFiles.Count, StringFormat='Files changed ({0})'}"
                                FontSize="11" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                 </Border>
+                <Border Padding="10,6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal">
+                        <ComboBox Width="120" FontSize="10" Margin="0,0,8,0" VerticalAlignment="Center"
+                                  ToolTip="Sort order (shared by all Files changed panels)"
+                                  ItemsSource="{x:Static vm:RepositoryViewModel.FileSortModeOptions}"
+                                  DisplayMemberPath="Label" SelectedValuePath="Mode"
+                                  SelectedValue="{Binding FileSortMode}"/>
+                        <Button Padding="8,4" Margin="0,0,2,0"
+                                Command="{Binding SetFileViewModeCommand}" CommandParameter="Flat"
+                                ToolTip="Flat list, sorted by path">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8FD;" FontFamily="Segoe Fluent Icons" FontSize="12" VerticalAlignment="Center"/>
+                                <TextBlock Text="Path" FontSize="11" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding FileViewMode}" Value="Flat">
+                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Padding="8,4"
+                                Command="{Binding SetFileViewModeCommand}" CommandParameter="Tree"
+                                ToolTip="Tree view (group by folder)">
+                            <StackPanel Orientation="Horizontal">
+                                <Canvas Width="12" Height="12" VerticalAlignment="Center">
+                                    <Rectangle Canvas.Left="4.5" Canvas.Top="1" Width="3" Height="3" Fill="{DynamicResource TextSecondaryBrush}"/>
+                                    <Rectangle Canvas.Left="1" Canvas.Top="8" Width="3" Height="3" Fill="{DynamicResource TextSecondaryBrush}"/>
+                                    <Rectangle Canvas.Left="8" Canvas.Top="8" Width="3" Height="3" Fill="{DynamicResource TextSecondaryBrush}"/>
+                                    <Line X1="6" Y1="4" X2="6" Y2="6.5" Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1"/>
+                                    <Line X1="2.5" Y1="6.5" X2="9.5" Y2="6.5" Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1"/>
+                                    <Line X1="2.5" Y1="6.5" X2="2.5" Y2="8" Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1"/>
+                                    <Line X1="9.5" Y1="6.5" X2="9.5" Y2="8" Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1"/>
+                                </Canvas>
+                                <TextBlock Text="Tree" FontSize="11" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding FileViewMode}" Value="Tree">
+                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Border>
+                </StackPanel>
 
-                <!-- Aggregated file list -->
-                <ListView Grid.Row="2"
+                <!-- Aggregated file list — Flat and Tree share row 2, toggled by FileViewMode. -->
+                <Grid Grid.Row="2">
+                <ListView
                           Style="{StaticResource DarkListView}"
                           ItemContainerStyle="{StaticResource DarkListViewItem}"
                           ItemsSource="{Binding AggregatedFiles}"
-                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          Visibility="{Binding FileViewMode, Converter={StaticResource EnumEqualsVis}, ConverterParameter=Flat}">
                     <ListView.ItemTemplate>
                         <DataTemplate DataType="{x:Type models:AggregatedFileChange}">
                             <Grid Height="26" Margin="8,0">
@@ -448,6 +712,21 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
+                <ListView
+                          Style="{StaticResource DarkListView}"
+                          ItemContainerStyle="{StaticResource DarkListViewItem}"
+                          ItemsSource="{Binding AggregatedFilesTreeRows}"
+                          ItemTemplateSelector="{StaticResource AggregatedFilesTreeSelector}"
+                          SelectionMode="Single"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          Visibility="{Binding FileViewMode, Converter={StaticResource EnumEqualsVis}, ConverterParameter=Tree}">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel/>
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
+                </ListView>
+                </Grid>
             </Grid>
         </Grid>
 
@@ -561,6 +840,26 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
+            </Border>
+
+            <!-- LFS un-pulled objects suggestion — replaces the old silent background `git lfs
+                 pull`; pulling is now only ever user-initiated via this button, which reuses
+                 RunCliAsync so it gets the normal progress bar / error dialog for free. -->
+            <Border Background="{DynamicResource BannerWarningBrush}" BorderBrush="{DynamicResource WarningBrush}" BorderThickness="0,0,0,1"
+                    Padding="10,8" Visibility="{Binding LfsUnpulledCount, Converter={StaticResource IntAboveZero}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="12">
+                        <Run Text="📦 "/>
+                        <Run Text="{Binding LfsUnpulledCount, Mode=OneWay}"/>
+                        <Run Text=" file(s) use Git LFS and haven't been downloaded yet."/>
+                    </TextBlock>
+                    <Button Grid.Column="1" Content="Pull LFS objects" Style="{StaticResource AccentButton}"
+                            Padding="10,3" Command="{Binding PullLfsObjectsCommand}"/>
+                </Grid>
             </Border>
 
             <!-- Shared Sort + Path/Tree view toggle — one control governing both panels, placed

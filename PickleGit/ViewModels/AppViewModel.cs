@@ -391,6 +391,7 @@ namespace PickleGit.ViewModels
         public ICommand OpenRepoCommand           { get; }
         public ICommand CloneRepoCommand          { get; }
         public ICommand InitRepoCommand           { get; }
+        public ICommand AddEmptyTabCommand        { get; }
         public ICommand CloseTabCommand           { get; }
         public ICommand ResetColumnWidthsCommand  { get; }
         public ICommand NextTabCommand            { get; }
@@ -420,6 +421,7 @@ namespace PickleGit.ViewModels
             OpenRepoCommand          = new RelayCommand(OpenNewTab);
             CloneRepoCommand         = new RelayCommand(CloneInNewTab);
             InitRepoCommand          = new RelayCommand(InitInNewTab);
+            AddEmptyTabCommand       = new RelayCommand(AddEmptyTab);
             CloseTabCommand          = new RelayCommand(CloseTab);
             ResetColumnWidthsCommand = new RelayCommand(ResetColumnWidths);
             NextTabCommand           = new RelayCommand(() => CycleTab(+1), () => Tabs.Count > 1);
@@ -621,63 +623,100 @@ namespace PickleGit.ViewModels
 
         // ── Tab management ────────────────────────────────────────────────────
 
-        public async Task OpenRepoInNewTabAsync(string path, bool setActive = true, bool preloadSidebar = false)
+        /// <summary>Creates a new tab (or, when <paramref name="reuseTab"/> is a live placeholder
+        /// tab — see RepositoryViewModel.IsPlaceholder — populates that same tab instead of adding
+        /// another one, so picking "Open" from the "+" tab's landing page replaces its own content
+        /// rather than opening a second tab beside it) and loads the repo at <paramref
+        /// name="path"/> into it.</summary>
+        public async Task OpenRepoInNewTabAsync(string path, bool setActive = true, bool preloadSidebar = false,
+            RepositoryViewModel reuseTab = null)
         {
             var existing = Tabs.FirstOrDefault(t =>
                 string.Equals(t.RepoPath, path, StringComparison.OrdinalIgnoreCase));
             if (existing != null) { if (setActive) ActiveTab = existing; return; }
 
-            var tab = new RepositoryViewModel();
-            tab.SmartBranchVisibility = _smartBranchVisibility;
-            tab.RequestOpenRepoInNewTab += p => _ = OpenRepoInNewTabAsync(p);
-            Tabs.Add(tab);
+            RepositoryViewModel tab;
+            bool reusing = reuseTab != null && reuseTab.IsPlaceholder;
+            if (reusing)
+            {
+                tab = reuseTab;
+            }
+            else
+            {
+                tab = new RepositoryViewModel();
+                tab.SmartBranchVisibility = _smartBranchVisibility;
+                tab.RequestOpenRepoInNewTab += p => _ = OpenRepoInNewTabAsync(p);
+                Tabs.Add(tab);
+            }
             await tab.OpenRepoAsync(path);
             if (!tab.HasRepo)
             {
-                Tabs.Remove(tab);
-                tab.Dispose();
+                // A placeholder tab is deliberately left open (with its landing page still showing)
+                // on failure — only a freshly-created tab gets torn down.
+                if (!reusing) { Tabs.Remove(tab); tab.Dispose(); }
                 return;
             }
+            tab.IsPlaceholder = false;
             if (preloadSidebar)
                 await tab.LoadSidebarAsync();
             if (setActive)
-                ActiveTab = tab;  // triggers EnsureLoadedAsync via setter
+            {
+                // ActiveTab's setter only calls EnsureLoadedAsync on an actual change — when
+                // reusing a placeholder tab that's already active (the common case: the user is
+                // looking at its landing page when they click Open), assigning the same reference
+                // is a no-op, so the tab would otherwise never load. Call it explicitly instead of
+                // relying on that setter side effect.
+                ActiveTab = tab;
+                if (!tab.IsLoaded)
+                    _ = tab.EnsureLoadedAsync();
+            }
             SaveSettings();
         }
 
-        private void OpenNewTab()
+        private void OpenNewTab(object param)
         {
             var path = Services.ShellFolderPicker.ShowDialog("Select a Git repository folder");
             if (path != null)
-                _ = OpenRepoInNewTabAsync(path);
+                _ = OpenRepoInNewTabAsync(path, reuseTab: param as RepositoryViewModel);
         }
 
-        private void CloneInNewTab()
+        private void CloneInNewTab(object param)
         {
+            var reuseTab = param as RepositoryViewModel;
             var dlg = new Views.CloneDialog { Owner = Application.Current.MainWindow };
             if (dlg.ShowDialog() == true)
                 // No manual credential fields anymore — CloneRepoAsync falls back to git's
                 // configured credential helper (GCM etc.) when both are blank.
                 _ = CloneInNewTabAsync(dlg.RemoteUrl, dlg.LocalPath, string.Empty, string.Empty,
-                    dlg.Branch, dlg.RecurseSubmodules);
+                    dlg.Branch, dlg.RecurseSubmodules, reuseTab);
         }
 
         private async Task CloneInNewTabAsync(string url, string localPath,
-            string username, string password, string branch = null, bool recurseSubmodules = false)
+            string username, string password, string branch = null, bool recurseSubmodules = false,
+            RepositoryViewModel reuseTab = null)
         {
-            var tab = new RepositoryViewModel();
-            tab.SmartBranchVisibility = _smartBranchVisibility;
-            tab.RequestOpenRepoInNewTab += p => _ = OpenRepoInNewTabAsync(p);
-            Tabs.Add(tab);
+            RepositoryViewModel tab;
+            bool reusing = reuseTab != null && reuseTab.IsPlaceholder;
+            if (reusing)
+            {
+                tab = reuseTab;
+            }
+            else
+            {
+                tab = new RepositoryViewModel();
+                tab.SmartBranchVisibility = _smartBranchVisibility;
+                tab.RequestOpenRepoInNewTab += p => _ = OpenRepoInNewTabAsync(p);
+                Tabs.Add(tab);
+            }
             ActiveTab = tab;
             await tab.CloneRepoAsync(url, localPath, username, password, branch, recurseSubmodules);
             if (!tab.HasRepo)
             {
-                Tabs.Remove(tab);
-                tab.Dispose();
+                if (!reusing) { Tabs.Remove(tab); tab.Dispose(); }
             }
             else
             {
+                tab.IsPlaceholder = false;
                 try
                 {
                     var parent = System.IO.Path.GetDirectoryName(localPath.TrimEnd('\\', '/'));
@@ -688,8 +727,9 @@ namespace PickleGit.ViewModels
             }
         }
 
-        private async void InitInNewTab()
+        private async void InitInNewTab(object param)
         {
+            var reuseTab = param as RepositoryViewModel;
             var path = Services.ShellFolderPicker.ShowDialog("Select folder to initialize as a Git repository");
             if (path == null) return;
             // No RepositoryViewModel/GitService.Executor exists yet for this path — Repository.Init
@@ -697,7 +737,19 @@ namespace PickleGit.ViewModels
             // is safe here specifically, unlike every other LibGit2Sharp call in the app, which must
             // go through an already-open repo's dedicated executor thread.
             await Task.Run(() => GitService.Init(path));
-            _ = OpenRepoInNewTabAsync(path);
+            _ = OpenRepoInNewTabAsync(path, reuseTab: reuseTab);
+        }
+
+        /// <summary>The "+" button after the tab strip — adds a tab with no repo yet, showing
+        /// NewTabPlaceholderView (Open/Clone/Init) instead of the normal 3-panel layout until the
+        /// user picks one.</summary>
+        private void AddEmptyTab()
+        {
+            var tab = new RepositoryViewModel { IsPlaceholder = true };
+            tab.SmartBranchVisibility = _smartBranchVisibility;
+            tab.RequestOpenRepoInNewTab += p => _ = OpenRepoInNewTabAsync(p);
+            Tabs.Add(tab);
+            ActiveTab = tab;
         }
 
         private void CloseTab(object param)

@@ -112,9 +112,53 @@
                                     Background="{DynamicResource SurfaceBrush}"
                                     BorderBrush="{DynamicResource BorderBrush}"
                                     BorderThickness="0,0,0,1">
-                                <TabPanel x:Name="HeaderPanel"
-                                          IsItemsHost="True"
-                                          Background="Transparent"/>
+                                <!-- WPF's default TabPanel wraps onto extra rows once it runs out of
+                                     width. Wrapping it in a ScrollViewer instead gives it effectively
+                                     unconstrained width along the scroll axis, so it always lays out
+                                     in one row and any overflow becomes horizontally scrollable —
+                                     ScrollBar.LineLeftCommand/LineRightCommand are handled natively by
+                                     ScrollViewer, no code-behind needed for the arrow buttons. -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Style="{StaticResource ToolbarButton}"
+                                            Padding="6,4" Margin="2,0"
+                                            Command="ScrollBar.LineLeftCommand"
+                                            CommandTarget="{Binding ElementName=PART_TabScroller}"
+                                            ToolTip="Scroll tabs left">
+                                        <TextBlock Text="&#xE76B;" FontFamily="Segoe Fluent Icons" FontSize="12"/>
+                                    </Button>
+                                    <ScrollViewer x:Name="PART_TabScroller" Grid.Column="1"
+                                                  HorizontalScrollBarVisibility="Hidden"
+                                                  VerticalScrollBarVisibility="Disabled"
+                                                  CanContentScroll="False">
+                                        <TabPanel x:Name="HeaderPanel"
+                                                  IsItemsHost="True"
+                                                  Background="Transparent"/>
+                                    </ScrollViewer>
+                                    <Button Grid.Column="2" Style="{StaticResource ToolbarButton}"
+                                            Padding="6,4" Margin="0,0,2,0"
+                                            Command="ScrollBar.LineRightCommand"
+                                            CommandTarget="{Binding ElementName=PART_TabScroller}"
+                                            ToolTip="Scroll tabs right">
+                                        <TextBlock Text="&#xE76C;" FontFamily="Segoe Fluent Icons" FontSize="12"/>
+                                    </Button>
+                                    <!-- Always visible after the tab strip (outside the scrollable
+                                         region), replacing the old toolbar Open/Clone/Init buttons —
+                                         opens a new placeholder tab showing those same three options
+                                         (see NewTabPlaceholderView). -->
+                                    <Button Grid.Column="3" Style="{StaticResource ToolbarButton}"
+                                            Padding="8,4" Margin="4,0,6,0" FontSize="14"
+                                            Command="{Binding DataContext.AddEmptyTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            ToolTip="New tab (open, clone, or init a repository)"
+                                            AutomationProperties.Name="New tab">
+                                        <TextBlock Text="＋" FontSize="14"/>
+                                    </Button>
+                                </Grid>
                             </Border>
                             <Border Grid.Row="1" Background="{DynamicResource BackgroundBrush}">
                                 <ContentPresenter x:Name="PART_SelectedContentHost"
@@ -214,16 +258,10 @@
                                VerticalAlignment="Center" Margin="0,0,8,0"/>
                 </StackPanel>
 
-                <!-- Center: Open / Clone / Init — centered within the space left by the side columns,
-                     so it can never overlap them (each side column reserves its own Auto width). -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Button Content="📂  Open" Style="{StaticResource ToolbarButton}"
-                            Command="{Binding OpenRepoCommand}" Margin="2,0" ToolTip="Open repository in new tab"/>
-                    <Button Content="⬇  Clone" Style="{StaticResource ToolbarButton}"
-                            Command="{Binding CloneRepoCommand}" Margin="2,0" ToolTip="Clone repository"/>
-                    <Button Content="＋  Init" Style="{StaticResource ToolbarButton}"
-                            Command="{Binding InitRepoCommand}" Margin="2,0" ToolTip="Initialize new repository"/>
-                </StackPanel>
+                <!-- Open / Clone / Init moved to the "+" button after the tab strip and the
+                     NewTabPlaceholderView it opens (see the "+" TabItem below and
+                     Views/NewTabPlaceholderView.xaml) — column 1 is now just reserved space
+                     between the repo name and the action buttons. -->
 
                 <!-- Right: action buttons -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
@@ -335,30 +373,36 @@
                 <TabControl.ContentTemplate>
                     <DataTemplate DataType="{x:Type vm:RepositoryViewModel}">
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="230" MinWidth="210" MaxWidth="400"/>
-                                <ColumnDefinition Width="5"/>
-                                <ColumnDefinition Width="*" MinWidth="300"/>
-                                <ColumnDefinition Width="{Binding DetailSplitterWidth}"/>
-                                <ColumnDefinition Width="{Binding DetailPanelWidth}" MinWidth="{Binding DetailPanelMinWidth}" MaxWidth="600"/>
-                            </Grid.ColumnDefinitions>
+                            <!-- Normal 3-panel layout, hidden for a "+"-created placeholder tab
+                                 (see IsPlaceholder) in favor of NewTabPlaceholderView below. -->
+                            <Grid Visibility="{Binding IsPlaceholder, Converter={StaticResource InvertBoolToVis}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="230" MinWidth="210" MaxWidth="400"/>
+                                    <ColumnDefinition Width="5"/>
+                                    <ColumnDefinition Width="*" MinWidth="300"/>
+                                    <ColumnDefinition Width="{Binding DetailSplitterWidth}"/>
+                                    <ColumnDefinition Width="{Binding DetailPanelWidth}" MinWidth="{Binding DetailPanelMinWidth}" MaxWidth="600"/>
+                                </Grid.ColumnDefinitions>
 
-                            <views:SidebarView Grid.Column="0"/>
-                            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"/>
+                                <views:SidebarView Grid.Column="0"/>
+                                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"/>
 
-                            <Grid Grid.Column="2">
-                                <!-- S single selected file takes over this whole
-                                     pane with its diff instead of sitting in a fixed-height strip that's
-                                     dead space whenever nothing's selected; 0 or 2+ selected files show
-                                     the commit graph instead (see ShowDiffInsteadOfCommits). -->
-                                <views:CommitListView Visibility="{Binding ShowDiffInsteadOfCommits, Converter={StaticResource InvertBoolToVis}}"/>
-                                <views:DiffView Visibility="{Binding ShowDiffInsteadOfCommits, Converter={StaticResource BoolToVis}}"/>
+                                <Grid Grid.Column="2">
+                                    <!-- S single selected file takes over this whole
+                                         pane with its diff instead of sitting in a fixed-height strip that's
+                                         dead space whenever nothing's selected; 0 or 2+ selected files show
+                                         the commit graph instead (see ShowDiffInsteadOfCommits). -->
+                                    <views:CommitListView Visibility="{Binding ShowDiffInsteadOfCommits, Converter={StaticResource InvertBoolToVis}}"/>
+                                    <views:DiffView Visibility="{Binding ShowDiffInsteadOfCommits, Converter={StaticResource BoolToVis}}"/>
+                                </Grid>
+
+                                <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch"
+                                              Visibility="{Binding HasDetailPanel, Converter={StaticResource BoolToVis}}"/>
+                                <views:CommitDetailView Grid.Column="4"
+                                                        Visibility="{Binding HasDetailPanel, Converter={StaticResource BoolToVis}}"/>
                             </Grid>
 
-                            <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch"
-                                          Visibility="{Binding HasDetailPanel, Converter={StaticResource BoolToVis}}"/>
-                            <views:CommitDetailView Grid.Column="4"
-                                                    Visibility="{Binding HasDetailPanel, Converter={StaticResource BoolToVis}}"/>
+                            <views:NewTabPlaceholderView Visibility="{Binding IsPlaceholder, Converter={StaticResource BoolToVis}}"/>
                         </Grid>
                     </DataTemplate>
                 </TabControl.ContentTemplate>
@@ -374,7 +418,7 @@
                            FontSize="20" FontWeight="Light"
                            Foreground="{DynamicResource TextSecondaryBrush}"
                            HorizontalAlignment="Center"/>
-                <TextBlock Text="Click  📂 Open  or  ⬇ Clone  to get started"
+                <TextBlock Text="Click  ＋  next to the tabs to get started"
                            FontSize="13" Margin="0,8,0,0"
                            Foreground="{DynamicResource TextSecondaryBrush}"
                            HorizontalAlignment="Center"/>
