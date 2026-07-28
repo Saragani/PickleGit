@@ -6,7 +6,8 @@
              xmlns:ctrl="clr-namespace:PickleGit.Controls"
              xmlns:conv="clr-namespace:PickleGit.Converters"
              xmlns:behaviors="clr-namespace:PickleGit.Behaviors"
-             xmlns:models="clr-namespace:PickleGit.Models">
+             xmlns:models="clr-namespace:PickleGit.Models"
+             DataContextChanged="DiffView_DataContextChanged">
 
     <UserControl.Resources>
         <conv:DiffItemTemplateSelector x:Key="DiffSelector">
@@ -23,7 +24,7 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{Binding Header}" FontFamily="Consolas"
+                            <TextBlock x:Name="RowText" Grid.Column="0" Text="{Binding Header}" FontFamily="Consolas"
                                        FontSize="11" VerticalAlignment="Center"
                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
@@ -127,15 +128,15 @@
                                     </Style>
                                 </Border.Style>
                             </Border>
-                            <TextBlock Grid.Column="0" Text="{Binding Line.OldLineNumber}"
+                            <TextBlock x:Name="RowGutterOld" Grid.Column="0" Text="{Binding Line.OldLineNumber}"
                                        FontFamily="Consolas" FontSize="11" TextAlignment="Right"
                                        Padding="0,1,6,0" Opacity="0.6"
                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
-                            <TextBlock Grid.Column="1" Text="{Binding Line.NewLineNumber}"
+                            <TextBlock x:Name="RowGutterNew" Grid.Column="1" Text="{Binding Line.NewLineNumber}"
                                        FontFamily="Consolas" FontSize="11" TextAlignment="Right"
                                        Padding="0,1,6,0" Opacity="0.6"
                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
-                            <TextBlock Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding Line}"
+                            <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding Line}"
                                        behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.DiffSearchText,
                                            RelativeSource={RelativeSource AncestorType=ListView}}"
                                        FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
@@ -162,7 +163,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{Binding Header}" FontFamily="Consolas" FontSize="11"
+                    <TextBlock x:Name="RowText" Grid.Column="0" Text="{Binding Header}" FontFamily="Consolas" FontSize="11"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
@@ -264,11 +265,11 @@
                             </Style>
                         </Border.Style>
                     </Border>
-                    <TextBlock Grid.Column="0" Text="{Binding Left.OldLineNumber}"
+                    <TextBlock x:Name="RowGutter" Grid.Column="0" Text="{Binding Left.OldLineNumber}"
                                FontFamily="Consolas" FontSize="11" TextAlignment="Right"
                                Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <TextBlock Grid.Column="1" behaviors:WordDiffHighlighter.Line="{Binding Left}"
+                    <TextBlock x:Name="RowText" Grid.Column="1" behaviors:WordDiffHighlighter.Line="{Binding Left}"
                                behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.DiffSearchText,
                                    RelativeSource={RelativeSource AncestorType=ListView}}"
                                FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
@@ -309,11 +310,11 @@
                             </Style>
                         </Border.Style>
                     </Border>
-                    <TextBlock Grid.Column="0" Text="{Binding Right.NewLineNumber}"
+                    <TextBlock x:Name="RowGutter" Grid.Column="0" Text="{Binding Right.NewLineNumber}"
                                FontFamily="Consolas" FontSize="11" TextAlignment="Right"
                                Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <TextBlock Grid.Column="1" behaviors:WordDiffHighlighter.Line="{Binding Right}"
+                    <TextBlock x:Name="RowText" Grid.Column="1" behaviors:WordDiffHighlighter.Line="{Binding Right}"
                                behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.DiffSearchText,
                                    RelativeSource={RelativeSource AncestorType=ListView}}"
                                FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
@@ -620,7 +621,7 @@
                 </ListView>
 
                 <!-- Blame mode: per-line author annotation of the current working-tree content. -->
-                <ListView Grid.Column="1" Style="{StaticResource DarkListView}"
+                <ListView x:Name="BlameListView" Grid.Column="1" Style="{StaticResource DarkListView}"
                           ItemsSource="{Binding BlameLines}"
                           Visibility="{Binding ShowBlame, Converter={StaticResource BoolToVis}}"
                           VirtualizingStackPanel.IsVirtualizing="True"
@@ -685,16 +686,23 @@
                       Style="{StaticResource DarkListView}"
                       ItemTemplateSelector="{StaticResource DiffSelector}"
                       SelectionMode="Extended"
+                      Loaded="UnifiedListView_Loaded"
                       SelectionChanged="DiffListView_SelectionChanged"
                       PreviewMouseLeftButtonDown="DiffListView_PreviewMouseLeftButtonDown"
                       PreviewMouseMove="DiffListView_PreviewMouseMove"
                       PreviewMouseLeftButtonUp="DiffListView_PreviewMouseLeftButtonUp"
+                      KeyDown="DiffTextSelection_KeyDown"
                       VirtualizingStackPanel.IsVirtualizing="True"
                       VirtualizingStackPanel.VirtualizationMode="Recycling"
                       VirtualizingPanel.ScrollUnit="Pixel"
                       ScrollViewer.CanContentScroll="True"
                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
                       BorderThickness="0">
+                <ListView.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Copy" Click="UnifiedCopySelection_Click"/>
+                    </ContextMenu>
+                </ListView.ContextMenu>
                 <!-- Uses the default VirtualizingStackPanel (ScrollUnit=Pixel keeps scrolling smooth,
                      not item-by-item — see CLAUDE.md's TreeView virtualization note). This only works
                      because every hunk-header and line template above now has an identical fixed
@@ -718,6 +726,11 @@
                     </Style>
                 </ListView.ItemContainerStyle>
             </ListView>
+            <!-- Text-selection highlight overlay for UnifiedListView — see DiffTextSelectionController.
+                 IsHitTestVisible=False so it never intercepts mouse input; positioned as a same-column
+                 sibling so its coordinate space matches the ListView it decorates. -->
+            <Canvas x:Name="UnifiedTextSelectionOverlay" Grid.Column="0"
+                    IsHitTestVisible="False" Panel.ZIndex="10"/>
             </Grid>
 
             <Grid x:Name="SideBySideContainer" Grid.Column="1"
@@ -741,12 +754,18 @@
                           PreviewMouseLeftButtonDown="SideBySideListView_PreviewMouseLeftButtonDown"
                           PreviewMouseMove="SideBySideListView_PreviewMouseMove"
                           PreviewMouseLeftButtonUp="SideBySideListView_PreviewMouseLeftButtonUp"
+                          KeyDown="DiffTextSelection_KeyDown"
                           VirtualizingStackPanel.IsVirtualizing="True"
                           VirtualizingStackPanel.VirtualizationMode="Recycling"
                           VirtualizingPanel.ScrollUnit="Pixel"
                           ScrollViewer.CanContentScroll="True"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           BorderThickness="0">
+                    <ListView.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Copy" Click="SideBySideLeftCopySelection_Click"/>
+                        </ContextMenu>
+                    </ListView.ContextMenu>
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="Padding" Value="0"/>
@@ -764,6 +783,8 @@
                         </Style>
                     </ListView.ItemContainerStyle>
                 </ListView>
+                <Canvas x:Name="SideBySideLeftTextSelectionOverlay" Grid.Column="0"
+                        IsHitTestVisible="False" Panel.ZIndex="10"/>
 
                 <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                               Background="{DynamicResource BorderBrush}" ResizeBehavior="PreviousAndNext"/>
@@ -778,12 +799,18 @@
                           PreviewMouseLeftButtonDown="SideBySideListView_PreviewMouseLeftButtonDown"
                           PreviewMouseMove="SideBySideListView_PreviewMouseMove"
                           PreviewMouseLeftButtonUp="SideBySideListView_PreviewMouseLeftButtonUp"
+                          KeyDown="DiffTextSelection_KeyDown"
                           VirtualizingStackPanel.IsVirtualizing="True"
                           VirtualizingStackPanel.VirtualizationMode="Recycling"
                           VirtualizingPanel.ScrollUnit="Pixel"
                           ScrollViewer.CanContentScroll="True"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           BorderThickness="0">
+                    <ListView.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Copy" Click="SideBySideRightCopySelection_Click"/>
+                        </ContextMenu>
+                    </ListView.ContextMenu>
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="Padding" Value="0"/>
@@ -801,6 +828,8 @@
                         </Style>
                     </ListView.ItemContainerStyle>
                 </ListView>
+                <Canvas x:Name="SideBySideRightTextSelectionOverlay" Grid.Column="2"
+                        IsHitTestVisible="False" Panel.ZIndex="10"/>
             </Grid>
 
             <Grid Grid.Column="1" Background="{DynamicResource BackgroundBrush}"

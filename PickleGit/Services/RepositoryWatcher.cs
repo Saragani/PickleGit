@@ -292,6 +292,56 @@ namespace PickleGit.Services
             return new SuppressScope(this);
         }
 
+        private Timer _graceSuppressTimer;
+        private bool _graceSuppressActive;
+
+        /// <summary>Suppresses for a fixed grace period rather than an explicit scope — call this
+        /// right after an explicit refresh completes to swallow that operation's own trailing FS
+        /// events. Unlike <see cref="Suppress"/>/<see cref="EndSuppress"/> (which deliberately
+        /// *resume* any pending signal once a real operation's suppression scope ends — correct
+        /// there, since something genuinely might have changed that the operation's own explicit
+        /// refresh didn't yet account for), this must NOT resume anything when the grace period
+        /// elapses: we already did an accurate refresh, so by definition anything the grace period
+        /// swallowed is trailing feedback from what we already captured, not new information.
+        /// Reusing EndSuppress() as originally written was the actual bug behind an apparently
+        /// unprompted refresh firing a fixed delay after every fetch — it wasn't discarding the
+        /// pending signal at all, just deferring it by exactly the grace period's own duration
+        /// (confirmed: 400ms with none, 5.4s with a 5s grace period, 10.4s with a 10s one — always
+        /// grace-period-plus-the-400ms-debounce, not a real external delivery delay).</summary>
+        public void SuppressForGracePeriod(int milliseconds)
+        {
+            lock (_lock)
+            {
+                if (_graceSuppressActive)
+                {
+                    _graceSuppressTimer.Change(milliseconds, Timeout.Infinite);
+                    return;
+                }
+                _suppressCount++;
+                _graceSuppressActive = true;
+                _graceSuppressTimer = new Timer(_ => ReleaseGraceSuppression(), null, milliseconds, Timeout.Infinite);
+            }
+        }
+
+        private void ReleaseGraceSuppression()
+        {
+            lock (_lock)
+            {
+                if (!_graceSuppressActive) return;
+                _graceSuppressActive = false;
+                _suppressCount = Math.Max(0, _suppressCount - 1);
+                // Only discard the shared pending state once nothing else is still suppressing —
+                // if a real operation's own scope is concurrently open, its own EndSuppress() must
+                // still get to decide whether to resume whatever arrived, once IT finishes.
+                if (_suppressCount == 0)
+                {
+                    _hasPending = false;
+                    _pendingWhileSuppressed = false;
+                    _pendingKind = RepoChangeKind.WorkingDir;
+                }
+            }
+        }
+
         private void EndSuppress()
         {
             lock (_lock)

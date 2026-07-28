@@ -33,7 +33,12 @@ namespace PickleGit.ViewModels
         public bool IsBusy
         {
             get => _isBusy;
-            set { if (Set(ref _isBusy, value)) RaisePropertyChanged(nameof(ShowEmptyState)); }
+            set
+            {
+                if (!Set(ref _isBusy, value)) return;
+                RaisePropertyChanged(nameof(ShowEmptyState));
+                AppLog.Info($"IsBusy -> {value} (status={StatusMessage}) [{RepoName}]");
+            }
         }
         public bool HasRepo => _git.IsOpen;
 
@@ -183,6 +188,13 @@ namespace PickleGit.ViewModels
             }
             catch (Exception ex) { AppLog.Warn("Signature check failed", ex); }
         }
+        /// <summary>Raised whenever the user picks a genuinely different file (not the same file's
+        /// FileChange instance being swapped out after a stage/unstage refresh — see
+        /// SyncDiffPaneAfterFileListChangeAsync, which bypasses this setter for exactly that reason).
+        /// DiffView listens for this to reset its scroll position — the previous file's scroll offset
+        /// is meaningless for a different file's content.</summary>
+        public event EventHandler DiffFileSwitched;
+
         public ObservableCollection<FileChange> CommitFiles { get => _commitFiles; private set => Set(ref _commitFiles, value); }
         public FileChange SelectedFile
         {
@@ -199,6 +211,7 @@ namespace PickleGit.ViewModels
                 RaisePropertyChanged(nameof(DiffPaneHeaderText));
                 if (value == null) return;
                 DiffPaneMode = DiffPaneMode.Diff; // picking a file from the list always returns to plain diff view
+                DiffFileSwitched?.Invoke(this, EventArgs.Empty);
                 if (IsComparisonMode) _ = LoadComparisonDiffAsync(_comparisonBaseSha, _comparisonTargetSha, value.Path);
                 else if (_detailCommit != null) _ = LoadDiffAsync(_detailCommit.Sha, value.Path);
                 else if (ShowWorkingDir) _ = LoadWorkingDiffAsync(value);
@@ -257,6 +270,7 @@ namespace PickleGit.ViewModels
         private bool _hasUncommittedChanges;
         private int _commitLimit = AppSettings.LoadCommitLimit();
         private string _lastRefreshSignature;
+        private string _lastHistoryRefSignature;
         private RepositoryWatcher _watcher;
 
         private bool _hasMoreCommits;
@@ -921,6 +935,10 @@ namespace PickleGit.ViewModels
             {
                 RemoteUsername = username;
                 RemotePassword = password;
+                // The libgit2 clone path above has no LFS awareness, so a freshly-cloned LFS repo
+                // is left with raw pointer files until this runs (see TryLfsCheckoutAsync). Harmless
+                // no-op for the git.exe clone path, which already smudged real content itself.
+                await TryLfsCheckoutAsync();
                 await RefreshAsync();
                 SaveCredentials(); // Remotes are populated after refresh
             }
@@ -928,9 +946,92 @@ namespace PickleGit.ViewModels
 
         // ── Refresh ───────────────────────────────────────────────────────────
 
-        public Task RefreshAsync() => RefreshAsync(force: false);
+        /// <summary>Which repository-state categories a refresh needs to re-query. Lets operations
+        /// that provably don't touch some categories (e.g. a fetch never moves HEAD or the working
+        /// tree) skip their two most expensive calls (GetHistory's full topological walk,
+        /// GetWorkingDirectoryStatus's full workdir scan) instead of paying full-refresh cost every
+        /// time. Categories left out of scope aren't cleared — RefreshOnceAsync substitutes the
+        /// existing (possibly slightly stale, but never wrong) VM state for them instead of a fresh
+        /// query, so the rest of the method's signature/UI/cache logic needs no other change at
+        /// all.</summary>
+        [Flags]
+        public enum RefreshScope
+        {
+            WorkingDir = 1, History = 2, Branches = 4, Tags = 8, Stashes = 16, Remotes = 32,
+            Full = WorkingDir | History | Branches | Tags | Stashes | Remotes
+        }
 
-        public async Task RefreshAsync(bool force)
+        private bool _refreshInFlight;
+        private bool _refreshPending;
+        private bool _refreshPendingForce;
+        private RefreshScope _refreshPendingScope = RefreshScope.Full;
+
+        public Task RefreshAsync() => RefreshAsync(false, RefreshScope.Full);
+
+        /// <summary>Self-coalescing wrapper around <see cref="RefreshOnceAsync"/>. Most git-mutating
+        /// operations call this as a separate step *after* their own busy scope/watcher-suppression
+        /// has already closed (see RunThenRefresh*'s "gap" — TryLfsCheckoutAsync and the explicit
+        /// refresh both run unsuppressed and often with IsBusy already false), so the
+        /// RepositoryWatcher's own debounced refresh can legitimately fire independently around the
+        /// same time — this was confirmed to cause a genuine second, redundant refresh (not just a
+        /// rare timing fluke) whenever that gap exceeds the watcher's ~400ms debounce window. Rather
+        /// than restructure every one of those call sites' scope, this coalesces at the one place
+        /// they all funnel through: a request that arrives while a refresh is already running just
+        /// marks "run once more after this one finishes" instead of starting a second overlapping
+        /// pass (which GitExecutor would have serialized back-to-back anyway, just wastefully).</summary>
+        public Task RefreshAsync(bool force) => RefreshAsync(force, RefreshScope.Full);
+
+        public async Task RefreshAsync(bool force, RefreshScope scope)
+        {
+            if (_refreshInFlight)
+            {
+                AppLog.Info($"RefreshAsync(force={force}, scope={scope}) coalesced into in-flight refresh [{RepoName}]");
+                _refreshPending = true;
+                _refreshPendingForce = _refreshPendingForce || force;
+                // Union, not overwrite — a coalesced Branches-only request must not cause an
+                // already-pending Full request (or vice versa) to lose categories it needed.
+                _refreshPendingScope |= scope;
+                return;
+            }
+            _refreshInFlight = true;
+            _refreshPendingScope = scope;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            AppLog.Info($"RefreshAsync(force={force}, scope={scope}) start [{RepoName}]");
+            try
+            {
+                int passes = 0;
+                do
+                {
+                    passes++;
+                    _refreshPending = false;
+                    var thisForce = force || _refreshPendingForce;
+                    var thisScope = _refreshPendingScope;
+                    _refreshPendingForce = false;
+                    _refreshPendingScope = RefreshScope.Full; // any request that arrives after this pass starts defaults full again
+                    AppLog.Info($"RefreshAsync - starting {thisScope} refresh in {sw.ElapsedMilliseconds}ms [{RepoName}]");
+                    await RefreshOnceAsync(thisForce, thisScope);
+                    AppLog.Info($"RefreshAsync - finished {thisScope} refresh in {sw.ElapsedMilliseconds}ms [{RepoName}]");
+                    force = false; // only the original caller's own force flag applies to the first pass
+                }
+                while (_refreshPending);
+                AppLog.Info($"RefreshAsync finished in {sw.ElapsedMilliseconds}ms ({passes} pass{(passes == 1 ? "" : "es")}) [{RepoName}]");
+                // Swallows this operation's own trailing FS events for a short window after we
+                // already reported accurate state — e.g. the brief unsuppressed gap between a
+                // fetch's own RunCliAsync ending and this refresh's own internal RunWorkAsync
+                // starting. (Earlier attempts at this used 5-10 SECOND windows chasing what looked
+                // like a multi-second OS event-delivery delay — that was a red herring: the apparent
+                // "delay" was exactly grace-period-plus-400ms every time because
+                // SuppressForGracePeriod's release used to *resume* the pending signal instead of
+                // discarding it, a bug now fixed at the source in RepositoryWatcher. With that fixed,
+                // this window only needs to cover the real, short internal gap, not an imagined
+                // multi-second one — kept brief so a genuinely new external change is never
+                // suppressed for long.)
+                _watcher?.SuppressForGracePeriod(2000);
+            }
+            finally { _refreshInFlight = false; }
+        }
+
+        private async Task RefreshOnceAsync(bool force, RefreshScope scope = RefreshScope.Full)
         {
             if (!_git.IsOpen || RepoDirectoryMissing()) return;
             _isLoaded = true;
@@ -941,16 +1042,85 @@ namespace PickleGit.ViewModels
             // false before the whole sequence is actually done (see TryEnterBusyScope).
             Action work = () =>
             {
+                // For any category `scope` excludes, reuse the existing VM state instead of paying
+                // for a fresh git query — captured via the dispatcher since these are UI-bound
+                // collections read from this background executor thread. Everything downstream
+                // (signature, UI reassignment, SaveCache) is unchanged either way; a reused category
+                // just gets harmlessly re-applied instead of freshly queried (ApplyWorkingDirStatus's
+                // own content-equality check, for one, makes reused status a pure no-op).
+                CommitHistory reusedHistory = null;
+                List<BranchInfo> reusedBranches = null;
+                List<TagInfo> reusedTags = null;
+                List<StashInfo> reusedStashes = null;
+                List<RemoteInfo> reusedRemotes = null;
+                List<FileChange> reusedStatus = null;
+                if (scope != RefreshScope.Full)
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        if ((scope & RefreshScope.History) == 0)
+                            reusedHistory = new CommitHistory { Commits = _allCommits, BranchMasks = BranchMasks, ReachedLimit = HasMoreCommits };
+                        if ((scope & RefreshScope.Branches) == 0)
+                            reusedBranches = LocalBranches.Concat(RemoteBranches).ToList();
+                        if ((scope & RefreshScope.Tags) == 0)
+                            reusedTags = Tags.ToList();
+                        if ((scope & RefreshScope.Stashes) == 0)
+                            reusedStashes = Stashes.ToList();
+                        if ((scope & RefreshScope.Remotes) == 0)
+                            reusedRemotes = Remotes.ToList();
+                        if ((scope & RefreshScope.WorkingDir) == 0)
+                            reusedStatus = WorkingDirFiles.Concat(StagedFiles).ToList();
+                    });
+                }
+
                 var branch   = _git.GetCurrentBranch();
                 var headSha  = _git.GetHeadSha();
                 var bisect   = _git.GetBisectState();
-                var history  = _git.GetHistory(_commitLimit, bisect);
-                var branches = _git.GetBranches();
-                var tags     = _git.GetTags();
-                var stashes  = _git.GetStashes();
-                var remotes  = _git.GetRemotes();
-                var status   = _git.GetWorkingDirectoryStatus();
+                var branches = reusedBranches ?? _git.GetBranches();
+                var tags     = reusedTags     ?? _git.GetTags();
+                var stashes  = reusedStashes  ?? _git.GetStashes();
+                var remotes  = reusedRemotes  ?? _git.GetRemotes();
+                var status   = reusedStatus   ?? _git.GetWorkingDirectoryStatus();
                 var conflict = _git.GetConflictState();
+
+                // GetHistory's full topological walk is the single most expensive call here, and —
+                // confirmed via logging — a delayed, watcher-triggered refresh reacting to a fetch's
+                // own ref-writes (Windows can deliver these SEVERAL SECONDS after the fetch process
+                // already exited, observed up to ~5.4s — too variable for a fixed suppression grace
+                // period to reliably outlast) would otherwise re-walk history from scratch even
+                // though nothing ref-relevant has actually changed since the last walk. Guard it with
+                // a cheap fingerprint of exactly what the walk's OUTPUT depends on (branch tips,
+                // which is all that determines the walkable commit set — deliberately NOT ahead/behind
+                // counts, which don't affect what's walkable and would otherwise invalidate this for
+                // no reason): only re-walk when that fingerprint actually differs from the last walk,
+                // regardless of which scope requested History or what triggered this refresh.
+                CommitHistory history;
+                if (reusedHistory != null)
+                {
+                    history = reusedHistory;
+                }
+                else
+                {
+                    var historyRefSignature = ComputeHistoryRefSignature(branch, headSha, branches, tags, stashes, remotes);
+                    if (!force && historyRefSignature == _lastHistoryRefSignature)
+                    {
+                        AppLog.Info($"RefreshOnceAsync: skipping GetHistory walk, ref state unchanged [{RepoName}]");
+                        // _allCommits/BranchMasks/HasMoreCommits are UI-bound VM state — read via the
+                        // dispatcher, same as the scope-based reuse block above, since this runs on
+                        // the background executor thread.
+                        CommitHistory captured = null;
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            captured = new CommitHistory { Commits = _allCommits, BranchMasks = BranchMasks, ReachedLimit = HasMoreCommits };
+                        });
+                        history = captured;
+                    }
+                    else
+                    {
+                        history = _git.GetHistory(_commitLimit, bisect);
+                        _lastHistoryRefSignature = historyRefSignature;
+                    }
+                }
 
                 // Conflict/bisect state are cheap (a few file reads) — refresh every cycle
                 // regardless of the signature-skip below, so neither banner ever goes stale.
@@ -982,7 +1152,7 @@ namespace PickleGit.ViewModels
                 // Skip the graph/UI/cache rebuild when the repo state is identical —
                 // rebuilding GraphNodes resets scroll and selection, and auto-refresh
                 // ticks would otherwise pay the full cost for nothing.
-                var signature = ComputeRefreshSignature(branch, headSha, history, branches, tags, stashes, status);
+                var signature = ComputeRefreshSignature(branch, headSha, history, branches, tags, stashes, remotes, status);
                 if (!force && signature == _lastRefreshSignature)
                     return;
 
@@ -1053,13 +1223,37 @@ namespace PickleGit.ViewModels
                 await RunAsync("Refreshing…", work);
         }
 
+        /// <summary>Fingerprint of exactly what GetHistory's walk output depends on — every branch
+        /// tip (which determines the walkable commit set) plus tags/stashes (which affect ref
+        /// decorations shown on commits), but deliberately NOT ahead/behind counts, which don't
+        /// affect what's walkable at all and would otherwise invalidate the history-reuse gate for
+        /// no reason. See RefreshOnceAsync's use of this — it guards the actual GetHistory() call
+        /// itself, not just the UI rebuild, so a redundant refresh (e.g. a delayed watcher-triggered
+        /// one reacting to a fetch whose ref state we already picked up) skips the expensive walk
+        /// entirely instead of just skipping its result's application.</summary>
+        private static string ComputeHistoryRefSignature(string branch, string headSha,
+            List<BranchInfo> branches, List<TagInfo> tags, List<StashInfo> stashes, List<RemoteInfo> remotes)
+        {
+            var sb = new StringBuilder(256);
+            sb.Append(branch).Append('|').Append(headSha);
+            foreach (var b in branches)
+                sb.Append('|').Append(b.FullName).Append('=').Append(b.TipSha);
+            foreach (var t in tags)
+                sb.Append('|').Append(t.Name).Append('=').Append(t.TargetSha);
+            foreach (var s in stashes)
+                sb.Append('|').Append(s.Sha);
+            foreach (var r in remotes)
+                sb.Append('|').Append(r.Name).Append('=').Append(r.Url);
+            return sb.ToString();
+        }
+
         /// <summary>
         /// Cheap fingerprint of everything the UI renders — when unchanged between
         /// refreshes, the graph recompute, UI rebuild and cache write are skipped.
         /// </summary>
         private static string ComputeRefreshSignature(string branch, string headSha,
             CommitHistory history, List<BranchInfo> branches, List<TagInfo> tags,
-            List<StashInfo> stashes, List<FileChange> status)
+            List<StashInfo> stashes, List<RemoteInfo> remotes, List<FileChange> status)
         {
             var sb = new StringBuilder(512);
             sb.Append(branch).Append('|').Append(headSha)
@@ -1072,6 +1266,12 @@ namespace PickleGit.ViewModels
                 sb.Append('|').Append(t.Name).Append('=').Append(t.TargetSha);
             foreach (var s in stashes)
                 sb.Append('|').Append(s.Sha);
+            // Remotes is one of the collections reassigned after this signature check (Remotes =
+            // new ObservableCollection<RemoteInfo>(remotes), below) but wasn't part of the
+            // fingerprint — adding/removing/editing a remote with nothing else changed was silently
+            // skipped by the signature-equality short-circuit.
+            foreach (var r in remotes)
+                sb.Append('|').Append(r.Name).Append('=').Append(r.Url).Append(',').Append(r.PushUrl);
             foreach (var f in status)
                 sb.Append('|').Append(f.Path).Append(':').Append((int)f.Kind).Append(f.IsStaged ? 'S' : 'W');
             return sb.ToString();
@@ -1283,6 +1483,12 @@ namespace PickleGit.ViewModels
 
         /// <summary>Like RunThenRefresh, for checkouts — also re-smudges any now-stale LFS pointer files
         /// before refreshing (see TryLfsCheckoutAsync).</summary>
+        /// <summary>HEAD and the working tree genuinely change on every checkout and must stay
+        /// full-cost, but tags/stashes don't — worth skipping given GetTags is an uncached
+        /// peel-and-sort over every tag in the repo, every refresh.</summary>
+        private const RefreshScope CheckoutRefreshScope =
+            RefreshScope.WorkingDir | RefreshScope.History | RefreshScope.Branches | RefreshScope.Remotes;
+
         private async Task<bool> RunThenRefreshCheckout(string status, Action work)
         {
             if (!TryEnterBusyScope()) return false;
@@ -1290,7 +1496,7 @@ namespace PickleGit.ViewModels
             {
                 var ok = await RunWorkAsync(status, work);
                 if (ok) await TryLfsCheckoutAsync();
-                await RefreshAsync();
+                await RefreshAsync(false, CheckoutRefreshScope);
                 return ok;
             }
             finally { IsBusy = false; }
@@ -1354,8 +1560,18 @@ namespace PickleGit.ViewModels
             return true;
         }
 
+        /// <summary>Busy-scope-reentrant: when called from inside a sequence that already holds the
+        /// busy scope (e.g. a RunThenRefresh*-style wrapper spanning "mutate + LFS smudge +
+        /// refresh"), just runs the work without touching IsBusy — mirroring the same
+        /// already-busy dispatch RefreshAsync itself uses. Without this, nesting RunAsync (or
+        /// RunCliAsync/RunCliAllowingConflictAsync, which both funnel through it) inside an outer
+        /// busy scope would immediately fail via TryEnterBusyScope, since IsBusy would already be
+        /// true. This is what makes it safe for callers to hold ONE continuous busy scope across a
+        /// whole "git op → LFS → refresh" sequence instead of IsBusy flickering false in between —
+        /// visibly seen as the "Working" indicator blinking off then back on for a moment.</summary>
         private async Task<bool> RunAsync(string status, Action work)
         {
+            if (IsBusy) return await RunWorkAsync(status, work);
             if (!TryEnterBusyScope()) return false;
             try { return await RunWorkAsync(status, work); }
             finally { IsBusy = false; }
@@ -1392,6 +1608,7 @@ namespace PickleGit.ViewModels
                 {
                     // Purge the stale PickleGit entry so it won't shadow a fresh credential
                     var failedUser = RemoteUsername;
+                    var failedPassword = RemotePassword;
                     var failedUrl = Remotes.FirstOrDefault()?.Url;
                     RemoteUsername = null;
                     RemotePassword = null;
@@ -1406,6 +1623,15 @@ namespace PickleGit.ViewModels
                                 Services.CredentialStore.Delete(failedUri.Host, failedUser);
                         }
                         catch { }
+                        // Also tell the SYSTEM credential helper (GCM, wincred, ...) this credential
+                        // was rejected — otherwise, if the failing credential actually came from there
+                        // (not PickleGit's own store), the helper has no idea it's stale and keeps
+                        // handing back the exact same one on every future `credential fill`, including
+                        // if the user closes the re-entry dialog expecting the "saved Windows
+                        // credentials" to just work. Real git.exe does this automatically; PickleGit's
+                        // manual fill-then-push path didn't, until now.
+                        if (!string.IsNullOrEmpty(failedUrl))
+                            Services.CredentialStore.RejectViaGitCredentialHelper(failedUrl, failedUser, failedPassword);
                     }
                     msg = "Authentication failed. Check that your username and password (or app password) are correct.";
                 }
@@ -1438,6 +1664,19 @@ namespace PickleGit.ViewModels
                           "The server isn't in your known_hosts yet, and PickleGit cannot show the interactive " +
                           "accept prompt. Run any git command against this remote once from a terminal " +
                           "(e.g. `git fetch`) and accept the host key, then retry here.";
+                }
+                // "Update branch" (FetchBranchAsync) updates a non-checked-out local branch via a
+                // fetch refspec with a local destination (`fetch <remote> <upstream>:<local>`) —
+                // deliberately fast-forward-only, since there's no working tree to merge into. Git's
+                // rejection for that case prints the same "[rejected] ... (non-fast-forward)" shape
+                // as a rejected push, and without this it surfaced as a raw, unexplained git error.
+                else if (msg.IndexOf("[rejected]", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                         msg.IndexOf("non-fast-forward", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    msg = "This local branch has diverged from the remote and can't be fast-forwarded.\n\n" +
+                          "It has commits the remote copy doesn't (or a different history) — updating a " +
+                          "branch that isn't checked out only ever fast-forwards, since there's no working " +
+                          "tree to merge into. Check the branch out and Pull (or rebase/reset) it instead.";
                 }
                 StatusMessage = $"Error: {msg}";
                 DialogService.ShowError("Operation Failed", msg, ex.ToString());

@@ -270,7 +270,14 @@ namespace PickleGit.Views
         private void SidebarSearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             _searchText = SidebarSearchBox.Text;
+            SidebarSearchClearButton.Visibility = string.IsNullOrEmpty(_searchText) ? Visibility.Collapsed : Visibility.Visible;
             RebuildRows();
+        }
+
+        private void SidebarSearchClearButton_Click(object sender, RoutedEventArgs e)
+        {
+            SidebarSearchBox.Clear();
+            SidebarSearchBox.Focus();
         }
 
         // ── Section header expand/collapse ──────────────────────────────────────────────────

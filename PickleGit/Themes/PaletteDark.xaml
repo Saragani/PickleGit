@@ -81,6 +81,11 @@
          from both the green/red add/delete row backgrounds and the amber word-diff/search highlights. -->
     <SolidColorBrush x:Key="LineSelectionBrush" Color="#555C9BD6"/>
 
+    <!-- Text-selection overlay (click/drag in the diff view's code column, for copying) — a violet
+         distinct from LineSelectionBrush's blue (staging) so the two can coexist without being
+         mistaken for each other. -->
+    <SolidColorBrush x:Key="TextSelectionBrush" Color="#4D9B59FF"/>
+
     <!-- Find-in-diff match highlight — amber, distinct from the green/red word-diff highlight hue. -->
     <SolidColorBrush x:Key="DiffSearchMatchBrush" Color="#66E0B000"/>
     <SolidColorBrush x:Key="DiffSearchCurrentMatchBrush" Color="#AAFFC400"/>

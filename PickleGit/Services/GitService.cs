@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using LibGit2Sharp;
 using LibGit2Sharp.Handlers;
@@ -106,6 +107,7 @@ namespace PickleGit.Services
         public CommitHistory GetHistory(int maxCount = 10000, BisectState bisectState = null)
         {
             EnsureOpen();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var history = new CommitHistory();
 
             // Seed mask bits at the branch tips. Bit 0 = HEAD/current branch;
@@ -178,6 +180,7 @@ namespace PickleGit.Services
                 }
                 history.Commits.Add(info);
             }
+            AppLog.Info($"GetHistory: {tips.Count} tips, {count} commits emitted, reachedLimit={history.ReachedLimit} in {sw.ElapsedMilliseconds}ms (in {_repoPath})");
             return history;
         }
 
@@ -953,6 +956,8 @@ namespace PickleGit.Services
             EnsureOpen();
             var remote = _repo.Network.Remotes[remoteName];
             if (remote == null) throw new InvalidOperationException($"Remote '{remoteName}' not found.");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            AppLog.Info($"libgit2 fetch {remoteName}{(prune ? " --prune" : "")} (in {_repoPath})");
             int lastPct = -1;
             var opts = new FetchOptions
             {
@@ -976,6 +981,7 @@ namespace PickleGit.Services
             };
             var refSpecs = remote.FetchRefSpecs.Select(r => r.Specification);
             Commands.Fetch(_repo, remoteName, refSpecs, opts, null);
+            AppLog.Info($"libgit2 fetch {remoteName} done in {sw.ElapsedMilliseconds}ms (in {_repoPath})");
         }
 
         public void Pull(string authorName, string authorEmail,
@@ -984,6 +990,8 @@ namespace PickleGit.Services
             System.Threading.CancellationToken ct = default(System.Threading.CancellationToken))
         {
             EnsureOpen();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            AppLog.Info($"libgit2 pull (in {_repoPath})");
             var sig = new Signature(authorName, authorEmail, DateTimeOffset.Now);
             var opts = new PullOptions
             {
@@ -995,6 +1003,7 @@ namespace PickleGit.Services
                 }
             };
             Commands.Pull(_repo, sig, opts);
+            AppLog.Info($"libgit2 pull done in {sw.ElapsedMilliseconds}ms (in {_repoPath})");
         }
 
         public void Push(string remoteName, string branchName,
@@ -1005,6 +1014,8 @@ namespace PickleGit.Services
             EnsureOpen();
             var branch = _repo.Branches[branchName];
             if (branch == null) throw new InvalidOperationException($"Branch '{branchName}' not found.");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            AppLog.Info($"libgit2 push {remoteName} {branchName} (in {_repoPath})");
             var opts = new PushOptions
             {
                 CredentialsProvider = BuildCredHandler(username, password),
@@ -1028,6 +1039,7 @@ namespace PickleGit.Services
             {
                 _repo.Network.Push(branch, opts);
             }
+            AppLog.Info($"libgit2 push {remoteName} {branchName} done in {sw.ElapsedMilliseconds}ms (in {_repoPath})");
         }
 
         public void PushTag(string tagName, string remoteName,
@@ -1454,28 +1466,80 @@ namespace PickleGit.Services
             return result;
         }
 
-        /// <summary>Rename-following file history via `git log --follow`; \x1f as field separator.</summary>
+        /// <summary>Rename-following file history via `git log --follow --name-status -z`.
+        /// -z NUL-terminates both the per-commit %-format output and each name-status field, which
+        /// is what makes this parseable at all: a rename/copy status shows as two separate
+        /// NUL-terminated path fields (old, new) instead of one, and there is no reliable in-band
+        /// separator otherwise (a commit message can itself contain blank lines, so the historical
+        /// non-`-z` parsing — splitting on \x1e after a lone %B field — could not tell a message's
+        /// own blank line apart from the record boundary once name-status lines were added). Verified
+        /// the exact token layout against a real repo with a rename (scratch test), per this file's
+        /// own logged lesson about not guessing git.exe output from memory.
+        /// Bounded by a timeout: `--follow`'s rename/similarity detection can be slow on a large,
+        /// heavily-renamed history, and this runs on the single shared git executor thread — an
+        /// unbounded hang here would block every other queued git operation (checkout, fetch, ...)
+        /// indefinitely. On timeout this throws, and the caller (GetFileHistory) falls back to the
+        /// slower-but-bounded libgit2 walk instead of hanging forever.</summary>
         private List<CommitInfo> GetFileHistoryCli(string filePath, int maxCount)
         {
-            var args = $"log --follow -{maxCount} --format=%H%x1f%an%x1f%ae%x1f%aI%x1f%B%x1e -- "
+            var args = $"log --follow --name-status -z -{maxCount} --format=%H%x1f%an%x1f%ae%x1f%aI%x1f%B -- "
                        + Git.CliGitService.Quote(filePath);
-            var cliResult = Cli.RunCheckedAsync(args).GetAwaiter().GetResult();
-            var result = new List<CommitInfo>();
-            foreach (var record in cliResult.StdOut.Split('\x1e'))
+            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
             {
-                var fields = record.TrimStart('\n', '\r').Split('\x1f');
-                if (fields.Length < 5 || fields[0].Length < 40) continue;
-                DateTimeOffset.TryParse(fields[3], out var when);
-                result.Add(new CommitInfo
+                var cliResult = Cli.RunCheckedAsync(args, ct: cts.Token).GetAwaiter().GetResult();
+                var tokens = cliResult.StdOut.Split('\0');
+                var result = new List<CommitInfo>();
+                // --follow walks newest→oldest. A rename status on a commit means the commit ITSELF
+                // (and everything newer) used the new name — everything OLDER used the old name.
+                var trackedPath = filePath;
+                int i = 0;
+                while (i < tokens.Length)
                 {
-                    Sha = fields[0].Trim(),
-                    AuthorName = fields[1],
-                    AuthorEmail = fields[2],
-                    AuthorDate = when,
-                    Message = fields[4].TrimEnd('\n', '\r')
-                });
+                    var header = tokens[i];
+                    if (!LooksLikeFileHistoryHeader(header)) { i++; continue; }
+                    var fields = header.Split(new[] { '\x1f' }, 5);
+                    if (fields.Length < 5) { i++; continue; }
+                    DateTimeOffset.TryParse(fields[3], out var when);
+                    result.Add(new CommitInfo
+                    {
+                        Sha = fields[0].Trim(),
+                        AuthorName = fields[1],
+                        AuthorEmail = fields[2],
+                        AuthorDate = when,
+                        Message = fields[4].TrimEnd('\n', '\r'),
+                        HistoryPath = trackedPath
+                    });
+                    i++;
+
+                    if (i >= tokens.Length) break;
+                    var status = tokens[i].TrimStart('\n', '\r');
+                    // A merge commit shows no diff (hence no status/path token) by default — the
+                    // next token is already the next commit's header, so don't consume it here.
+                    if (status.Length == 0 || !char.IsUpper(status[0])) continue;
+                    i++;
+
+                    if ((status[0] == 'R' || status[0] == 'C') && i + 1 < tokens.Length)
+                    {
+                        trackedPath = tokens[i]; // old path — applies to older (not-yet-seen) commits
+                        i += 2; // old path + new path
+                    }
+                    else if (i < tokens.Length)
+                    {
+                        i++; // plain path token; tracked path unchanged
+                    }
+                }
+                return result;
             }
-            return result;
+        }
+
+        /// <summary>A file-history record header is exactly `<40-hex-char sha>\x1f...` — used to tell
+        /// a real commit header apart from a name-status token while walking the NUL-split stream.</summary>
+        private static bool LooksLikeFileHistoryHeader(string s)
+        {
+            if (s == null || s.Length <= 40 || s[40] != '\x1f') return false;
+            for (int j = 0; j < 40; j++)
+                if (!Uri.IsHexDigit(s[j])) return false;
+            return true;
         }
 
         /// <summary>Per-line blame for the file's current working-tree content.</summary>

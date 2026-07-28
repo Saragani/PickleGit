@@ -154,6 +154,8 @@ namespace PickleGit.Services.Git
             var stdout = new StringBuilder();
             var stderr = new StringBuilder();
             var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var sw = Stopwatch.StartNew();
+            PickleGit.Services.AppLog.Info($"git {args} (in {workDir})");
 
             var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
             proc.OutputDataReceived += (s, e) =>
@@ -192,6 +194,7 @@ namespace PickleGit.Services.Git
                     // Ensure async output readers have flushed
                     proc.WaitForExit();
                     ct.ThrowIfCancellationRequested();
+                    PickleGit.Services.AppLog.Info($"git {args} exit={exitCode} in {sw.ElapsedMilliseconds}ms (in {workDir})");
                     return new GitCliResult
                     {
                         ExitCode = exitCode,

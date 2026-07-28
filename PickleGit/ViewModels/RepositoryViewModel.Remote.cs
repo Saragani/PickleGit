@@ -18,55 +18,113 @@ namespace PickleGit.ViewModels
     {
         // ── Remote operations ─────────────────────────────────────────────────
 
+        /// <summary>Re-reads HEAD directly from disk right before a fetch/pull/push, in case an
+        /// external change — another tab open on the same repo, or a git command run outside the
+        /// app — moved the current branch since the last refresh. Acting on a stale cached
+        /// <see cref="CurrentBranch"/> here could pull into, or push, the wrong branch.
+        /// <see cref="GitService.Reopen"/> forces a fresh libgit2 handle so the read can't be
+        /// served from an in-memory ref cache that predates the external change.</summary>
+        private async Task<string> RefreshCurrentBranchAsync()
+        {
+            var branch = await _git.Executor.RunAsync(() =>
+            {
+                _git.Reopen();
+                return _git.GetCurrentBranch();
+            });
+            if (branch != CurrentBranch)
+                CurrentBranch = branch;
+            return branch;
+        }
+
+        // A fetch never touches the working tree, but it CAN introduce brand-new commit objects
+        // reachable from a branch tip that just moved — including a non-checked-out branch's tip
+        // (that's the whole point of a fetch) — and by default also auto-follows any new tags that
+        // point at them. Confirmed the hard way: excluding History here left the commit graph
+        // missing newly-fetched commits until some later Full refresh caught up, and that later
+        // refresh's own (correctly) different signature meant it never got skipped, effectively
+        // just deferring the exact same GetHistory cost to a second, confusing-looking refresh
+        // moments after the first. Only WorkingDir (genuinely untouched) is safe to skip.
+        private const RefreshScope FetchRefreshScope =
+            RefreshScope.History | RefreshScope.Branches | RefreshScope.Tags | RefreshScope.Remotes;
+
+        // FetchBranchAsync's refspec fetch runs with --no-tags (matching SourceTree's equivalent
+        // command for the same "update one non-checked-out branch" operation) — tags genuinely
+        // cannot change from it, so unlike the general FetchRefreshScope above, Tags is safe to
+        // drop here too, not just WorkingDir.
+        private const RefreshScope UpdateBranchRefreshScope =
+            RefreshScope.History | RefreshScope.Branches | RefreshScope.Remotes;
+
+        // Unlike fetch, a push is purely outbound — no new local objects, branches, or tags ever
+        // appear from pushing, so History/Tags/WorkingDir/Stashes are all safe to skip; only
+        // Branches (ahead/behind, upstream tracking) and the cheap Remotes matter.
+        private const RefreshScope PushRefreshScope = RefreshScope.Branches | RefreshScope.Remotes;
+
         private async Task FetchAsync(bool prune = false, bool allRemotes = false)
         {
+            await RefreshCurrentBranchAsync();
             var progress = new Progress<string>(ReportProgress);
-            if (allRemotes && Remotes.Count > 1)
+            // One continuous busy scope spanning the whole "fetch → refresh" sequence — RunAsync/
+            // RunCliAsync are busy-scope-reentrant (see RunAsync), so nesting them here no longer
+            // flickers IsBusy false in between (previously visible as the "Working" indicator
+            // blinking off for under half a second before the trailing refresh's own busy scope
+            // reopened it — confirmed, not just a rare race, whenever this gap outlasted the
+            // RepositoryWatcher's ~400ms debounce).
+            if (!TryEnterBusyScope()) return;
+            try
             {
-                var remotes = Remotes.ToList();
-                if (remotes.Any(r => !GitCli.IsSshUrl(r.Url)) && !await EnsureCredentialsAsync()) return;
-                var allOk = await RunAsync("Fetching all remotes…", () =>
+                if (allRemotes && Remotes.Count > 1)
                 {
-                    foreach (var r in remotes)
+                    var remotes = Remotes.ToList();
+                    if (remotes.Any(r => !GitCli.IsSshUrl(r.Url)) && !await EnsureCredentialsAsync()) return;
+                    var allOk = await RunAsync("Fetching all remotes…", () =>
                     {
-                        if (GitCli.IsSshUrl(r.Url))
+                        foreach (var r in remotes)
                         {
-                            var args = $"fetch {(prune ? "--prune " : "")}{CliGitService.Quote(r.Name)}";
-                            var result = _git.Cli.RunAsync(args, new GitCliOptions { Progress = progress }).GetAwaiter().GetResult();
-                            _git.Reopen();
-                            if (!result.Success) throw new InvalidOperationException(result.ErrorText);
+                            if (GitCli.IsSshUrl(r.Url))
+                            {
+                                var args = $"fetch {(prune ? "--prune " : "")}{CliGitService.Quote(r.Name)}";
+                                var result = _git.Cli.RunAsync(args, new GitCliOptions { Progress = progress }).GetAwaiter().GetResult();
+                                _git.Reopen();
+                                if (!result.Success) throw new InvalidOperationException(result.ErrorText);
+                            }
+                            else
+                            {
+                                _git.Fetch(r.Name, RemoteUsername, RemotePassword, progress, prune, OpToken);
+                            }
                         }
-                        else
-                        {
-                            _git.Fetch(r.Name, RemoteUsername, RemotePassword, progress, prune, OpToken);
-                        }
-                    }
-                });
-                if (allOk && _credentialsFromDialog) SaveCredentials();
-                await RefreshAsync();
-                return;
-            }
+                    });
+                    if (allOk && _credentialsFromDialog) SaveCredentials();
+                    await RefreshAsync(false, FetchRefreshScope);
+                    return;
+                }
 
-            var remote = Remotes.FirstOrDefault();
-            var remoteName = remote?.Name ?? "origin";
-            var status = prune ? $"Fetching from {remoteName} (prune)…" : $"Fetching from {remoteName}…";
-            if (GitCli.IsSshUrl(remote?.Url))
-            {
-                await RunCliAsync(status, $"fetch {(prune ? "--prune " : "")}{CliGitService.Quote(remoteName)}", "Fetch");
-                await RefreshAsync();
-                return;
+                var remote = Remotes.FirstOrDefault();
+                var remoteName = remote?.Name ?? "origin";
+                var status = prune ? $"Fetching from {remoteName} (prune)…" : $"Fetching from {remoteName}…";
+                if (GitCli.IsSshUrl(remote?.Url))
+                {
+                    await RunCliAsync(status, $"fetch {(prune ? "--prune " : "")}{CliGitService.Quote(remoteName)}", "Fetch");
+                    await RefreshAsync(false, FetchRefreshScope);
+                    return;
+                }
+                if (!await EnsureCredentialsAsync()) return;
+                var ok = await RunAsync(status, () => _git.Fetch(remoteName, RemoteUsername, RemotePassword, progress, prune, OpToken));
+                if (ok && _credentialsFromDialog) SaveCredentials();
+                await RefreshAsync(false, FetchRefreshScope);
             }
-            if (!await EnsureCredentialsAsync()) return;
-            var ok = await RunAsync(status, () => _git.Fetch(remoteName, RemoteUsername, RemotePassword, progress, prune, OpToken));
-            if (ok && _credentialsFromDialog) SaveCredentials();
-            await RefreshAsync();
+            finally { IsBusy = false; }
         }
 
         /// <summary>Updates a local branch other than the checked-out one to match its upstream,
         /// without switching to it — via a plain refspec fetch (`fetch &lt;remote&gt; &lt;upstream&gt;:&lt;local&gt;`),
         /// which git only allows when it's a fast-forward and the branch isn't currently checked out.
         /// That's exactly the safety net we want: no merge commit is possible here anyway since there's
-        /// no working tree to merge into, so a plain "pull" only ever makes sense as a fast-forward.</summary>
+        /// no working tree to merge into, so a plain "pull" only ever makes sense as a fast-forward.
+        /// --no-tags (matching SourceTree's own equivalent command) means tags genuinely cannot
+        /// change from this operation, so the refresh below can safely skip RefreshScope.Tags too —
+        /// without it, git's default auto-follow-tags behavior could bring in a new tag, and skipping
+        /// the tag refresh anyway would've been a real (if narrow) staleness bug, not just an
+        /// optimization.</summary>
         private async Task FetchBranchAsync(object param)
         {
             if (!(param is BranchInfo bi) || bi.IsRemote || bi.IsHead || string.IsNullOrEmpty(bi.TrackedBranchName))
@@ -77,9 +135,14 @@ namespace PickleGit.ViewModels
                 ? bi.TrackedBranchName.Substring(remoteName.Length + 1)
                 : bi.TrackedBranchName;
             var refspec = CliGitService.Quote($"{upstreamShort}:{bi.Name}");
-            if (await RunCliAsync($"Updating {bi.Name}…",
-                    $"fetch {CliGitService.Quote(remoteName)} {refspec}", "Update branch"))
-                await RefreshAsync();
+            if (!TryEnterBusyScope()) return;
+            try
+            {
+                if (await RunCliAsync($"Updating {bi.Name}…",
+                        $"fetch --no-tags {CliGitService.Quote(remoteName)} {refspec}", "Update branch"))
+                    await RefreshAsync(false, UpdateBranchRefreshScope);
+            }
+            finally { IsBusy = false; }
         }
 
         /// <summary>
@@ -141,6 +204,7 @@ namespace PickleGit.ViewModels
 
         private async Task PullRebaseAsync()
         {
+            await RefreshCurrentBranchAsync();
             var preHead = await _git.Executor.RunAsync(() => _git.GetHeadSha());
             var ok = await RunCliAllowingConflictAsync("Pulling (rebase)…", "pull --rebase --autostash", "Pull (rebase)");
             if (ok)
@@ -156,7 +220,7 @@ namespace PickleGit.ViewModels
 
         private async Task ForcePushAsync()
         {
-            var branch = CurrentBranch;
+            var branch = await RefreshCurrentBranchAsync();
             if (string.IsNullOrEmpty(branch) || branch.StartsWith("detached")) return;
             if (!DialogService.Confirm("Force Push",
                     $"Force-push '{branch}' (with lease)?\n\nThis rewrites the remote branch to match your local one. " +
@@ -171,14 +235,20 @@ namespace PickleGit.ViewModels
             var lease = expected != null
                 ? $"--force-with-lease={CliGitService.Quote(branch + ":" + expected)}"
                 : "--force-with-lease";
-            if (await RunCliAsync($"Force-pushing {branch}…",
-                    $"push {lease} {CliGitService.Quote(remote)} {CliGitService.Quote(branch)}",
-                    "Force push"))
-                await RefreshAsync();
+            if (!TryEnterBusyScope()) return;
+            try
+            {
+                if (await RunCliAsync($"Force-pushing {branch}…",
+                        $"push {lease} {CliGitService.Quote(remote)} {CliGitService.Quote(branch)}",
+                        "Force push"))
+                    await RefreshAsync(false, PushRefreshScope);
+            }
+            finally { IsBusy = false; }
         }
 
         private async Task PullAsync()
         {
+            await RefreshCurrentBranchAsync();
             if (GitCli.IsSshUrl(Remotes.FirstOrDefault()?.Url))
             {
                 var preHead = await _git.Executor.RunAsync(() => _git.GetHeadSha());
@@ -210,23 +280,29 @@ namespace PickleGit.ViewModels
         /// (e.g. HostingViewModel's push-before-PR prompt) can decide whether to proceed.</summary>
         public async Task<bool> PushAsync()
         {
+            var branch = await RefreshCurrentBranchAsync();
             var remoteName = Remotes.FirstOrDefault()?.Name ?? "origin";
-            if (GitCli.IsSshUrl(Remotes.FirstOrDefault()?.Url))
+            if (!TryEnterBusyScope()) return false;
+            try
             {
-                var cliOk = await RunCliAsync($"Pushing to {remoteName}…",
-                    $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(CurrentBranch)}", "Push");
-                if (cliOk) await RefreshAsync();
-                return cliOk;
+                if (GitCli.IsSshUrl(Remotes.FirstOrDefault()?.Url))
+                {
+                    var cliOk = await RunCliAsync($"Pushing to {remoteName}…",
+                        $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(branch)}", "Push");
+                    if (cliOk) await RefreshAsync(false, PushRefreshScope);
+                    return cliOk;
+                }
+                if (!await EnsureCredentialsAsync()) return false;
+                var ok = await RunAsync($"Pushing to {remoteName}…", () =>
+                {
+                    _git.Push(remoteName, branch, RemoteUsername, RemotePassword,
+                        new Progress<string>(ReportProgress), OpToken);
+                });
+                if (ok && _credentialsFromDialog) SaveCredentials();
+                await RefreshAsync(false, PushRefreshScope);
+                return ok;
             }
-            if (!await EnsureCredentialsAsync()) return false;
-            var ok = await RunAsync($"Pushing to {remoteName}…", () =>
-            {
-                _git.Push(remoteName, CurrentBranch, RemoteUsername, RemotePassword,
-                    new Progress<string>(ReportProgress), OpToken);
-            });
-            if (ok && _credentialsFromDialog) SaveCredentials();
-            await RefreshAsync();
-            return ok;
+            finally { IsBusy = false; }
         }
 
         // ── Credential helpers ────────────────────────────────────────────────

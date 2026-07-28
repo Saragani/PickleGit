@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using PickleGit.Controls;
 using PickleGit.Models;
 using PickleGit.ViewModels;
 
@@ -11,12 +12,136 @@ namespace PickleGit.Views
 {
     public partial class DiffView : UserControl
     {
+        // ── Cross-line text selection (Controls/DiffTextSelectionController.cs) — additive, keeps
+        // the existing gutter-driven line-selection/staging code below completely untouched. One
+        // controller per pane; DiffListView_PreviewMouseLeftButtonDown/Move/Up route a click to
+        // either the existing staging logic (gutter) or the matching controller (everything else),
+        // never both.
+        private readonly DiffTextSelectionController _unifiedTextSelection;
+        private readonly DiffTextSelectionController _sideBySideLeftTextSelection;
+        private readonly DiffTextSelectionController _sideBySideRightTextSelection;
+
         public DiffView()
         {
             InitializeComponent();
+            _unifiedTextSelection = new DiffTextSelectionController(UnifiedListView, UnifiedTextSelectionOverlay, GetUnifiedRowText);
+            _sideBySideLeftTextSelection = new DiffTextSelectionController(SideBySideLeftListView, SideBySideLeftTextSelectionOverlay,
+                item => GetSideBySideRowText(item, isLeftPane: true));
+            _sideBySideRightTextSelection = new DiffTextSelectionController(SideBySideRightListView, SideBySideRightTextSelectionOverlay,
+                item => GetSideBySideRowText(item, isLeftPane: false));
+        }
+
+        private static string GetUnifiedRowText(object item)
+        {
+            var di = item as DiffItem;
+            if (di == null) return null;
+            return di.Kind == DiffItemKind.HunkHeader ? di.Header : di.Line?.Content;
+        }
+
+        private static string GetSideBySideRowText(object item, bool isLeftPane)
+        {
+            var sbi = item as SideBySideItem;
+            if (sbi == null) return null;
+            if (sbi.Kind == DiffItemKind.HunkHeader) return sbi.Header;
+            return (isLeftPane ? sbi.Left : sbi.Right)?.Content;
         }
 
         private RepositoryViewModel RepoVm => DataContext as RepositoryViewModel;
+
+        /// <summary>Decides gutter vs. content by comparing the click's X position against the row's
+        /// own "RowText" content element's left edge — not by which specific visual element the
+        /// hit-test happened to land on. That distinction matters: the gutter columns' line-number
+        /// TextBlocks are right-aligned and narrow (e.g. a single-digit line number in a 36px
+        /// column), so blank space to their *left* doesn't hit-test to the TextBlock at all — it
+        /// falls through to the row's own background Border. A hit-test-identity check would then
+        /// wrongly classify that blank gutter-column space as content. Comparing X position against
+        /// RowText's actual rendered left edge is robust to that regardless of padding/alignment,
+        /// and naturally makes an entire hunk-header row "content" (no gutter — buttons are already
+        /// excluded earlier via IsWithinButton) since RowText's left edge sits at the row's own left
+        /// edge there.</summary>
+        private static bool TryGetRowTextForContentClick(ListView lv, ListViewItem container, Point positionInListView, out TextBlock rowText)
+        {
+            rowText = DiffTextSelectionController.FindNamedDescendant<TextBlock>(container, "RowText");
+            if (rowText == null) return false;
+            var rowTextLeft = rowText.TransformToAncestor(lv).Transform(new Point(0, 0)).X;
+            return positionInListView.X >= rowTextLeft;
+        }
+
+        // ── Scroll-to-top on file switch ──────────────────────────────────────────────────────
+        // DiffFileSwitched fires synchronously from SelectedFile's setter, well before the new
+        // file's diff has actually loaded (that load is fire-and-forget and awaits a git call).
+        // Scrolling right away would just act on the OLD content a moment before it's cleared, so
+        // instead this arms a pending flag and defers the actual scroll until FlatDiffItems /
+        // SideBySideItems / BlameLines next change to something non-empty — i.e. the new file's
+        // content actually arriving, not the interim clear-to-empty every load starts with (both
+        // fire a PropertyChanged for the same property, so the empty one must NOT consume the flag
+        // or the later real one would be silently missed).
+        private bool _pendingDiffScrollReset;
+
+        private void DiffView_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (e.OldValue is RepositoryViewModel oldVm)
+            {
+                oldVm.DiffFileSwitched -= OnDiffFileSwitched;
+                oldVm.PropertyChanged -= OnRepoVmPropertyChangedForScrollReset;
+                oldVm.BlameLines.CollectionChanged -= OnBlameLinesChangedForScrollReset;
+            }
+            if (e.NewValue is RepositoryViewModel newVm)
+            {
+                newVm.DiffFileSwitched += OnDiffFileSwitched;
+                newVm.PropertyChanged += OnRepoVmPropertyChangedForScrollReset;
+                newVm.BlameLines.CollectionChanged += OnBlameLinesChangedForScrollReset;
+            }
+        }
+
+        private void OnDiffFileSwitched(object sender, EventArgs e) => _pendingDiffScrollReset = true;
+
+        private void OnRepoVmPropertyChangedForScrollReset(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(RepositoryViewModel.FlatDiffItems) &&
+                e.PropertyName != nameof(RepositoryViewModel.SideBySideItems))
+                return;
+            // Unlike the scroll-reset flag below (which deliberately skips the pre-load empty-clear
+            // and only acts once real content arrives), a stale text selection must be dropped
+            // immediately on EVERY change, including that first empty clear — the (row, char) pairs
+            // it holds are about to reference a list that's being replaced out from under them.
+            _unifiedTextSelection.ClearSelection();
+            _sideBySideLeftTextSelection.ClearSelection();
+            _sideBySideRightTextSelection.ClearSelection();
+
+            if (!_pendingDiffScrollReset) return;
+            var vm = (RepositoryViewModel)sender;
+            if (vm.FlatDiffItems.Count == 0 && vm.SideBySideItems.Count == 0) return; // the pre-load clear, not real content yet
+            _pendingDiffScrollReset = false;
+            ResetDiffScrollToTop();
+        }
+
+        private void OnBlameLinesChangedForScrollReset(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            if (!_pendingDiffScrollReset || RepoVm == null || RepoVm.BlameLines.Count == 0) return;
+            _pendingDiffScrollReset = false;
+            ResetDiffScrollToTop();
+        }
+
+        /// <summary>ScrollIntoView(Items[0]) needs no captured ScrollViewer reference (unlike the
+        /// side-by-side scroll-sync below), and for the first item it always lands at the very top
+        /// since nothing above it could ever be "more in view". Deferred a tick so the ListView has
+        /// already re-virtualized against the just-updated ItemsSource.</summary>
+        private void ResetDiffScrollToTop()
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                ScrollListToTop(UnifiedListView);
+                ScrollListToTop(SideBySideLeftListView);
+                ScrollListToTop(SideBySideRightListView);
+                ScrollListToTop(BlameListView);
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+        private static void ScrollListToTop(ListView lv)
+        {
+            if (lv != null && lv.Items.Count > 0) lv.ScrollIntoView(lv.Items[0]);
+        }
 
         // ── Line selection: click/ctrl/shift are native ListView behavior (SelectionMode=Extended);
         // this adds a plain click-drag range-select on top, matching SourceTree's line staging UX.
@@ -75,6 +200,13 @@ namespace PickleGit.Views
             if (IsWithinButton(lv.InputHitTest(position) as DependencyObject)) return;
             var container = ListViewItemFromPoint(lv, position);
             if (container == null) return; // scrollbar, empty space, etc. — not a row, leave it alone
+
+            if (TryGetRowTextForContentClick(lv, container, position, out var rowText))
+            {
+                _unifiedTextSelection.BeginSelection(e, container, rowText);
+                return;
+            }
+
             var item = container.Content as DiffItem;
             if (!IsSelectableLine(item))
             {
@@ -93,6 +225,11 @@ namespace PickleGit.Views
 
         private void DiffListView_PreviewMouseMove(object sender, MouseEventArgs e)
         {
+            if (_unifiedTextSelection.IsSelecting)
+            {
+                _unifiedTextSelection.UpdateDrag(e);
+                return;
+            }
             if (!_isDragging || e.LeftButton != MouseButtonState.Pressed) return;
             var lv = (ListView)sender;
             var hovered = DiffItemFromPoint(lv, e.GetPosition(lv));
@@ -112,6 +249,7 @@ namespace PickleGit.Views
 
         private void DiffListView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
+            if (_unifiedTextSelection.IsSelecting) { _unifiedTextSelection.EndSelection(); return; }
             _isDragging = false;
             _dragAnchorIndex = -1;
         }
@@ -143,6 +281,9 @@ namespace PickleGit.Views
         private static SideBySideItem SideBySideItemFromPoint(ListView lv, Point p) =>
             ListViewItemFromPoint(lv, p)?.Content as SideBySideItem;
 
+        private DiffTextSelectionController SideBySideController(bool isLeft) =>
+            isLeft ? _sideBySideLeftTextSelection : _sideBySideRightTextSelection;
+
         private void SideBySideListView_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             var lv = (ListView)sender;
@@ -151,6 +292,13 @@ namespace PickleGit.Views
             if (IsWithinButton(lv.InputHitTest(position) as DependencyObject)) return;
             var container = ListViewItemFromPoint(lv, position);
             if (container == null) return; // scrollbar, empty space, etc. — not a row, leave it alone
+
+            if (TryGetRowTextForContentClick(lv, container, position, out var rowText))
+            {
+                SideBySideController(isLeft).BeginSelection(e, container, rowText);
+                return;
+            }
+
             var item = container.Content as SideBySideItem;
             if (!IsSelectableSideBySideLine(item, isLeft))
             {
@@ -166,9 +314,15 @@ namespace PickleGit.Views
 
         private void SideBySideListView_PreviewMouseMove(object sender, MouseEventArgs e)
         {
-            if (!_isDragging || e.LeftButton != MouseButtonState.Pressed) return;
             var lv = (ListView)sender;
             bool isLeft = ReferenceEquals(lv, SideBySideLeftListView);
+            var controller = SideBySideController(isLeft);
+            if (controller.IsSelecting)
+            {
+                controller.UpdateDrag(e);
+                return;
+            }
+            if (!_isDragging || e.LeftButton != MouseButtonState.Pressed) return;
             var hovered = SideBySideItemFromPoint(lv, e.GetPosition(lv));
             if (hovered == null) return;
             int hoveredIndex = lv.Items.IndexOf(hovered);
@@ -186,6 +340,10 @@ namespace PickleGit.Views
 
         private void SideBySideListView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
+            var lv = (ListView)sender;
+            bool isLeft = ReferenceEquals(lv, SideBySideLeftListView);
+            var controller = SideBySideController(isLeft);
+            if (controller.IsSelecting) { controller.EndSelection(); return; }
             _isDragging = false;
             _dragAnchorIndex = -1;
         }
@@ -210,8 +368,20 @@ namespace PickleGit.Views
         // Loaded firing nor a later dispatcher callback guarantees the ListView's ControlTemplate
         // (where its internal ScrollViewer lives) has actually been applied yet; ApplyTemplate() forces
         // it immediately so the descendant search below reliably finds a real ScrollViewer.
-        private ScrollViewer _leftScroll, _rightScroll;
+        private ScrollViewer _leftScroll, _rightScroll, _unifiedScroll;
         private bool _syncingScroll;
+
+        private void UnifiedListView_Loaded(object sender, RoutedEventArgs e)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_unifiedScroll != null) return;
+                UnifiedListView.ApplyTemplate();
+                _unifiedScroll = FindDescendant<ScrollViewer>(UnifiedListView);
+                if (_unifiedScroll != null) _unifiedScroll.ScrollChanged += (s, ev) => _unifiedTextSelection.Recompute();
+                UnifiedListView.SizeChanged += (s, ev) => _unifiedTextSelection.Recompute();
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
 
         private void SideBySideLeftListView_Loaded(object sender, RoutedEventArgs e)
         {
@@ -220,7 +390,9 @@ namespace PickleGit.Views
                 if (_leftScroll != null) return;
                 SideBySideLeftListView.ApplyTemplate();
                 _leftScroll = FindDescendant<ScrollViewer>(SideBySideLeftListView);
-                if (_leftScroll != null) _leftScroll.ScrollChanged += (s, ev) => SyncScroll(_leftScroll, _rightScroll);
+                if (_leftScroll != null)
+                    _leftScroll.ScrollChanged += (s, ev) => { SyncScroll(_leftScroll, _rightScroll); _sideBySideLeftTextSelection.Recompute(); };
+                SideBySideLeftListView.SizeChanged += (s, ev) => _sideBySideLeftTextSelection.Recompute();
             }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
@@ -231,7 +403,12 @@ namespace PickleGit.Views
                 if (_rightScroll != null) return;
                 SideBySideRightListView.ApplyTemplate();
                 _rightScroll = FindDescendant<ScrollViewer>(SideBySideRightListView);
-                if (_rightScroll != null) _rightScroll.ScrollChanged += (s, ev) => SyncScroll(_rightScroll, _leftScroll);
+                if (_rightScroll != null)
+                {
+                    _rightScroll.ScrollChanged += (s, ev) => SyncScroll(_rightScroll, _leftScroll);
+                    _rightScroll.ScrollChanged += (s, ev) => _sideBySideRightTextSelection.Recompute();
+                }
+                SideBySideRightListView.SizeChanged += (s, ev) => _sideBySideRightTextSelection.Recompute();
             }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
@@ -243,6 +420,21 @@ namespace PickleGit.Views
             target.ScrollToHorizontalOffset(source.HorizontalOffset);
             _syncingScroll = false;
         }
+
+        // ── Cross-line text-selection copy (Ctrl+C / context-menu "Copy") ───────────────────────
+        private void DiffTextSelection_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.C || Keyboard.Modifiers != ModifierKeys.Control) return;
+            var lv = (ListView)sender;
+            var controller = ReferenceEquals(lv, UnifiedListView) ? _unifiedTextSelection
+                : ReferenceEquals(lv, SideBySideLeftListView) ? _sideBySideLeftTextSelection
+                : _sideBySideRightTextSelection;
+            if (controller.TryCopySelection()) e.Handled = true;
+        }
+
+        private void UnifiedCopySelection_Click(object sender, RoutedEventArgs e) => _unifiedTextSelection.TryCopySelection();
+        private void SideBySideLeftCopySelection_Click(object sender, RoutedEventArgs e) => _sideBySideLeftTextSelection.TryCopySelection();
+        private void SideBySideRightCopySelection_Click(object sender, RoutedEventArgs e) => _sideBySideRightTextSelection.TryCopySelection();
 
         // ── Change-map click-to-jump (Controls/DiffChangeMapControl.cs) ─────────────────────────
         private void UnifiedChangeMap_JumpRequested(object sender, double fraction) =>

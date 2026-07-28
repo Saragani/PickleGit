@@ -52,6 +52,13 @@ namespace PickleGit.Models
         /// </summary>
         public ulong RefMask { get; set; }
 
+        /// <summary>Only set by <see cref="Services.GitService.GetFileHistory"/> — the path the
+        /// tracked file had AT THIS commit, which can differ from the path used to look the history
+        /// up when the file was renamed somewhere in between. Blame/diff for this commit must look
+        /// up this path, not the (possibly later, post-rename) path the history list was opened
+        /// with — the file may not exist yet under that later name this far back.</summary>
+        public string HistoryPath { get; set; }
+
         public string AuthorDateRelative
         {
             get

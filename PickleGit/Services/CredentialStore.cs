@@ -176,6 +176,54 @@ namespace PickleGit.Services
             catch { return default; }
         }
 
+        /// <summary>
+        /// Tells git's configured credential helper (GCM, wincred, store, etc.) that a credential it
+        /// supplied was rejected by the server — the "reject" step of the git-credential protocol
+        /// (see git-credential(1)). Without this, a helper like GCM that cached a since-expired/revoked
+        /// OAuth token or app password has no way to know it's stale: `credential fill` is read-only
+        /// and just keeps returning the same cached value forever, so every retry (even after the user
+        /// closes PickleGit's own re-entry dialog expecting the "saved Windows credentials" to work)
+        /// fails identically and indefinitely. Real git.exe calls this automatically as part of its own
+        /// HTTPS push/fetch failure handling; PickleGit's manual "fill credentials, then hand them to
+        /// LibGit2Sharp" path bypassed that protocol entirely until this was added. Best-effort — a
+        /// helper that no-ops or isn't configured must not surface an error for this.
+        /// </summary>
+        public static void RejectViaGitCredentialHelper(string remoteUrl, string username, string password)
+        {
+            if (!Uri.TryCreate(remoteUrl, UriKind.Absolute, out var uri)) return;
+            var gitPath = Git.GitCli.ResolveGitPath();
+            if (gitPath == null) return;
+            var input = $"protocol={uri.Scheme}\nhost={uri.Host}\n" +
+                        (!string.IsNullOrEmpty(username) ? $"username={username}\n" : "") +
+                        (!string.IsNullOrEmpty(password) ? $"password={password}\n" : "") +
+                        "\n";
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = gitPath,
+                    Arguments = "credential reject",
+                    UseShellExecute = false,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                };
+                using (var proc = System.Diagnostics.Process.Start(psi))
+                {
+                    if (proc == null) return;
+                    proc.StandardInput.Write(input);
+                    proc.StandardInput.Close();
+                    proc.OutputDataReceived += (_, __) => { };
+                    proc.ErrorDataReceived += (_, __) => { };
+                    proc.BeginOutputReadLine();
+                    proc.BeginErrorReadLine();
+                    if (!proc.WaitForExit(5000)) { try { proc.Kill(); } catch { } }
+                }
+            }
+            catch { }
+        }
+
         public static List<(string host, string username)> ListAll()
         {
             var results = new List<(string, string)>();

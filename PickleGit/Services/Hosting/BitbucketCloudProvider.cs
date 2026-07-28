@@ -40,8 +40,9 @@ namespace PickleGit.Services.Hosting
 
                 var url = $"https://api.bitbucket.org/2.0/repositories/{Owner}/{Slug}/pullrequests?state=OPEN";
                 var response = await http.GetAsync(url).ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode) return new List<PullRequestInfo>();
                 var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                    throw new InvalidOperationException(ExtractBitbucketError(json, response.StatusCode));
                 var root = JObject.Parse(json);
                 var arr = root["values"] as JArray ?? new JArray();
 

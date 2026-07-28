@@ -44,8 +44,9 @@ namespace PickleGit.Services.Hosting
 
                 var url = $"{ApiBase}/repos/{Owner}/{Slug}/pulls?state=open";
                 var response = await http.GetAsync(url).ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode) return new List<PullRequestInfo>();
                 var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                    throw new InvalidOperationException(ExtractGitHubError(json, response.StatusCode));
                 var arr = JArray.Parse(json);
 
                 var list = new List<PullRequestInfo>();

@@ -138,9 +138,27 @@ namespace PickleGit.ViewModels
                 default:
                     return (a, b) =>
                     {
-                        var byKind = ((int)a.Kind).CompareTo((int)b.Kind);
+                        var byKind = StatusSortRank(a.Kind).CompareTo(StatusSortRank(b.Kind));
                         return byKind != 0 ? byKind : string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase);
                     };
+            }
+        }
+
+        /// <summary>Display order for <see cref="FileSortMode.Status"/> — conflicts surface first
+        /// (need resolving before anything else), then Modified/Added/Deleted/unknown per the app's
+        /// requested convention, independent of <see cref="FileChangeKind"/>'s declaration order.</summary>
+        private static int StatusSortRank(FileChangeKind kind)
+        {
+            switch (kind)
+            {
+                case FileChangeKind.Modified:   return 0;
+                case FileChangeKind.Added:      return 1;
+                case FileChangeKind.Deleted:    return 2;
+                case FileChangeKind.Renamed:    return 3;
+                case FileChangeKind.Copied:     return 4;
+                case FileChangeKind.Conflicted: return 5;
+                case FileChangeKind.Untracked:  return 6;
+                default:                        return 7;
             }
         }
 

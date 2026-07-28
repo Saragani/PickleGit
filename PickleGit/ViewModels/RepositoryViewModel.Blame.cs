@@ -38,7 +38,7 @@ namespace PickleGit.ViewModels
                 if (!Set(ref _isBlameContent, value)) return;
                 RaisePropertyChanged(nameof(ShowBlame));
                 RaiseDiffModeChanged();
-                if (value) _ = LoadBlameForHistoryAsync(SelectedFileHistoryCommit?.Sha);
+                if (value) _ = LoadBlameForHistoryAsync(SelectedFileHistoryCommit?.Sha, SelectedFileHistoryCommit?.HistoryPath ?? _blameHistoryFilePath);
             }
         }
 
@@ -74,8 +74,14 @@ namespace PickleGit.ViewModels
             set
             {
                 if (!Set(ref _selectedFileHistoryCommit, value) || value == null) return;
-                if (IsBlameContent) _ = LoadBlameForHistoryAsync(value.Sha);
-                else _ = LoadDiffAsync(value.Sha, _blameHistoryFilePath);
+                // HistoryPath is the path the file actually had AT this commit (see CommitInfo) —
+                // falls back to the path the history list was opened with only when unset (the
+                // libgit2 QueryBy fallback path in GetFileHistory doesn't populate it). Using the
+                // wrong (later, post-rename) path here is exactly what made Blame/diff come back
+                // empty for commits from before a rename.
+                var pathAtCommit = value.HistoryPath ?? _blameHistoryFilePath;
+                if (IsBlameContent) _ = LoadBlameForHistoryAsync(value.Sha, pathAtCommit);
+                else _ = LoadDiffAsync(value.Sha, pathAtCommit);
             }
         }
 
@@ -96,7 +102,8 @@ namespace PickleGit.ViewModels
             ShowCommitDiffContentCommand = new RelayCommand(() =>
             {
                 IsBlameContent = false;
-                if (SelectedFileHistoryCommit != null) _ = LoadDiffAsync(SelectedFileHistoryCommit.Sha, _blameHistoryFilePath);
+                if (SelectedFileHistoryCommit != null)
+                    _ = LoadDiffAsync(SelectedFileHistoryCommit.Sha, SelectedFileHistoryCommit.HistoryPath ?? _blameHistoryFilePath);
             }, () => HasRepo);
             ShowBlameContentCommand = new RelayCommand(() => IsBlameContent = true, () => HasRepo);
         }
@@ -117,24 +124,38 @@ namespace PickleGit.ViewModels
             RaisePropertyChanged(nameof(CanPartialStage));
         }
 
-        /// <summary>Loads blame for _blameHistoryFilePath as of a specific commit (navigating History
-        /// while IsBlameContent is active — see SelectedFileHistoryCommit/IsBlameContent), or the
-        /// working tree when sha is null.</summary>
-        private async Task LoadBlameForHistoryAsync(string sha)
+        /// <summary>Bumped by every EnterHistoryModeAsync/LoadBlameForHistoryAsync call and captured
+        /// at the start of each — clicking History/Blame/a history row repeatedly (as this feature
+        /// invites) fires a new fire-and-forget load before an earlier one's git call has returned;
+        /// without this guard, whichever overlapping call happens to finish LAST wins regardless of
+        /// which one the user actually asked for last, and a slow stale response can wipe out a
+        /// newer, already-correct one right after it rendered ("click Blame -> nothing visible" could
+        /// really be a same-frame stale response clobbering a good one, not an empty result at all).</summary>
+        private int _historyRequestSeq;
+
+        /// <summary>Loads blame for the file as of a specific commit (navigating History while
+        /// IsBlameContent is active — see SelectedFileHistoryCommit/IsBlameContent), or the working
+        /// tree when sha is null. <paramref name="path"/> must be the path the file actually had AT
+        /// that commit (see CommitInfo.HistoryPath) — using the current/later path for a commit from
+        /// before a rename looks up a file that doesn't exist yet at that point in history and comes
+        /// back empty.</summary>
+        private async Task LoadBlameForHistoryAsync(string sha, string path)
         {
-            if (string.IsNullOrEmpty(_blameHistoryFilePath)) return;
+            if (string.IsNullOrEmpty(path)) return;
+            var seq = ++_historyRequestSeq;
             ClearWorkingDirDiffState();
             BlameLines.Clear();
             List<BlameLine> blame;
             try
             {
-                blame = await _git.Executor.RunAsync(() => _git.GetBlame(_blameHistoryFilePath, sha));
+                blame = await _git.Executor.RunAsync(() => _git.GetBlame(path, sha));
             }
             catch (Exception ex)
             {
-                DialogService.ShowError("Blame", ex.Message);
+                if (seq == _historyRequestSeq) DialogService.ShowError("Blame", ex.Message);
                 return;
             }
+            if (seq != _historyRequestSeq) return; // superseded by a newer History/Blame click
             string lastSha = null;
             bool alt = false;
             foreach (var b in blame)
@@ -148,6 +169,7 @@ namespace PickleGit.ViewModels
         private async Task EnterHistoryModeAsync(string path, bool blameContent = false)
         {
             if (string.IsNullOrEmpty(path)) return;
+            var seq = ++_historyRequestSeq;
             _blameHistoryFilePath = path;
             DiffPaneMode = DiffPaneMode.History;
             SetBlameContentSilently(blameContent); // SelectedFileHistoryCommit (below) triggers the actual load
@@ -160,9 +182,10 @@ namespace PickleGit.ViewModels
             }
             catch (Exception ex)
             {
-                DialogService.ShowError("File History", ex.Message);
+                if (seq == _historyRequestSeq) DialogService.ShowError("File History", ex.Message);
                 return;
             }
+            if (seq != _historyRequestSeq) return; // superseded by a newer History/Blame click
             foreach (var c in history) FileHistoryCommits.Add(c);
             if (FileHistoryCommits.Count > 0) SelectedFileHistoryCommit = FileHistoryCommits[0];
         }
