@@ -116,8 +116,8 @@ namespace PickleGit.Controls
                 if (container == null || !container.IsArrangeValid) continue;
 
                 double left, right;
-                var topLeft = container.TransformToAncestor(_overlay).Transform(new Point(0, 0));
-                var bottomRight = container.TransformToAncestor(_overlay).Transform(new Point(container.ActualWidth, container.ActualHeight));
+                var topLeft = container.TransformToVisual(_overlay).Transform(new Point(0, 0));
+                var bottomRight = container.TransformToVisual(_overlay).Transform(new Point(container.ActualWidth, container.ActualHeight));
 
                 int rowTextLength = (_getRowText(_listView.Items[i]) ?? string.Empty).Length;
 
@@ -276,7 +276,7 @@ namespace PickleGit.Controls
         /// boundary rows of a selection, never the full range.</summary>
         private double XForCharIndex(TextBlock textBlock, int ch, int textLength)
         {
-            if (textLength == 0) return textBlock.TransformToAncestor(_overlay).Transform(new Point(0, 0)).X;
+            if (textLength == 0) return textBlock.TransformToVisual(_overlay).Transform(new Point(0, 0)).X;
             ch = Math.Max(0, Math.Min(ch, textLength));
             double lo = 0, hi = Math.Max(textBlock.ActualWidth, 20000);
             double midY = Math.Max(textBlock.ActualHeight / 2, 1);
@@ -286,7 +286,7 @@ namespace PickleGit.Controls
                 int idxAtMid = PlainCharIndexAt(textBlock, new Point(mid, midY), textLength);
                 if (idxAtMid < ch) lo = mid; else hi = mid;
             }
-            return textBlock.TransformToAncestor(_overlay).Transform(new Point(hi, 0)).X;
+            return textBlock.TransformToVisual(_overlay).Transform(new Point(hi, 0)).X;
         }
 
         private static string SafeSubstring(string text, int start, int end)
