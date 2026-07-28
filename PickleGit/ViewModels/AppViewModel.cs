@@ -709,10 +709,16 @@ namespace PickleGit.ViewModels
                 Tabs.Add(tab);
             }
             ActiveTab = tab;
+            // Hide the Open/Clone/Init landing page as soon as the clone starts rather than
+            // waiting for it to finish — there's no reason to keep offering those options while
+            // the repo is already receiving objects. Restored below on failure so a reused tab can
+            // still be retried from the same landing page instead of being left an empty shell.
+            if (reusing) tab.IsPlaceholder = false;
             await tab.CloneRepoAsync(url, localPath, username, password, branch, recurseSubmodules);
             if (!tab.HasRepo)
             {
                 if (!reusing) { Tabs.Remove(tab); tab.Dispose(); }
+                else tab.IsPlaceholder = true;
             }
             else
             {

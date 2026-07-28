@@ -27,7 +27,15 @@ namespace PickleGit.ViewModels
         private bool _isBusy;
 
         public string RepoPath { get => _repoPath; private set => Set(ref _repoPath, value); }
+
+        /// <summary>Destination folder of a clone in progress — RepoPath itself isn't set until
+        /// OpenRepoAsync opens the freshly-cloned repo, so without this the tab would keep showing
+        /// "New Tab"/"(no repository)" for the whole (potentially long) clone instead of the
+        /// destination folder's name. See CloneRepoAsync.</summary>
+        private string _pendingLocalPath;
+
         public string RepoName => RepoPath != null ? Path.GetFileName(RepoPath.TrimEnd('\\', '/'))
+            : _pendingLocalPath != null ? Path.GetFileName(_pendingLocalPath.TrimEnd('\\', '/'))
             : IsPlaceholder ? "New Tab" : "(no repository)";
 
         private bool _isPlaceholder;
@@ -942,59 +950,69 @@ namespace PickleGit.ViewModels
         public async Task CloneRepoAsync(string url, string localPath, string username, string password,
             string branch = null, bool recurseSubmodules = false)
         {
-            // Submodule recursion needs git.exe on both paths — libgit2sharp 0.27's
-            // RecurseSubmodules is unreliable with credentials, so prefer the CLI when asked.
-            if ((GitCli.IsSshUrl(url) || recurseSubmodules) && GitCli.IsGitAvailable)
+            _pendingLocalPath = localPath;
+            RaisePropertyChanged(nameof(RepoName));
+            try
             {
-                var parentDir = Path.GetDirectoryName(localPath.TrimEnd('\\', '/'));
-                if (string.IsNullOrEmpty(parentDir)) parentDir = Environment.CurrentDirectory;
-                var extra = (recurseSubmodules ? " --recurse-submodules" : "") +
-                            (!string.IsNullOrWhiteSpace(branch) ? $" --branch {CliGitService.Quote(branch.Trim())}" : "");
-                await RunAsync($"Cloning {url}…", () =>
+                // Submodule recursion needs git.exe on both paths — libgit2sharp 0.27's
+                // RecurseSubmodules is unreliable with credentials, so prefer the CLI when asked.
+                if ((GitCli.IsSshUrl(url) || recurseSubmodules) && GitCli.IsGitAvailable)
                 {
-                    var result = GitCli.RunAsync(parentDir,
-                        $"clone{extra} {CliGitService.Quote(url)} {CliGitService.Quote(localPath)}",
-                        new GitCliOptions { Progress = new Progress<string>(ReportProgress) }, OpToken)
-                        .GetAwaiter().GetResult();
-                    if (!result.Success)
-                        throw new InvalidOperationException(result.ErrorText);
-                });
-            }
-            else
-            {
-                await RunAsync($"Cloning {url}…", () =>
-                {
-                    // Blank credentials go straight into libgit2's CredentialsHandler as empty
-                    // strings, which a private/auth-required remote rejects repeatedly until
-                    // libgit2 gives up with "too many redirects or authentication replays" — so
-                    // before falling back to that, ask git's own configured credential helper
-                    // (same call Push/Pull already use) for cached creds, or to run its normal
-                    // interactive/browser prompt (e.g. GCM) if nothing is cached yet.
-                    if (string.IsNullOrEmpty(username) && string.IsNullOrEmpty(password))
+                    var parentDir = Path.GetDirectoryName(localPath.TrimEnd('\\', '/'));
+                    if (string.IsNullOrEmpty(parentDir)) parentDir = Environment.CurrentDirectory;
+                    var extra = (recurseSubmodules ? " --recurse-submodules" : "") +
+                                (!string.IsNullOrWhiteSpace(branch) ? $" --branch {CliGitService.Quote(branch.Trim())}" : "");
+                    await RunAsync($"Cloning {url}…", () =>
                     {
-                        var (helperUser, helperPass) = CredentialStore.LoadViaGitCredentialHelper(url);
-                        if (!string.IsNullOrEmpty(helperPass))
+                        var result = GitCli.RunAsync(parentDir,
+                            $"clone{extra} {CliGitService.Quote(url)} {CliGitService.Quote(localPath)}",
+                            new GitCliOptions { Progress = new Progress<string>(ReportProgress) }, OpToken)
+                            .GetAwaiter().GetResult();
+                        if (!result.Success)
+                            throw new InvalidOperationException(result.ErrorText);
+                    });
+                }
+                else
+                {
+                    await RunAsync($"Cloning {url}…", () =>
+                    {
+                        // Blank credentials go straight into libgit2's CredentialsHandler as empty
+                        // strings, which a private/auth-required remote rejects repeatedly until
+                        // libgit2 gives up with "too many redirects or authentication replays" — so
+                        // before falling back to that, ask git's own configured credential helper
+                        // (same call Push/Pull already use) for cached creds, or to run its normal
+                        // interactive/browser prompt (e.g. GCM) if nothing is cached yet.
+                        if (string.IsNullOrEmpty(username) && string.IsNullOrEmpty(password))
                         {
-                            username = helperUser;
-                            password = helperPass;
+                            var (helperUser, helperPass) = CredentialStore.LoadViaGitCredentialHelper(url);
+                            if (!string.IsNullOrEmpty(helperPass))
+                            {
+                                username = helperUser;
+                                password = helperPass;
+                            }
                         }
-                    }
-                    GitService.Clone(url, localPath, username, password,
-                        new Progress<string>(ReportProgress), OpToken, branch);
-                });
+                        GitService.Clone(url, localPath, username, password,
+                            new Progress<string>(ReportProgress), OpToken, branch);
+                    });
+                }
+                await OpenRepoAsync(localPath);
+                if (_git.IsOpen)
+                {
+                    RemoteUsername = username;
+                    RemotePassword = password;
+                    // The libgit2 clone path above has no LFS awareness, so a freshly-cloned LFS repo
+                    // is left with raw pointer files — detect that here so the "Pull LFS objects"
+                    // suggestion shows up immediately (see RefreshLfsStatusAsync). Harmless no-op for
+                    // the git.exe clone path, which already smudged real content itself.
+                    await RefreshLfsStatusAsync();
+                    await RefreshAsync();
+                    SaveCredentials(); // Remotes are populated after refresh
+                }
             }
-            await OpenRepoAsync(localPath);
-            if (_git.IsOpen)
+            finally
             {
-                RemoteUsername = username;
-                RemotePassword = password;
-                // The libgit2 clone path above has no LFS awareness, so a freshly-cloned LFS repo
-                // is left with raw pointer files — detect that here so the "Pull LFS objects"
-                // suggestion shows up immediately (see RefreshLfsStatusAsync). Harmless no-op for
-                // the git.exe clone path, which already smudged real content itself.
-                await RefreshLfsStatusAsync();
-                await RefreshAsync();
-                SaveCredentials(); // Remotes are populated after refresh
+                _pendingLocalPath = null;
+                RaisePropertyChanged(nameof(RepoName));
             }
         }
 
