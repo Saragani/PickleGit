@@ -117,16 +117,29 @@
                                      unconstrained width along the scroll axis, so it always lays out
                                      in one row and any overflow becomes horizontally scrollable —
                                      ScrollBar.LineLeftCommand/LineRightCommand are handled natively by
-                                     ScrollViewer, no code-behind needed for the arrow buttons. -->
-                                <Grid>
+                                     ScrollViewer, no code-behind needed for the scroll action itself.
+                                     The arrows' Visibility, however, IS toggled from code-behind
+                                     (MainWindow.xaml.cs, SetupTabScrollArrows/UpdateTabScrollArrows) —
+                                     ScrollViewer.ExtentWidth/ViewportWidth are plain CLR properties, not
+                                     DependencyProperties, so whether scrolling is even possible can't be
+                                     expressed as a XAML binding; the code-behind listens to ScrollChanged
+                                     instead and hides both arrows when nothing overflows.
+                                     The "+" button sits after the right arrow and is always visible
+                                     (unlike the arrows), replacing the old toolbar Open/Clone/Init
+                                     buttons. Adding a tab or selecting one scrolls it into view (see
+                                     MainTabControl_SelectionChanged / AddEmptyTabCommand handling in
+                                     code-behind), so reaching a tab that's currently scrolled out of
+                                     sight doesn't require manually clicking the arrows first. -->
+                                <Grid HorizontalAlignment="Left">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Button Grid.Column="0" Style="{StaticResource ToolbarButton}"
-                                            Padding="6,4" Margin="2,0"
+                                    <Button x:Name="TabScrollLeftButton" Grid.Column="0"
+                                            Style="{StaticResource ToolbarButton}"
+                                            Padding="6,4" Margin="2,0" Visibility="Collapsed"
                                             Command="ScrollBar.LineLeftCommand"
                                             CommandTarget="{Binding ElementName=PART_TabScroller}"
                                             ToolTip="Scroll tabs left">
@@ -140,17 +153,14 @@
                                                   IsItemsHost="True"
                                                   Background="Transparent"/>
                                     </ScrollViewer>
-                                    <Button Grid.Column="2" Style="{StaticResource ToolbarButton}"
-                                            Padding="6,4" Margin="0,0,2,0"
+                                    <Button x:Name="TabScrollRightButton" Grid.Column="2"
+                                            Style="{StaticResource ToolbarButton}"
+                                            Padding="6,4" Margin="0,0,2,0" Visibility="Collapsed"
                                             Command="ScrollBar.LineRightCommand"
                                             CommandTarget="{Binding ElementName=PART_TabScroller}"
                                             ToolTip="Scroll tabs right">
                                         <TextBlock Text="&#xE76C;" FontFamily="Segoe Fluent Icons" FontSize="12"/>
                                     </Button>
-                                    <!-- Always visible after the tab strip (outside the scrollable
-                                         region), replacing the old toolbar Open/Clone/Init buttons —
-                                         opens a new placeholder tab showing those same three options
-                                         (see NewTabPlaceholderView). -->
                                     <Button Grid.Column="3" Style="{StaticResource ToolbarButton}"
                                             Padding="8,4" Margin="4,0,6,0" FontSize="14"
                                             Command="{Binding DataContext.AddEmptyTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -349,7 +359,8 @@
                         ItemsSource="{Binding Tabs}"
                         SelectedItem="{Binding ActiveTab}"
                         Style="{StaticResource DarkTabControl}"
-                        ItemContainerStyle="{StaticResource DarkTabItem}">
+                        ItemContainerStyle="{StaticResource DarkTabItem}"
+                        SelectionChanged="MainTabControl_SelectionChanged">
 
                 <!-- ── Tab header: repo name + close button ────────────────── -->
                 <TabControl.ItemTemplate>

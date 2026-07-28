@@ -64,6 +64,7 @@ namespace PickleGit
             RestoreWindowGeometry();
             Closing += (s, e) => SaveWindowGeometry();
             Loaded += (s, e) => ApplyDarkTitleBar();
+            Loaded += (s, e) => SetupTabScrollArrows();
 
             // Catch mouse-up anywhere on the window so a drag is always cleared
             PreviewMouseLeftButtonUp += (s, e) => EndTabDrag();
@@ -290,6 +291,61 @@ namespace PickleGit
             }
             _draggingTab = null;
             _isDragging = false;
+        }
+
+        // ── Tab strip scroll arrows: only shown when the tabs actually overflow ─
+
+        private ScrollViewer _tabScroller;
+        private Button _tabScrollLeftButton;
+        private Button _tabScrollRightButton;
+
+        private void SetupTabScrollArrows()
+        {
+            // ApplyTemplate() forces the DarkTabControl style's ControlTemplate to be built
+            // immediately, so Template.FindName can locate its named parts right away.
+            MainTabControl.ApplyTemplate();
+            _tabScroller = MainTabControl.Template.FindName("PART_TabScroller", MainTabControl) as ScrollViewer;
+            _tabScrollLeftButton = MainTabControl.Template.FindName("TabScrollLeftButton", MainTabControl) as Button;
+            _tabScrollRightButton = MainTabControl.Template.FindName("TabScrollRightButton", MainTabControl) as Button;
+            if (_tabScroller == null) return;
+
+            // ScrollViewer.ScrollableWidth isn't a DependencyProperty, so whether the tab strip
+            // overflows can't be expressed as a XAML binding — ScrollChanged fires both on user
+            // scroll and whenever Extent/Viewport change (tab added/removed, window resized).
+            _tabScroller.ScrollChanged += (s, e) => UpdateTabScrollArrows();
+            UpdateTabScrollArrows();
+        }
+
+        private void UpdateTabScrollArrows()
+        {
+            if (_tabScroller == null) return;
+            var visibility = _tabScroller.ScrollableWidth > 0.5 ? Visibility.Visible : Visibility.Collapsed;
+            if (_tabScrollLeftButton != null) _tabScrollLeftButton.Visibility = visibility;
+            if (_tabScrollRightButton != null) _tabScrollRightButton.Visibility = visibility;
+        }
+
+        // Fires for the TabControl itself AND bubbles up from any Selector inside a tab's own
+        // content (ComboBoxes, ListViews, ...) — OriginalSource narrows it down to the former,
+        // so picking a sort-mode dropdown doesn't also re-scroll the tab strip.
+        private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (e.OriginalSource != MainTabControl) return;
+            ScrollActiveTabIntoView();
+        }
+
+        private void ScrollActiveTabIntoView()
+        {
+            // A newly-added tab's container may not exist yet when the selection change fires;
+            // deferring to Loaded priority and forcing UpdateLayout gives the generator a chance
+            // to realize it first (see the ApplyTemplate/Loaded timing note in CLAUDE.md).
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                var activeTab = _vm.ActiveTab;
+                if (activeTab == null) return;
+                MainTabControl.UpdateLayout();
+                if (MainTabControl.ItemContainerGenerator.ContainerFromItem(activeTab) is TabItem item)
+                    item.BringIntoView();
+            }));
         }
 
         // ── Branch selection → commit scroll ─────────────────────────────────
