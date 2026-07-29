@@ -1806,10 +1806,107 @@ namespace PickleGit.Services
             return true;
         }
 
-        /// <summary>Per-line blame for the file's current working-tree content.</summary>
+        /// <summary>Per-line blame for the file's current working-tree content, or as of a specific
+        /// commit when <paramref name="sha"/> is given (History mode navigating commits).</summary>
         public List<BlameLine> GetBlame(string filePath, string sha = null)
         {
             EnsureOpen();
+            if (Cli != null && Cli.IsAvailable)
+            {
+                try { return GetBlameCli(filePath, sha); }
+                catch (Exception ex) { AppLog.Warn("GetBlameCli failed, falling back to LibGit2Sharp", ex); }
+            }
+            return GetBlameViaLibGit2(filePath, sha);
+        }
+
+        /// <summary>libgit2's own Blame() walk has no bound on history/rename complexity: on a file
+        /// with a long, heavily-merged history in a large repo it can take minutes — confirmed on a
+        /// real repro (274-branch repo, ~9000-line file) at over two minutes, versus `git blame`
+        /// finishing the identical file/commit in well under a second. Worse, GetBlame runs on the
+        /// single dedicated GitExecutor thread shared by the whole tab (see CLAUDE.md), so while
+        /// libgit2 grinds through the walk, every other git operation for that repo — including the
+        /// refresh that repopulates "Files changed" after reselecting a commit — sits queued behind
+        /// it and appears to just not work. Routing through git.exe (already the pattern for
+        /// GetBranches/GetTags/GetFileHistory) removes both symptoms at once.</summary>
+        private List<BlameLine> GetBlameCli(string filePath, string sha)
+        {
+            var args = "blame --porcelain "
+                       + (!string.IsNullOrEmpty(sha) ? Git.CliGitService.Quote(sha) + " " : "")
+                       + "-- " + Git.CliGitService.Quote(filePath);
+            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+            {
+                var cliResult = Cli.RunCheckedAsync(args, ct: cts.Token).GetAwaiter().GetResult();
+                return ParsePorcelainBlame(cliResult.StdOut);
+            }
+        }
+
+        /// <summary>A porcelain blame header line is `<40-hex sha> <orig-line> <final-line>
+        /// [<group-line-count>]` — the trailing count is only present on the first line of a run of
+        /// consecutive lines from the same commit, so it's parsed positionally and never relied on.</summary>
+        private static bool IsBlameHeaderLine(string line, out string sha, out int finalLine)
+        {
+            sha = null; finalLine = 0;
+            if (line.Length < 41 || line[40] != ' ') return false;
+            for (int j = 0; j < 40; j++)
+                if (!Uri.IsHexDigit(line[j])) return false;
+            var parts = line.Split(' ');
+            if (parts.Length < 3 || !int.TryParse(parts[2], out finalLine)) return false;
+            sha = parts[0];
+            return true;
+        }
+
+        /// <summary>Parses `git blame --porcelain` output. Per-commit metadata (author, author-time,
+        /// summary, …) is only emitted the first time a commit appears in the whole output — every
+        /// later reference to that same commit is just the header line followed immediately by the
+        /// tab-prefixed content line — so metadata is cached per sha as it's first seen.</summary>
+        private static List<BlameLine> ParsePorcelainBlame(string stdout)
+        {
+            var result = new List<BlameLine>();
+            var commitInfo = new Dictionary<string, (string author, DateTimeOffset date, string summary)>();
+            var lines = stdout.Split('\n');
+
+            int i = 0;
+            while (i < lines.Length)
+            {
+                var line = lines[i].TrimEnd('\r');
+                if (!IsBlameHeaderLine(line, out var sha, out var finalLine)) { i++; continue; }
+                i++;
+
+                commitInfo.TryGetValue(sha, out var info);
+                var author = info.author;
+                var date = info.date;
+                var summary = info.summary;
+                long authorTime = 0;
+                while (i < lines.Length && !lines[i].StartsWith("\t"))
+                {
+                    var meta = lines[i];
+                    if (meta.StartsWith("author ")) author = meta.Substring(7);
+                    else if (meta.StartsWith("author-time ")) long.TryParse(meta.Substring(12), out authorTime);
+                    else if (meta.StartsWith("summary ")) summary = meta.Substring(8);
+                    i++;
+                }
+                if (authorTime != 0) date = DateTimeOffset.FromUnixTimeSeconds(authorTime);
+                commitInfo[sha] = (author, date, summary);
+
+                if (i >= lines.Length || !lines[i].StartsWith("\t")) continue; // malformed/truncated tail
+                result.Add(new BlameLine
+                {
+                    LineNumber = finalLine,
+                    Content = lines[i].Substring(1).TrimEnd('\r'),
+                    Sha = sha,
+                    AuthorName = author ?? string.Empty,
+                    AuthorDate = date,
+                    MessageShort = summary
+                });
+                i++;
+            }
+            return result;
+        }
+
+        /// <summary>LibGit2Sharp fallback used only when git.exe isn't available — see GetBlameCli's
+        /// remarks for why the CLI path is strongly preferred whenever git.exe is present.</summary>
+        private List<BlameLine> GetBlameViaLibGit2(string filePath, string sha)
+        {
             BlameHunkCollection hunks;
             string[] contentLines;
             if (!string.IsNullOrEmpty(sha))
