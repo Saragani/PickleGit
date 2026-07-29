@@ -1768,6 +1768,29 @@ namespace PickleGit.ViewModels
                           "branch that isn't checked out only ever fast-forwards, since there's no working " +
                           "tree to merge into. Check the branch out and Pull (or rebase/reset) it instead.";
                 }
+                // Pull fetches fine but then can't find the branch's configured upstream ref in
+                // FETCH_HEAD, whose entries always carry the remote's exact casing. The most common
+                // cause: git ref names are case-sensitive, but on Windows' case-insensitive filesystem
+                // `git checkout SomeName` can silently succeed and record the wrong case in
+                // branch.<name>.merge when only the letter case differs from the real remote branch —
+                // confirmed as the root cause the first time this surfaced. The rest is a remote
+                // branch that was renamed or deleted after this branch's upstream was set.
+                else if (ex is LibGit2Sharp.MergeFetchHeadNotFoundException)
+                {
+                    var quoteStart = msg.IndexOf('\'');
+                    var quoteEnd = quoteStart >= 0 ? msg.IndexOf('\'', quoteStart + 1) : -1;
+                    var refName = quoteEnd > quoteStart
+                        ? msg.Substring(quoteStart + 1, quoteEnd - quoteStart - 1)
+                        : "the upstream branch";
+                    msg = $"Pull failed: this branch is set to track '{refName}', but that exact ref " +
+                          "wasn't found in what was just fetched.\n\n" +
+                          "Most likely cause: the branch name's letter case doesn't exactly match the " +
+                          "remote's (git branch names are case-sensitive, even though Windows silently " +
+                          "tolerates the mismatch when you check the branch out). It can also mean the " +
+                          "remote branch was renamed or deleted since this branch's upstream was set.\n\n" +
+                          "Fix by re-pointing this branch's upstream at the correct remote branch, e.g.:\n" +
+                          "  git branch --set-upstream-to=origin/<CorrectName> <this-branch>";
+                }
                 StatusMessage = $"Error: {msg}";
                 DialogService.ShowError("Operation Failed", msg, ex.ToString());
                 return false;
