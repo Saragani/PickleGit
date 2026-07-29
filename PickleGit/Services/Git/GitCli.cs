@@ -184,13 +184,17 @@ namespace PickleGit.Services.Git
                 // stdout — so progress has to be reported from both streams, not just stderr.
                 var stdoutTask = PumpStreamAsync(proc.StandardOutput, line =>
                 {
-                    lock (stdout) stdout.AppendLine(line.TrimEnd());
+                    // Keep the buffered copy byte-for-byte (callers like GetBranchesViaCli parse
+                    // tab-delimited output and a trailing empty field is significant) — only trim
+                    // the copy handed to the status bar, since git pads progress lines with
+                    // trailing spaces to blank out a previous longer line when overwriting via '\r'.
+                    lock (stdout) stdout.AppendLine(line);
                     opts?.Progress?.Report(line.TrimEnd());
                 });
                 var stderrTask = PumpStreamAsync(proc.StandardError, line =>
                 {
                     lock (stderr) stderr.AppendLine(line);
-                    opts?.Progress?.Report(line);
+                    opts?.Progress?.Report(line.TrimEnd());
                 });
 
                 if (opts?.StdIn != null)
