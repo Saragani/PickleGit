@@ -450,8 +450,15 @@
                                Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12"
                                Visibility="{Binding ActiveTab.CurrentBranch, Converter={StaticResource InvertDetachedVis}}"/>
                     <Border Background="{DynamicResource DetachedBadgeBrush}" CornerRadius="3" Padding="6,1"
-                            Visibility="{Binding ActiveTab.CurrentBranch, Converter={StaticResource DetachedVis}}"
-                            ToolTip="HEAD is not on a branch — commits here can be lost unless you create a branch or tag.">
+                            Visibility="{Binding ActiveTab.CurrentBranch, Converter={StaticResource DetachedVis}}">
+                        <Border.ToolTip>
+                            <!-- MaxWidth + Wrap: DetachedHeadTooltip's commit message line can be long. -->
+                            <TextBlock MaxWidth="360" TextWrapping="Wrap">
+                                <Run Text="HEAD is not on a branch — commits here can be lost unless you create a branch or tag."/>
+                                <LineBreak/><LineBreak/>
+                                <Run Text="{Binding ActiveTab.DetachedHeadTooltip, Mode=OneWay}"/>
+                            </TextBlock>
+                        </Border.ToolTip>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#x26A0; " FontSize="11" Foreground="White"/>
                             <TextBlock Text="{Binding ActiveTab.CurrentBranch, FallbackValue=''}"

@@ -2004,6 +2004,33 @@ namespace PickleGit.Services
             return _repo.Head?.Tip?.Sha;
         }
 
+        /// <summary>Rich info for the detached-HEAD status-bar badge's tooltip: the commit's message,
+        /// author, and date, plus the tag name if this exact commit is tagged. Callers should only
+        /// invoke this while actually detached, and cache the result per-SHA — `git describe` is a
+        /// process spawn, cheap but not free to repeat on every auto-refresh tick.</summary>
+        public string GetDetachedHeadInfo()
+        {
+            EnsureOpen();
+            var commit = _repo.Head?.Tip;
+            if (commit == null) return null;
+
+            var sb = new StringBuilder();
+            sb.Append(FirstLine(commit.Message));
+            sb.Append('\n').Append(commit.Author.Name)
+              .Append(" · ").Append(commit.Author.When.ToString("yyyy-MM-dd HH:mm"));
+
+            if (Cli != null && Cli.IsAvailable)
+            {
+                // Non-zero exit here just means "no tag points exactly at this commit" — the
+                // ordinary case, not a failure — so the result is simply omitted, not surfaced.
+                var result = Cli.RunAsync("describe --tags --exact-match " + commit.Sha)
+                    .GetAwaiter().GetResult();
+                if (result.Success && !string.IsNullOrWhiteSpace(result.StdOut))
+                    sb.Append("\nTag: ").Append(result.StdOut.Trim());
+            }
+            return sb.ToString();
+        }
+
         /// <summary>Tip SHA of any branch by friendly name (e.g. "origin/main"), or null.</summary>
         public string GetBranchTipSha(string branchName)
         {

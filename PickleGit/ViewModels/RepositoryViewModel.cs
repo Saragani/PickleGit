@@ -23,8 +23,15 @@ namespace PickleGit.ViewModels
         // ── Repository state ──────────────────────────────────────────────────
         private string _repoPath;
         private string _currentBranch;
+        private string _detachedHeadTooltip;
         private string _statusMessage = "Ready";
         private bool _isBusy;
+
+        // Cache for the detached-HEAD tooltip, keyed by SHA — GetDetachedHeadInfo runs a `git
+        // describe`, so it's only recomputed when the detached SHA actually changes, not on every
+        // auto-refresh tick while sitting in the same detached state.
+        private string _lastDetachedInfoSha;
+        private string _lastDetachedInfo;
 
         public string RepoPath { get => _repoPath; private set => Set(ref _repoPath, value); }
 
@@ -54,6 +61,9 @@ namespace PickleGit.ViewModels
             }
         }
         public string CurrentBranch { get => _currentBranch; private set => Set(ref _currentBranch, value); }
+        /// <summary>Commit message/author/date, plus tag name if exactly tagged — bound as the
+        /// detached-HEAD status-bar badge's tooltip; null while on a branch. See ComputeDetachedHeadInfo.</summary>
+        public string DetachedHeadTooltip { get => _detachedHeadTooltip; private set => Set(ref _detachedHeadTooltip, value); }
         public string StatusMessage { get => _statusMessage; set => Set(ref _statusMessage, value); }
         public bool IsBusy
         {
@@ -871,6 +881,7 @@ namespace PickleGit.ViewModels
             await RunAsync("Loading repository branches...", () =>
             {
                 var branch = _git.GetCurrentBranch();
+                var detachedInfo = ComputeDetachedHeadInfo(branch);
                 var branches = _git.GetBranches();
                 var tags = _git.GetTags();
                 var stashes = _git.GetStashes();
@@ -890,6 +901,7 @@ namespace PickleGit.ViewModels
                     Stashes = new ObservableCollection<StashInfo>(stashes);
                     Remotes = new ObservableCollection<RemoteInfo>(remotes);
                     CurrentBranch = branch;
+                    DetachedHeadTooltip = detachedInfo;
                 });
             });
         }
@@ -1146,6 +1158,7 @@ namespace PickleGit.ViewModels
                 }
 
                 var branch   = _git.GetCurrentBranch();
+                var detachedInfo = ComputeDetachedHeadInfo(branch);
                 var headSha  = _git.GetHeadSha();
                 var bisect   = _git.GetBisectState();
                 var branches = reusedBranches ?? _git.GetBranches();
@@ -1259,6 +1272,7 @@ namespace PickleGit.ViewModels
                     Stashes = new ObservableCollection<StashInfo>(stashes);
                     Remotes = new ObservableCollection<RemoteInfo>(remotes);
                     CurrentBranch = branch;
+                    DetachedHeadTooltip = detachedInfo;
 
                     if (savedSha != null)
                     {
@@ -1804,6 +1818,25 @@ namespace PickleGit.ViewModels
                 RaisePropertyChanged(nameof(CanCancel));
                 ProgressPercent = -1;
             }
+        }
+
+        /// <summary>Must run on the executor thread (calls into GitService). Returns null and clears
+        /// the cache when not detached; otherwise returns the cached tooltip if the detached SHA
+        /// hasn't changed since last time, only calling GitService.GetDetachedHeadInfo (a `git
+        /// describe` spawn) when it has.</summary>
+        private string ComputeDetachedHeadInfo(string branch)
+        {
+            if (branch == null || !branch.StartsWith("detached", StringComparison.Ordinal))
+            {
+                _lastDetachedInfoSha = null;
+                _lastDetachedInfo = null;
+                return null;
+            }
+            var headSha = _git.GetHeadSha();
+            if (headSha == _lastDetachedInfoSha) return _lastDetachedInfo;
+            _lastDetachedInfoSha = headSha;
+            _lastDetachedInfo = _git.GetDetachedHeadInfo();
+            return _lastDetachedInfo;
         }
 
         private ObservableCollection<BranchNodeViewModel> BuildBranchTree(
