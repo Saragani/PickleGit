@@ -1567,7 +1567,17 @@ namespace PickleGit.ViewModels
                 // Reset/revert/stash-pop/undo can all restore LFS-tracked files to raw pointer
                 // content — this was previously undetected for these operations entirely (only
                 // checkout/clone/pull ever checked). See RefreshLfsStatusAsync.
-                if (ok) await RefreshLfsStatusAsync();
+                if (ok)
+                {
+                    await RefreshLfsStatusAsync();
+                    // Try the local object cache first (no network) before ever showing a pointer
+                    // count the user would have to act on — see SmudgeLfsFromLocalCacheAsync.
+                    if (LfsUnpulledCount > 0)
+                    {
+                        await SmudgeLfsFromLocalCacheAsync();
+                        await RefreshLfsStatusAsync();
+                    }
+                }
                 await RefreshAsync();
                 return ok;
             }
@@ -1589,7 +1599,19 @@ namespace PickleGit.ViewModels
             {
                 var preLfsUnpulled = LfsUnpulledCount;
                 var ok = await RunWorkAsync(status, work);
-                if (ok) await RefreshLfsStatusAsync();
+                if (ok)
+                {
+                    await RefreshLfsStatusAsync();
+                    // libgit2 checkout (used here) never runs git-lfs's smudge filter, so
+                    // switching back to a branch whose LFS content was already pulled before
+                    // still needs this local-cache-only "finish the checkout" step every time —
+                    // try it before ever counting this as something the user needs to act on.
+                    if (LfsUnpulledCount > 0)
+                    {
+                        await SmudgeLfsFromLocalCacheAsync();
+                        await RefreshLfsStatusAsync();
+                    }
+                }
                 await RefreshAsync(false, CheckoutRefreshScope);
                 // Only pop the popup when THIS checkout is what caused (or grew) the gap — not on
                 // every checkout while an earlier, already-dismissed shortfall is still sitting

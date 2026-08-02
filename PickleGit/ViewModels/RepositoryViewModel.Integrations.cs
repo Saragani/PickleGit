@@ -107,6 +107,22 @@ namespace PickleGit.ViewModels
                 await PullLfsObjectsAsync();
         }
 
+        /// <summary>Materializes LFS-tracked files that are still raw pointer text using ONLY
+        /// already-cached local objects (`git lfs checkout`) — no network access at all, unlike
+        /// `git lfs pull`. libgit2 checkout (used by every branch/tag/commit checkout in this app,
+        /// via GitService.Checkout et al.) never invokes git-lfs's smudge filter, so switching back
+        /// to a branch whose LFS content was already pulled on an earlier visit still needs this
+        /// "finish the checkout" step every single time — run it silently before ever bothering the
+        /// user with a prompt, so a round-trip through already-fetched branches never nags for a
+        /// pull it doesn't actually need. Only objects genuinely missing from the local cache still
+        /// need the explicit, user-initiated "Pull Now" (see PromptLfsPullAfterCheckoutAsync).</summary>
+        private async Task SmudgeLfsFromLocalCacheAsync()
+        {
+            if (_git.Cli == null || !_git.Cli.IsAvailable) return;
+            try { await _git.Cli.RunAsync("lfs checkout"); }
+            catch (Exception ex) { AppLog.Warn("SmudgeLfsFromLocalCacheAsync failed", ex); }
+        }
+
         /// <summary>Runs the actual `git lfs pull` — only ever user-initiated (the "Pull LFS
         /// objects" banner button), unlike the old automatic background pull this replaced.</summary>
         private async Task PullLfsObjectsAsync()
