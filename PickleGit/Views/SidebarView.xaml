@@ -348,6 +348,11 @@
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                               CommandParameter="{Binding PlacementTarget.DataContext.BranchInfo,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                    <MenuItem Header="Push to remote"
+                                              Command="{Binding PlacementTarget.Tag.PushBranchCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{Binding PlacementTarget.DataContext.BranchInfo,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                     <MenuItem Header="Create Pull Request…"
                                               Visibility="{Binding PlacementTarget.Tag.Hosting.HasHostingProvider,
                                                            Converter={StaticResource BoolToVis},

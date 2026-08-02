@@ -560,6 +560,7 @@ namespace PickleGit.ViewModels
         public ICommand FetchCommand { get; }
         public ICommand PullCommand { get; }
         public ICommand PushCommand { get; }
+        public ICommand PushBranchCommand { get; }
         public ICommand PullLfsObjectsCommand { get; }
         public ICommand CreateBranchCommand { get; }
         public ICommand CheckoutBranchCommand { get; }
@@ -687,6 +688,8 @@ namespace PickleGit.ViewModels
             FetchCommand = new RelayCommand(async () => await FetchAsync(), () => HasRepo);
             PullCommand = new RelayCommand(async () => await PullAsync(), () => HasRepo);
             PushCommand = new RelayCommand(async () => await PushAsync(), () => HasRepo);
+            PushBranchCommand = new RelayCommand(p => _ = PushBranchAsync(p),
+                p => HasRepo && p is BranchInfo bi && !bi.IsRemote);
             PullLfsObjectsCommand = new RelayCommand(async () => await PullLfsObjectsAsync(), () => HasRepo && LfsUnpulledCount > 0);
             FetchPruneCommand = new RelayCommand(async () => await FetchAsync(prune: true), () => HasRepo);
             FetchAllCommand = new RelayCommand(async () => await FetchAsync(allRemotes: true), () => HasRepo);
@@ -1584,9 +1587,15 @@ namespace PickleGit.ViewModels
             if (!TryEnterBusyScope()) return false;
             try
             {
+                var preLfsUnpulled = LfsUnpulledCount;
                 var ok = await RunWorkAsync(status, work);
                 if (ok) await RefreshLfsStatusAsync();
                 await RefreshAsync(false, CheckoutRefreshScope);
+                // Only pop the popup when THIS checkout is what caused (or grew) the gap — not on
+                // every checkout while an earlier, already-dismissed shortfall is still sitting
+                // there unresolved.
+                if (ok && LfsUnpulledCount > 0 && LfsUnpulledCount > preLfsUnpulled)
+                    await PromptLfsPullAfterCheckoutAsync();
                 return ok;
             }
             finally { IsBusy = false; }

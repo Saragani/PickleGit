@@ -33,7 +33,7 @@ namespace PickleGit.Services
         }
 
         public static bool Confirm(string title, string message,
-            string okText = "OK", bool danger = false)
+            string okText = "OK", bool danger = false, string cancelText = "Cancel")
         {
             var dlg = new ConfirmDialog
             {
@@ -42,6 +42,7 @@ namespace PickleGit.Services
                 HeaderText = title,
                 MessageText = message,
                 OkText = okText,
+                CancelText = cancelText,
                 IsDanger = danger
             };
             return dlg.ShowDialog() == true;

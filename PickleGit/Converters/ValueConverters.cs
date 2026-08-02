@@ -668,4 +668,31 @@ namespace PickleGit.Converters
             => (value is int i && i >= 2) ? Visibility.Visible : Visibility.Collapsed;
         public object ConvertBack(object value, Type t, object p, CultureInfo c) => throw new NotSupportedException();
     }
+
+    /// <summary>RepositoryViewModel.ProgressPercent is 0-100 (-1 when hidden);
+    /// Window.TaskbarItemInfo.ProgressValue wants a 0-1 fraction.</summary>
+    public class PercentToFractionConverter : IValueConverter
+    {
+        public object Convert(object value, Type t, object p, CultureInfo c)
+            => value is int pct && pct >= 0 ? Math.Min(pct, 100) / 100.0 : 0.0;
+        public object ConvertBack(object value, Type t, object p, CultureInfo c) => throw new NotSupportedException();
+    }
+
+    /// <summary>MultiBinding: (ActiveTab.IsBusy, ActiveTab.HasProgress) → TaskbarItemProgressState.
+    /// Checkout/other fast local ops set IsBusy with no percentage stream (HasProgress false) — those
+    /// get an Indeterminate taskbar overlay; Fetch/Push/Pull/Clone report real percentages
+    /// (HasProgress true) and get Normal; idle (IsBusy false) hides the overlay entirely.</summary>
+    public class TaskbarProgressStateConverter : IMultiValueConverter
+    {
+        public object Convert(object[] values, Type t, object p, CultureInfo c)
+        {
+            bool isBusy = values.Length > 0 && values[0] is bool b && b;
+            bool hasProgress = values.Length > 1 && values[1] is bool hp && hp;
+            if (!isBusy) return System.Windows.Shell.TaskbarItemProgressState.None;
+            return hasProgress
+                ? System.Windows.Shell.TaskbarItemProgressState.Normal
+                : System.Windows.Shell.TaskbarItemProgressState.Indeterminate;
+        }
+        public object[] ConvertBack(object value, Type[] t, object p, CultureInfo c) => null;
+    }
 }

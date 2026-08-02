@@ -305,6 +305,38 @@ namespace PickleGit.ViewModels
             finally { IsBusy = false; }
         }
 
+        /// <summary>Pushes an arbitrary local branch, not necessarily the checked-out one — the
+        /// sidebar's per-branch "Push to remote" context-menu item, and HostingViewModel's
+        /// push-before-PR step when the PR's source branch isn't CurrentBranch. Mirrors
+        /// <see cref="PushAsync"/> exactly, just parameterized on <paramref name="param"/>'s branch
+        /// name instead of always reading CurrentBranch.</summary>
+        public async Task<bool> PushBranchAsync(object param)
+        {
+            if (!(param is BranchInfo bi) || bi.IsRemote) return false;
+            var remoteName = Remotes.FirstOrDefault()?.Name ?? "origin";
+            if (!TryEnterBusyScope()) return false;
+            try
+            {
+                if (GitCli.IsSshUrl(Remotes.FirstOrDefault()?.Url))
+                {
+                    var cliOk = await RunCliAsync($"Pushing {bi.Name} to {remoteName}…",
+                        $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(bi.Name)}", "Push");
+                    if (cliOk) await RefreshAsync(false, PushRefreshScope);
+                    return cliOk;
+                }
+                if (!await EnsureCredentialsAsync()) return false;
+                var ok = await RunAsync($"Pushing {bi.Name} to {remoteName}…", () =>
+                {
+                    _git.Push(remoteName, bi.Name, RemoteUsername, RemotePassword,
+                        new Progress<string>(ReportProgress), OpToken);
+                });
+                if (ok && _credentialsFromDialog) SaveCredentials();
+                await RefreshAsync(false, PushRefreshScope);
+                return ok;
+            }
+            finally { IsBusy = false; }
+        }
+
         // ── Credential helpers ────────────────────────────────────────────────
 
         private async Task<bool> EnsureCredentialsAsync()

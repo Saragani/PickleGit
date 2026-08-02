@@ -89,6 +89,24 @@ namespace PickleGit.ViewModels
             }
         }
 
+        /// <summary>Shown right after a checkout/tag-checkout/remote-branch-checkout whose result
+        /// left LFS-tracked files as un-smudged pointer text — the passive "Pull LFS objects"
+        /// banner (RefreshLfsStatusAsync) only renders inside the Diff/Commit-detail panels, so
+        /// it's easy to miss immediately after switching branches if neither panel happens to be
+        /// open. This surfaces the same information as an unmissable popup, mirroring how clone
+        /// already makes LFS data expectations obvious. Pulling itself still only happens if the
+        /// user opts in here (or later via the banner) — never automatically/silently, per the
+        /// deliberate move away from the old background auto-pull.</summary>
+        private async Task PromptLfsPullAfterCheckoutAsync()
+        {
+            var count = LfsUnpulledCount;
+            var noun = count == 1 ? "file" : "files";
+            if (DialogService.Confirm("Git LFS",
+                    $"{count} {noun} tracked by Git LFS haven't been downloaded yet for this checkout.",
+                    "Pull Now", cancelText: "Later"))
+                await PullLfsObjectsAsync();
+        }
+
         /// <summary>Runs the actual `git lfs pull` — only ever user-initiated (the "Pull LFS
         /// objects" banner button), unlike the old automatic background pull this replaced.</summary>
         private async Task PullLfsObjectsAsync()

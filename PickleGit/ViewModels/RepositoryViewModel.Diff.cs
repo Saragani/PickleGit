@@ -199,6 +199,10 @@ namespace PickleGit.ViewModels
         {
             RaisePropertyChanged(nameof(ShowUnifiedDiff));
             RaisePropertyChanged(nameof(ShowSideBySideDiff));
+            // Matches are content-type-specific (DiffItem vs BlameLine, see _diffMatches) — a mode
+            // switch (e.g. toggling Blame on/off) while Find is open must recompute against
+            // whichever content is now showing, not silently keep stale matches for the other one.
+            RecomputeDiffSearch();
         }
 
         /// <summary>True when the unified (single-column) diff list should be shown — also used by
@@ -522,7 +526,11 @@ namespace PickleGit.ViewModels
             set { if (Set(ref _diffSearchText, value)) RecomputeDiffSearch(); }
         }
 
-        private List<DiffItem> _diffMatches = new List<DiffItem>();
+        // Holds DiffItem instances in the normal diff modes, or BlameLine instances while ShowBlame
+        // is true — MainWindow's ScrollToDiffItemRequested handler already dispatches on whichever
+        // type it actually receives (matches a ListView by its items' runtime type), so navigation
+        // needs no further changes for the blame case, just matches that are really BlameLines.
+        private List<object> _diffMatches = new List<object>();
         private int _diffMatchPos = -1;
 
         private string _diffSearchStatus;
@@ -538,10 +546,19 @@ namespace PickleGit.ViewModels
             var term = _diffSearchText?.Trim();
             if (!string.IsNullOrEmpty(term))
             {
-                foreach (var item in FlatDiffItems)
-                    if (item.Kind == DiffItemKind.Line && item.Line?.Content != null &&
-                        item.Line.Content.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
-                        _diffMatches.Add(item);
+                if (ShowBlame)
+                {
+                    foreach (var line in BlameLines)
+                        if (line.Content != null && line.Content.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
+                            _diffMatches.Add(line);
+                }
+                else
+                {
+                    foreach (var item in FlatDiffItems)
+                        if (item.Kind == DiffItemKind.Line && item.Line?.Content != null &&
+                            item.Line.Content.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
+                            _diffMatches.Add(item);
+                }
             }
             DiffSearchStatus = string.IsNullOrEmpty(term) ? null
                 : _diffMatches.Count == 0 ? "0 matches" : $"{_diffMatches.Count} matches";

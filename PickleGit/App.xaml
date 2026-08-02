@@ -45,6 +45,8 @@
             <conv:DiscardTooltipConverter x:Key="DiscardTooltip"/>
             <conv:DiscardBadgeTextConverter x:Key="DiscardBadgeText"/>
             <conv:IntAtLeastTwoToVisibilityConverter x:Key="IntAtLeastTwoToVis"/>
+            <conv:PercentToFractionConverter x:Key="PercentToFraction"/>
+            <conv:TaskbarProgressStateConverter x:Key="TaskbarProgressState"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -8,6 +8,7 @@
         xmlns:behaviors="clr-namespace:PickleGit.Behaviors"
         xmlns:models="clr-namespace:PickleGit.Models"
         xmlns:views="clr-namespace:PickleGit.Views"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="PickleGit" Height="800" Width="1280" MinWidth="900" MinHeight="600"
         Icon="Resources/pickle.ico"
         Background="{DynamicResource BackgroundBrush}"
@@ -17,6 +18,21 @@
     <!-- InputBindings are built dynamically in code-behind (MainWindow.xaml.cs, RebuildInputBindings)
          from Services/ShortcutManager.cs, so Settings → Shortcuts overrides take effect without
          restarting. See CLAUDE.md "Keyboard shortcuts" for why. -->
+
+    <!-- Mirrors the status-bar ProgressBar/StatusMessage below (ActiveTab.ProgressPercent/
+         HasProgress/IsBusy) so long operations also show on the taskbar button, not just inside
+         the app window. -->
+    <Window.TaskbarItemInfo>
+        <shell:TaskbarItemInfo ProgressValue="{Binding ActiveTab.ProgressPercent, Mode=OneWay,
+                                                Converter={StaticResource PercentToFraction}, FallbackValue=0}">
+            <shell:TaskbarItemInfo.ProgressState>
+                <MultiBinding Converter="{StaticResource TaskbarProgressState}">
+                    <Binding Path="ActiveTab.IsBusy" Mode="OneWay"/>
+                    <Binding Path="ActiveTab.HasProgress" Mode="OneWay"/>
+                </MultiBinding>
+            </shell:TaskbarItemInfo.ProgressState>
+        </shell:TaskbarItemInfo>
+    </Window.TaskbarItemInfo>
 
     <Window.Resources>
         <!-- ── Dark TabItem style ──────────────────────────────────────────── -->

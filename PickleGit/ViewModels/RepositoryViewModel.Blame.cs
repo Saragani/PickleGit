@@ -164,6 +164,11 @@ namespace PickleGit.ViewModels
                 b.IsBandAlt = alt;
                 BlameLines.Add(b);
             }
+            // Navigating between history commits while already in Blame mode swaps BlameLines'
+            // content without a DiffPaneMode/IsBlameContent change, so RaiseDiffModeChanged (which
+            // would otherwise catch this) never fires here — recompute Find matches directly
+            // against the freshly-loaded content instead of leaving stale ones from the prior commit.
+            RecomputeDiffSearch();
         }
 
         private async Task EnterHistoryModeAsync(string path, bool blameContent = false)

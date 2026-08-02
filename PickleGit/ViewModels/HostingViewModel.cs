@@ -127,21 +127,21 @@ namespace PickleGit.ViewModels
             if (dlg.ShowDialog() != true) return;
 
             // Only pushed AFTER the user confirms the dialog (not while it's still being filled
-            // in), and only the checked-out branch can be pushed via PushAsync (it pushes
-            // CurrentBranch, not an arbitrary branch name) — for a different, non-checked-out
-            // source branch (e.g. dragged onto a target), skip the push-first step rather than
-            // risk pushing the wrong branch. Everything below (API create / browser compose page)
-            // must not run unless this push actually succeeds — a PR page for a branch the remote
-            // has never heard of is worse than not opening one at all.
-            if (string.Equals(source, _repo.CurrentBranch, StringComparison.Ordinal))
+            // in). Pushes via PushBranchAsync, which takes the branch explicitly, so this works
+            // for a non-checked-out source branch too (e.g. right-clicked from the sidebar, or
+            // dragged onto a target) — not just CurrentBranch. Everything below (API create /
+            // browser compose page) must not run unless this push actually succeeds — a PR page
+            // for a branch the remote has never heard of is worse than not opening one at all.
+            var sourceBranch = _repo.LocalBranches.FirstOrDefault(
+                b => string.Equals(b.DisplayName, source, StringComparison.Ordinal));
+            if (sourceBranch != null)
             {
-                var current = _repo.LocalBranches.FirstOrDefault(b => b.IsHead);
                 // A brand-new branch has no upstream tracking ref at all, so AheadBy has nothing
                 // to compare against and stays 0 — checking AheadBy alone missed this case entirely.
-                bool neverPushed = current != null && string.IsNullOrEmpty(current.TrackedBranchName);
-                if (current != null && (current.AheadBy > 0 || neverPushed))
+                bool neverPushed = string.IsNullOrEmpty(sourceBranch.TrackedBranchName);
+                if (sourceBranch.AheadBy > 0 || neverPushed)
                 {
-                    if (!await _repo.PushAsync()) return;
+                    if (!await _repo.PushBranchAsync(sourceBranch)) return;
                 }
             }
 
