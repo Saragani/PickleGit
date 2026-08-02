@@ -451,6 +451,7 @@
         <li><a href="#phase-6"><span class="num mono">06</span>Hosting &amp; Ecosystem</a></li>
         <li><a href="#phase-7"><span class="num mono">07</span>Staging &amp; Workflow Polish</a></li>
         <li><a href="#phase-8"><span class="num mono">08</span>Performance &amp; Git LFS Workflow</a></li>
+        <li><a href="#phase-9"><span class="num mono">09</span>Sidebar, Blame &amp; LFS Reliability</a></li>
       </ol>
       <ol class="rail-extra">
         <li><a href="#architecture"><span class="num mono">—</span>Architecture</a></li>
@@ -469,8 +470,8 @@
          and a fair number of things that broke along the way and got fixed before they shipped.</p>
 
       <div class="stats">
-        <div class="stat"><div class="n mono">9</div><div class="l">phases, 00 → 08</div></div>
-        <div class="stat"><div class="n mono">16</div><div class="l">bugs caught live, not just in review</div></div>
+        <div class="stat"><div class="n mono">10</div><div class="l">phases, 00 → 09</div></div>
+        <div class="stat"><div class="n mono">19</div><div class="l">bugs caught live, not just in review</div></div>
         <div class="stat"><div class="n mono">3</div><div class="l">hosting providers, one abstraction</div></div>
         <div class="stat"><div class="n mono">1</div><div class="l">theme — dark, start to finish</div></div>
       </div>
@@ -957,6 +958,84 @@
              <code>GIT_LFS_FORCE_PROGRESS=1</code>, and progress reporting wired to both output streams. Verified
              live: the status bar now climbs from "Downloading LFS objects: 0% (0/1)" to "100% (5/5)" with the
              progress bar filling in step.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ PHASE 9 ══════════════════════ -->
+    <section class="phase" id="phase-9">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 09</span>
+        <h2 class="phase-title display">Sidebar, Blame &amp; LFS Reliability</h2>
+      </div>
+      <p class="thesis">Since <span class="mono">PickleGit_1.0.19</span>: a sidebar-emptying parsing bug, a
+         140-second Blame hang, and a Git LFS workflow that kept re-nagging for a pull it didn't actually need —
+         three reliability regressions found and closed — alongside the branch-Push, PR-push-gate, taskbar
+         progress, and Blame Find work from the last punch list.</p>
+
+      <ul class="feature-list">
+        <li><div><b>Push a branch that isn't checked out</b> — <span class="desc">local branches get a
+            "Push to remote" context-menu item (<code>PushBranchAsync</code>), instead of Push only ever
+            knowing how to push <code>CurrentBranch</code>.</span></div></li>
+        <li><div><b>Create Pull Request pushes the right branch</b> — <span class="desc">the push-before-PR
+            guard no longer silently skips pushing when the PR's source branch isn't the checked-out one — it
+            now pushes whichever branch was actually chosen, through the same <code>PushBranchAsync</code>
+            path.</span></div></li>
+        <li><div><b>Git LFS: an unmissable popup, and no needless network pulls</b> — <span class="desc">checkout
+            (branch, remote-branch, or tag) now pops a message box with a "Pull Now" action when it leaves LFS
+            files un-smudged, instead of relying only on the easy-to-miss Diff/Commit-detail panel banner — and
+            before that popup ever shows, <code>SmudgeLfsFromLocalCacheAsync</code> runs <code>git lfs
+            checkout</code> (local objects only, no network) to finish materializing anything already fetched on
+            an earlier visit, so re-visiting a branch never nags for a pull it doesn't need.</span></div></li>
+        <li><div><b>Taskbar icon progress</b> — <span class="desc"><code>Window.TaskbarItemInfo</code> mirrors
+            the status bar: indeterminate while busy with no percentage (checkout), a real percentage for
+            Fetch/Push/Pull/Clone.</span></div></li>
+        <li><div><b>Blame Find, for real this time</b> — <span class="desc">Find now searches
+            <code>BlameLines</code> instead of only diff content, highlights matches via the new
+            <code>BlameSearchHighlighter</code> behavior, and Find Next/Previous scrolls the Blame list to each
+            one.</span></div></li>
+        <li><div><b>Detached-HEAD tooltip is actually informative</b> — <span class="desc">previously a static
+            warning with no information about which commit HEAD is on; <code>GetDetachedHeadInfo</code> adds the
+            commit's message, author, date, and — via <code>git describe --tags --exact-match</code> — its tag
+            name if it has one, cached per-SHA so the extra <code>git describe</code> spawn only runs when the
+            detached commit actually changes.</span></div></li>
+        <li><div><b>Friendlier message for a common Pull failure</b> — <span class="desc">a
+            <code>MergeFetchHeadNotFoundException</code> no longer falls through to raw LibGit2Sharp exception
+            text; the new message explains the most common real cause — a case mismatch between a branch's
+            upstream config and the actual remote branch name, easy to hit on Windows' case-insensitive
+            filesystem — and gives the one-line fix.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Caught in testing — three reliability regressions</p>
+          <p><b>The sidebar showed only the checked-out branch.</b> <code>GitCli.RunAsync</code>'s buffered
+             stdout copy was passed through <code>TrimEnd()</code> before <code>GetBranchesViaCli</code> parsed
+             it — harmless for most output, but this parser reads tab-delimited <code>git for-each-ref</code>
+             lines where most branches have empty trailing upstream/HEAD fields, so their lines end in bare tab
+             characters that <code>TrimEnd()</code> silently ate. That collapsed almost every branch line below
+             the field count the parser required, leaving only the one branch whose trailing fields happened to
+             be non-empty. Fixed by only trimming the separate copy handed to the status bar's progress display,
+             leaving the buffer used for parsing untouched.</p>
+          <p><b>Blame could hang for over two minutes and freeze the whole tab.</b> LibGit2Sharp's
+             <code>repo.Blame()</code> has no bound on history/rename-walk complexity — on a real repo (274
+             branches, a ~9000-line file) it took about 140 seconds. Every git operation for a tab is serialized
+             onto one dedicated executor thread, so that hang blocked everything else for the tab too, including
+             the refresh that repopulates "Files changed" after reselecting a commit — which looked like an
+             unrelated "0 files" bug until the real cause was traced back to Blame. Fixed by routing
+             <code>GetBlame</code> through <code>git blame --porcelain</code> via the CLI, the same
+             hybrid-backend pattern already used for <code>GetBranches</code>/<code>GetTags</code>/
+             <code>GetFileHistory</code> — measured at 0.355s for the identical file and commit. The
+             LibGit2Sharp path stays only as a fallback for when git.exe isn't installed.</p>
+          <p><b>Already-cached LFS objects still triggered a pull prompt.</b> Switching back to a branch whose
+             LFS content had already been pulled on an earlier visit kept popping the new "Pull Now" dialog from
+             this same phase's checkout-popup feature above — because libgit2 checkout never invokes git-lfs's
+             smudge filter at all, regardless of whether the objects are cached locally, so every checkout left
+             pointer text behind even when nothing needed downloading. Fixed by trying the local-object-cache-only
+             <code>git lfs checkout</code> first (see <code>SmudgeLfsFromLocalCacheAsync</code> above) and only
+             falling through to the network-fetching "Pull Now" prompt when files are genuinely missing from the
+             cache.</p>
         </div>
       </div>
     </section>
