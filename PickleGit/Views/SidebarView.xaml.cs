@@ -88,7 +88,8 @@ namespace PickleGit.Views
 
         private void OnRepoPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == null || s_structuralRepoProps.Contains(e.PropertyName))
+            if (e.PropertyName == null || s_structuralRepoProps.Contains(e.PropertyName) ||
+                e.PropertyName == nameof(RepositoryViewModel.BranchFilterMode))
                 RebuildRows();
         }
 
@@ -118,9 +119,12 @@ namespace PickleGit.Views
             var search = string.IsNullOrWhiteSpace(_searchText) ? null : _searchText.Trim();
             if (_repo != null)
             {
+                // Ignored while searching — a search always shows every match regardless of star state.
+                bool starredOnly = search == null && _repo.BranchFilterMode == BranchFilterMode.StarredOnly;
+
                 bool localExpanded = _appVm?.SidebarLocalBranchesExpanded ?? true;
                 var localRows = new List<SidebarRow>();
-                bool localMatched = AppendBranchRows(localRows, _repo.LocalBranchTree, 1, SidebarRowKind.LocalBranchGroup, SidebarRowKind.LocalBranchLeaf, search);
+                bool localMatched = AppendBranchRows(localRows, _repo.LocalBranchTree, 1, SidebarRowKind.LocalBranchGroup, SidebarRowKind.LocalBranchLeaf, search, starredOnly);
                 if (search == null)
                 {
                     rows.Add(new SidebarRow { Kind = SidebarRowKind.LocalBranchesHeader, IsExpanded = localExpanded });
@@ -134,7 +138,8 @@ namespace PickleGit.Views
 
                 bool remoteExpanded = _appVm?.SidebarRemoteBranchesExpanded ?? true;
                 var remoteBranchRows = new List<SidebarRow>();
-                bool remoteMatched = AppendBranchRows(remoteBranchRows, _repo.RemoteBranchTree, 1, SidebarRowKind.RemoteBranchGroup, SidebarRowKind.RemoteBranchLeaf, search);
+                // The starred filter never applies to remote branches — only local branches are starrable.
+                bool remoteMatched = AppendBranchRows(remoteBranchRows, _repo.RemoteBranchTree, 1, SidebarRowKind.RemoteBranchGroup, SidebarRowKind.RemoteBranchLeaf, search, starredOnly: false);
                 if (search == null)
                 {
                     rows.Add(new SidebarRow { Kind = SidebarRowKind.RemoteBranchesHeader, IsExpanded = remoteExpanded });
@@ -192,33 +197,37 @@ namespace PickleGit.Views
         /// exactly as before (groups always shown, children only when expanded). When searching, a
         /// group is only included if its own name or some descendant matches — and once included, its
         /// children are always shown (search results shouldn't stay hidden behind IsExpanded=false).
-        /// Returns whether anything was added, so callers can decide whether to show the section's
-        /// header at all while searching.</summary>
+        /// <paramref name="starredOnly"/> additionally hides non-starred leaves (and groups with no
+        /// starred descendant) — callers pass <c>false</c> while searching (search always wins) and
+        /// for the remote-branch tree (only local branches are starrable). Returns whether anything
+        /// was added, so callers can decide whether to show the section's header at all while
+        /// searching.</summary>
         private static bool AppendBranchRows(
             List<SidebarRow> rows,
             IEnumerable<BranchNodeViewModel> nodes,
             int indentLevel,
             SidebarRowKind groupKind,
             SidebarRowKind leafKind,
-            string search)
+            string search,
+            bool starredOnly)
         {
             bool anyAdded = false;
             foreach (var node in nodes)
             {
                 if (node.IsGroup)
                 {
-                    if (search == null)
+                    if (search == null && !starredOnly)
                     {
                         rows.Add(new SidebarRow { Kind = groupKind, IndentLevel = indentLevel, Payload = node });
                         anyAdded = true;
                         if (node.IsExpanded)
-                            AppendBranchRows(rows, node.Children, indentLevel + 1, groupKind, leafKind, search);
+                            AppendBranchRows(rows, node.Children, indentLevel + 1, groupKind, leafKind, search, starredOnly);
                     }
                     else
                     {
                         var childRows = new List<SidebarRow>();
-                        bool childMatched = AppendBranchRows(childRows, node.Children, indentLevel + 1, groupKind, leafKind, search);
-                        bool nameMatches = node.DisplayName != null &&
+                        bool childMatched = AppendBranchRows(childRows, node.Children, indentLevel + 1, groupKind, leafKind, search, starredOnly);
+                        bool nameMatches = search != null && node.DisplayName != null &&
                             node.DisplayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0;
                         if (childMatched || nameMatches)
                         {
@@ -230,8 +239,9 @@ namespace PickleGit.Views
                 }
                 else
                 {
-                    bool include = search == null || (node.DisplayName != null &&
-                        node.DisplayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0);
+                    bool include = (search == null || (node.DisplayName != null &&
+                        node.DisplayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0))
+                        && (!starredOnly || node.IsStarred);
                     if (include)
                     {
                         rows.Add(new SidebarRow { Kind = leafKind, IndentLevel = indentLevel, Payload = node });

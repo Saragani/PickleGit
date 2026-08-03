@@ -637,6 +637,14 @@ namespace PickleGit.Converters
         public object ConvertBack(object value, Type t, object p, CultureInfo c) => throw new NotSupportedException();
     }
 
+    /// <summary>Local-branch context-menu Star/Unstar item label — toggles with BranchInfo.IsStarred.</summary>
+    public class StarMenuLabelConverter : IValueConverter
+    {
+        public object Convert(object value, Type t, object p, CultureInfo c) =>
+            value is bool b && b ? "Unstar" : "Star";
+        public object ConvertBack(object value, Type t, object p, CultureInfo c) => throw new NotSupportedException();
+    }
+
     /// <summary>Tooltip for the bulk discard button: "Discard all files" normally, "Discard N files"
     /// once 2+ files are multi-selected.</summary>
     public class DiscardTooltipConverter : IValueConverter

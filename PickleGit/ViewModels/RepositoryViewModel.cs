@@ -461,6 +461,14 @@ namespace PickleGit.ViewModels
             set { if (Set(ref _fileViewMode, value)) AppSettings.SaveFileViewMode(value); }
         }
 
+        // ── Sidebar local-branch star filter ────────────────────────────────────────────────
+        private BranchFilterMode _branchFilterMode = AppSettings.LoadBranchFilterMode();
+        public BranchFilterMode BranchFilterMode
+        {
+            get => _branchFilterMode;
+            set { if (Set(ref _branchFilterMode, value)) AppSettings.SaveBranchFilterMode(value); }
+        }
+
         private ObservableCollection<FileTreeRow> _stagedFileTreeRows = new ObservableCollection<FileTreeRow>();
         public ObservableCollection<FileTreeRow> StagedFileTreeRows { get => _stagedFileTreeRows; private set => Set(ref _stagedFileTreeRows, value); }
 
@@ -486,6 +494,12 @@ namespace PickleGit.ViewModels
         {
             if (param is string s && Enum.TryParse(s, out FileViewMode mode))
                 FileViewMode = mode;
+        }
+
+        private void SetBranchFilterMode(object param)
+        {
+            if (param is string s && Enum.TryParse(s, out BranchFilterMode mode))
+                BranchFilterMode = mode;
         }
 
         private void ToggleTreeFolder(object param)
@@ -553,6 +567,7 @@ namespace PickleGit.ViewModels
 
         private readonly HashSet<string> _collapsedBranchNodes = new HashSet<string>();
         private bool _hasSavedBranchNodeState;
+        private HashSet<string> _starredBranches = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private System.Windows.Threading.DispatcherTimer _refreshTimer;
 
         // ── Commands ──────────────────────────────────────────────────────────
@@ -619,6 +634,8 @@ namespace PickleGit.ViewModels
         public ICommand EditRemoteCommand { get; }
         public ICommand RemoveRemoteCommand { get; }
         public ICommand CopyBranchNameCommand { get; }
+        public ICommand ToggleBranchStarCommand { get; }
+        public ICommand SetBranchFilterModeCommand { get; private set; }
         public ICommand OpenFileCommand { get; }
         public ICommand RevealFileCommand { get; }
         public ICommand CopyFilePathCommand { get; }
@@ -742,6 +759,8 @@ namespace PickleGit.ViewModels
             RemoveRemoteCommand = new RelayCommand(RemoveRemote, _ => HasRepo);
             CopyBranchNameCommand = new RelayCommand(
                 p => CopyToClipboard((p as BranchInfo)?.Name), _ => HasRepo);
+            ToggleBranchStarCommand = new RelayCommand(ToggleBranchStar, _ => HasRepo);
+            SetBranchFilterModeCommand = new RelayCommand(SetBranchFilterMode);
             OpenFileCommand = new RelayCommand(OpenFile, _ => HasRepo);
             RevealFileCommand = new RelayCommand(RevealFile, _ => HasRepo);
             CopyFilePathCommand = new RelayCommand(CopyFilePath, _ => HasRepo);
@@ -847,6 +866,7 @@ namespace PickleGit.ViewModels
                     foreach (var key in collapsedNodes)
                         _collapsedBranchNodes.Add(key);
                 }
+                _starredBranches = AppSettings.LoadStarredBranches(path);
                 RaisePropertyChanged(nameof(RepoName));
                 RaisePropertyChanged(nameof(HasRepo));
                 await LoadIdentityAsync(path);
@@ -894,6 +914,7 @@ namespace PickleGit.ViewModels
                 {
                     var local = branches.Where(b => !b.IsRemote).ToList();
                     var remote = FilterRemoteBranches(branches, remotes);
+                    foreach (var b in local) b.IsStarred = _starredBranches.Contains(b.Name);
 
                     LocalBranches = new ObservableCollection<BranchInfo>(local);
                     RemoteBranches = new ObservableCollection<BranchInfo>(remote);
@@ -1266,6 +1287,7 @@ namespace PickleGit.ViewModels
                     GraphNodes = new ObservableCollection<GraphNode>(nodes);
                     var local  = branches.Where(b => !b.IsRemote).ToList();
                     var remote = FilterRemoteBranches(branches, remotes);
+                    foreach (var b in local) b.IsStarred = _starredBranches.Contains(b.Name);
                     LocalBranches    = new ObservableCollection<BranchInfo>(local);
                     RemoteBranches   = new ObservableCollection<BranchInfo>(remote);
                     LocalBranchTree  = BuildBranchTree(local, "local");
@@ -1479,6 +1501,7 @@ namespace PickleGit.ViewModels
             GraphNodes = new ObservableCollection<GraphNode>(nodes);
             var local  = (cache.Branches ?? new List<BranchInfo>()).Where(b => !b.IsRemote).ToList();
             var remote = FilterRemoteBranches(cache.Branches, cache.Remotes);
+            foreach (var b in local) b.IsStarred = _starredBranches.Contains(b.Name);
             LocalBranches    = new ObservableCollection<BranchInfo>(local);
             RemoteBranches   = new ObservableCollection<BranchInfo>(remote);
             LocalBranchTree  = BuildBranchTree(local, "local");

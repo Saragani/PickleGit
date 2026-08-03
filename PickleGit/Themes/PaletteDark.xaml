@@ -31,6 +31,9 @@
     <Color x:Key="AddedColor">#FF1E3D1E</Color>
     <Color x:Key="DeletedColor">#FF3D1E1E</Color>
     <Color x:Key="TagColor">#FF5A4010</Color>
+    <!-- Literal gold, not derived from the theme palette — a starred branch should read as
+         "gold star" identically in both themes, the same way a real star sticker would. -->
+    <Color x:Key="StarColor">#FFFFD700</Color>
 
     <SolidColorBrush x:Key="ExtraBranchesBrush" Color="{StaticResource ExtraBranchesColor}"/>
     <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}"/>
@@ -51,6 +54,7 @@
     <SolidColorBrush x:Key="AddedBrush" Color="{StaticResource AddedColor}"/>
     <SolidColorBrush x:Key="DeletedBrush" Color="{StaticResource DeletedColor}"/>
     <SolidColorBrush x:Key="TagBrush" Color="{StaticResource TagColor}"/>
+    <SolidColorBrush x:Key="StarBrush" Color="{StaticResource StarColor}"/>
     <SolidColorBrush x:Key="TransparentBrush" Color="Transparent"/>
 
     <!-- ── Extended palette (views + templates that used to hardcode these) ── -->

@@ -42,6 +42,7 @@
             <conv:RefsTooltipConverter x:Key="RefsTooltip"/>
             <conv:PrependConverter x:Key="Prepend"/>
             <conv:BulkActionLabelConverter x:Key="BulkActionLabel"/>
+            <conv:StarMenuLabelConverter x:Key="StarMenuLabel"/>
             <conv:DiscardTooltipConverter x:Key="DiscardTooltip"/>
             <conv:DiscardBadgeTextConverter x:Key="DiscardBadgeText"/>
             <conv:IntAtLeastTwoToVisibilityConverter x:Key="IntAtLeastTwoToVis"/>

@@ -48,6 +48,12 @@ namespace PickleGit.Services
             public Dictionary<string, List<string>> CollapsedBranchNodesByRepo { get; set; }
                 = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
+            public Dictionary<string, List<string>> StarredBranchesByRepo { get; set; }
+                = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            /// <summary>Sidebar local-branch filter — <see cref="Models.BranchFilterMode"/> name.</summary>
+            public string BranchFilterMode { get; set; } = "All";
+
             public bool SidebarLocalBranchesExpanded   { get; set; } = true;
             public bool SidebarRemoteBranchesExpanded  { get; set; } = true;
             public bool SidebarTagsExpanded            { get; set; } = false;
@@ -222,6 +228,45 @@ namespace PickleGit.Services
                 Save(data);
             }
             catch { }
+        }
+
+        public static HashSet<string> LoadStarredBranches(string repoPath)
+        {
+            var d = Load() ?? new SettingsData();
+            if (string.IsNullOrEmpty(repoPath) ||
+                d.StarredBranchesByRepo == null ||
+                !d.StarredBranchesByRepo.TryGetValue(repoPath, out var names))
+                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return new HashSet<string>(names ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static void SaveStarredBranches(string repoPath, IEnumerable<string> names)
+        {
+            if (string.IsNullOrEmpty(repoPath)) return;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
+                var data = Load() ?? new SettingsData();
+                if (data.StarredBranchesByRepo == null)
+                    data.StarredBranchesByRepo = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+                data.StarredBranchesByRepo[repoPath] = (names ?? Enumerable.Empty<string>())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                Save(data);
+            }
+            catch { }
+        }
+
+        public static Models.BranchFilterMode LoadBranchFilterMode() =>
+            Enum.TryParse((Load() ?? new SettingsData()).BranchFilterMode, out Models.BranchFilterMode mode)
+                ? mode : Models.BranchFilterMode.All;
+
+        public static void SaveBranchFilterMode(Models.BranchFilterMode mode)
+        {
+            var data = Load() ?? new SettingsData();
+            data.BranchFilterMode = mode.ToString();
+            Save(data);
         }
 
         public static (bool local, bool remote, bool tags, bool stashes, bool remotes) LoadSidebarSectionStates()

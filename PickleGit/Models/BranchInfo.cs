@@ -11,6 +11,7 @@ namespace PickleGit.Models
         public string TipSha { get; set; }
         public int AheadBy { get; set; }
         public int BehindBy { get; set; }
+        public bool IsStarred { get; set; }
 
         public string DisplayName => IsRemote && RemoteName != null
             ? Name.StartsWith(RemoteName + "/") ? Name.Substring(RemoteName.Length + 1) : Name

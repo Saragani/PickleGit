@@ -46,6 +46,18 @@ namespace PickleGit.ViewModels
             _ = RunThenRefresh($"Renaming {bi.Name} → {newName}…", () => _git.RenameBranch(bi.Name, newName));
         }
 
+        /// <summary>Pure UI-state toggle — no git call, so no RunThenRefresh/busy indicator.</summary>
+        private void ToggleBranchStar(object param)
+        {
+            if (!(param is BranchInfo bi) || bi.IsRemote) return;
+            if (bi.IsStarred) _starredBranches.Remove(bi.Name);
+            else _starredBranches.Add(bi.Name);
+            AppSettings.SaveStarredBranches(RepoPath, _starredBranches);
+            bi.IsStarred = !bi.IsStarred;
+            // Rebuild so the BranchNodeViewModel.IsStarred passthrough (and row visuals) refresh.
+            LocalBranchTree = BuildBranchTree(LocalBranches, "local");
+        }
+
         private void CheckoutRemoteBranch(object param)
         {
             if (!(param is BranchInfo bi) || !bi.IsRemote) return;

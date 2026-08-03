@@ -32,6 +32,7 @@ namespace PickleGit.ViewModels
         }
 
         public bool IsHead  => BranchInfo?.IsHead  ?? false;
+        public bool IsStarred => BranchInfo?.IsStarred ?? false;
         public int  AheadBy => BranchInfo?.AheadBy ?? 0;
         public int  BehindBy=> BranchInfo?.BehindBy?? 0;
         public bool HasAhead => AheadBy > 0;

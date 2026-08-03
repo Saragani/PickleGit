@@ -79,6 +79,11 @@ namespace PickleGit.Models
     /// Unstaged panels.</summary>
     public enum FileViewMode { Flat, Tree }
 
+    /// <summary>Local-branch sidebar filter — <see cref="StarredOnly"/> hides non-starred local
+    /// branches (and any branch-group folder with no starred descendant); ignored while the
+    /// sidebar search box has text, so a search always shows every match regardless of star state.</summary>
+    public enum BranchFilterMode { All, StarredOnly }
+
     public enum FileTreeRowKind { Folder, File }
 
     /// <summary>One flattened row of a Staged/Unstaged panel in Tree view mode — either a folder
