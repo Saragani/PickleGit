@@ -604,6 +604,17 @@ namespace PickleGit.Services
             EnsureOpen();
             var commit = _repo.Lookup<Commit>(sha)
                 ?? throw new InvalidOperationException($"Commit {sha} not found.");
+            // Only "hard" touches the working tree (soft/mixed only move HEAD/the index, which
+            // libgit2 already does with no working-tree I/O to speed up) — route just that case
+            // through git.exe so any LFS-tracked file rewritten by the reset gets smudged inline
+            // from the local cache, same as GitService.Checkout.
+            if (mode == "hard" && Cli != null && Cli.IsAvailable)
+            {
+                var result = Cli.RunAsync("reset --hard " + Git.CliGitService.Quote(commit.Sha)).GetAwaiter().GetResult();
+                Reopen();
+                if (!result.Success) throw new InvalidOperationException(result.ErrorText);
+                return;
+            }
             ResetMode resetMode;
             switch (mode)
             {
@@ -1591,7 +1602,26 @@ namespace PickleGit.Services
         public void ApplyStash(int index)
         {
             EnsureOpen();
+            if (Cli != null && Cli.IsAvailable) { StashCli("apply", index); return; }
             _repo.Stashes.Apply(index);
+        }
+
+        /// <summary>Runs `git stash apply/pop stash@{N}` — like Checkout, lets git-lfs's real smudge
+        /// filter materialize any LFS-tracked file the stash restores, instead of libgit2's Stashes
+        /// API leaving raw pointer text. A stash apply/pop can conflict exactly like a merge (git
+        /// exits non-zero and leaves unmerged entries in the index rather than failing cleanly) —
+        /// the pre-existing libgit2 path already tolerates this silently (StashApplyStatus.Conflicts
+        /// isn't treated as an exception), so this checks the post-command index for actual
+        /// conflict entries rather than trusting the exit code alone: a non-zero exit WITH
+        /// conflicted entries is the expected "resolve it yourself" outcome; a non-zero exit with a
+        /// clean index is a genuine failure (bad stash index, nothing to apply, etc.) and still
+        /// throws.</summary>
+        private void StashCli(string subcommand, int index)
+        {
+            var result = Cli.RunAsync($"stash {subcommand} stash@{{{index}}}").GetAwaiter().GetResult();
+            Reopen();
+            if (!result.Success && !_repo.Index.Conflicts.Any())
+                throw new InvalidOperationException(result.ErrorText);
         }
 
         public void DropStash(int index)
@@ -1613,6 +1643,7 @@ namespace PickleGit.Services
                     File.Delete(absPath);
                 return;
             }
+            if (Cli != null && Cli.IsAvailable) { DiscardPathsCli(new[] { filePath }); return; }
             _repo.CheckoutPaths("HEAD", new[] { filePath },
                 new CheckoutOptions { CheckoutModifiers = CheckoutModifiers.Force });
         }
@@ -1637,13 +1668,56 @@ namespace PickleGit.Services
                     trackedPaths.Add(fc.Path);
                 }
             }
-            if (trackedPaths.Count > 0)
-                _repo.CheckoutPaths("HEAD", trackedPaths, new CheckoutOptions { CheckoutModifiers = CheckoutModifiers.Force });
+            if (trackedPaths.Count == 0) return;
+            if (Cli != null && Cli.IsAvailable) { DiscardPathsCli(trackedPaths); return; }
+            _repo.CheckoutPaths("HEAD", trackedPaths, new CheckoutOptions { CheckoutModifiers = CheckoutModifiers.Force });
+        }
+
+        /// <summary>Restores the given paths' working-tree AND index content to match HEAD via
+        /// git.exe — `git checkout HEAD -- &lt;paths&gt;` is the exact CLI equivalent of libgit2's
+        /// CheckoutPaths("HEAD", ...), and — like this app's branch checkout (see GitService.Checkout)
+        /// — runs git-lfs's real smudge filter inline from the local cache for any LFS-tracked path
+        /// being restored, instead of leaving raw pointer text the way libgit2 always does. Chunked
+        /// for the same reason RepositoryViewModel's LFS smudge calls are: a large "discard all" on a
+        /// repo with hundreds of changed files can otherwise exceed Windows' ~32K command-line
+        /// limit (confirmed hit in production — see git log for RefreshLfsStatusForCheckoutAsync).</summary>
+        private void DiscardPathsCli(IReadOnlyCollection<string> paths)
+        {
+            foreach (var batch in ChunkPathsByLength(paths))
+            {
+                var result = Cli.RunAsync("checkout HEAD -- " + string.Join(" ", batch.Select(Git.CliGitService.Quote)))
+                    .GetAwaiter().GetResult();
+                if (!result.Success) throw new InvalidOperationException(result.ErrorText);
+            }
+            Reopen();
+        }
+
+        /// <summary>Splits a path list into batches whose joined length stays comfortably under
+        /// Windows' ~32,767-character command-line limit — see DiscardPathsCli.</summary>
+        private const int PathArgBudgetChars = 20000;
+        private static IEnumerable<List<string>> ChunkPathsByLength(IReadOnlyCollection<string> paths)
+        {
+            var batch = new List<string>();
+            int len = 0;
+            foreach (var p in paths)
+            {
+                var addLen = p.Length + 1;
+                if (batch.Count > 0 && len + addLen > PathArgBudgetChars)
+                {
+                    yield return batch;
+                    batch = new List<string>();
+                    len = 0;
+                }
+                batch.Add(p);
+                len += addLen;
+            }
+            if (batch.Count > 0) yield return batch;
         }
 
         public void PopStash(int index = 0)
         {
             EnsureOpen();
+            if (Cli != null && Cli.IsAvailable) { StashCli("pop", index); return; }
             _repo.Stashes.Pop(index);
         }
 
