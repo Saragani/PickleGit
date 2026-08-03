@@ -22,6 +22,7 @@
             <conv:DetachedHeadConverter x:Key="DetachedVis"/>
             <conv:DetachedHeadConverter x:Key="InvertDetachedVis" Invert="True"/>
             <conv:FileChangeKindToColorConverter x:Key="KindToColor"/>
+            <conv:ConflictRowBackgroundConverter x:Key="ConflictRowBg"/>
             <conv:GraphWidthConverter x:Key="GraphWidth"/>
             <conv:HeadBoldConverter x:Key="HeadBold"/>
             <conv:IntAboveZeroConverter x:Key="IntAboveZero"/>

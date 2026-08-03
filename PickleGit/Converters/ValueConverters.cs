@@ -133,7 +133,9 @@ namespace PickleGit.Converters
         private static readonly Brush Deleted = Freeze(Color.FromRgb(0xBE, 0x4B, 0x48));
         private static readonly Brush Modified = Freeze(Color.FromRgb(0x5C, 0x9B, 0xD6));
         private static readonly Brush Renamed = Freeze(Color.FromRgb(0xD7, 0x9B, 0x57));
-        private static readonly Brush Conflicted = Freeze(Color.FromRgb(0xBC, 0x6B, 0xAC));
+        // Deliberately a brighter, more saturated red than Deleted's muted brick tone — a conflict
+        // needs to read as more urgent than an ordinary deletion at a glance in a long file list.
+        private static readonly Brush Conflicted = Freeze(Color.FromRgb(0xE5, 0x39, 0x35));
 
         private static Brush Freeze(Color color)
         {
@@ -155,6 +157,27 @@ namespace PickleGit.Converters
                 default: return Brushes.Gray;
             }
         }
+        public object ConvertBack(object value, Type t, object p, CultureInfo c) => null;
+    }
+
+    /// <summary>Faint full-row tint for a conflicted file in the staged/unstaged file lists —
+    /// the small 14x14 status badge alone (even recolored red by
+    /// FileChangeKindToColorConverter) is easy to miss while scanning a long, mostly-mundane
+    /// file list; tinting the whole row makes a conflict impossible to scroll past unnoticed.
+    /// Transparent (not null) for every other kind so it's still a valid Brush for Background.</summary>
+    public class ConflictRowBackgroundConverter : IValueConverter
+    {
+        private static readonly Brush Tint = Freeze(Color.FromArgb(0x28, 0xE5, 0x39, 0x35));
+
+        private static Brush Freeze(Color color)
+        {
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            return brush;
+        }
+
+        public object Convert(object value, Type t, object p, CultureInfo c) =>
+            value is FileChangeKind kind && kind == FileChangeKind.Conflicted ? Tint : Brushes.Transparent;
         public object ConvertBack(object value, Type t, object p, CultureInfo c) => null;
     }
 

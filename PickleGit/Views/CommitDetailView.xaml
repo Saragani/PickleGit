@@ -129,6 +129,7 @@
             <conv:FileTreeRowTemplateSelector.FileTemplate>
                 <DataTemplate DataType="{x:Type models:FileTreeRow}">
                     <Grid Height="26" ToolTip="{Binding File.Path}"
+                          Background="{Binding File.Kind, Converter={StaticResource ConflictRowBg}}"
                           Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -155,6 +156,45 @@
                                 ToolTip="Stage"/>
                         <Grid.ContextMenu>
                             <ContextMenu>
+                                <!-- Merge-conflict actions — only meaningful (and only ever shown)
+                                     for a conflicted file, which git status always reports as
+                                     unstaged, never staged. -->
+                                <MenuItem Header="Take Ours"
+                                          Visibility="{Binding PlacementTarget.DataContext.File.Kind,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                    Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"
+                                          Command="{Binding PlacementTarget.Tag.TakeOursCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.File,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="Take Theirs"
+                                          Visibility="{Binding PlacementTarget.DataContext.File.Kind,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                    Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"
+                                          Command="{Binding PlacementTarget.Tag.TakeTheirsCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.File,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="Open Merge Editor"
+                                          Visibility="{Binding PlacementTarget.DataContext.File.Kind,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                    Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"
+                                          Command="{Binding PlacementTarget.Tag.OpenMergeEditorCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.File,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="Mark Resolved"
+                                          Visibility="{Binding PlacementTarget.DataContext.File.Kind,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                    Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"
+                                          Command="{Binding PlacementTarget.Tag.MarkResolvedCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.File,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <Separator
+                                    Visibility="{Binding PlacementTarget.DataContext.File.Kind,
+                                              RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                              Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"/>
                                 <MenuItem Header="Stage"
                                           Command="{Binding PlacementTarget.Tag.StageFileCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -775,70 +815,24 @@
                         <Run Text=" of "/>
                         <Run Text="{Binding ConflictInfo.RebaseStepTotal, Mode=OneWay}"/>
                     </TextBlock>
-                    <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
-                               Text="{Binding ConflictInfo.ConflictedFiles.Count, StringFormat='{}{0} conflicted file(s)'}"/>
-                    <ItemsControl ItemsSource="{Binding ConflictedFileChanges}" Margin="0,6,0,0">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type models:FileChange}">
-                                <Grid Margin="0,3" Height="24"
-                                      Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Path}" VerticalAlignment="Center"
-                                               FontSize="11" FontFamily="Consolas" TextTrimming="CharacterEllipsis"/>
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                        <Button Content="Take Ours" FontSize="10" Padding="6,2" Margin="0,0,4,0"
-                                                Style="{StaticResource ToolbarButton}"
-                                                Command="{Binding DataContext.TakeOursCommand,
-                                                          RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}"/>
-                                        <Button Content="Take Theirs" FontSize="10" Padding="6,2" Margin="0,0,4,0"
-                                                Style="{StaticResource ToolbarButton}"
-                                                Command="{Binding DataContext.TakeTheirsCommand,
-                                                          RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}"/>
-                                        <Button Content="Open Editor" FontSize="10" Padding="6,2" Margin="0,0,4,0"
-                                                Style="{StaticResource ToolbarButton}"
-                                                Command="{Binding DataContext.OpenMergeEditorCommand,
-                                                          RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}"/>
-                                        <Button Content="Mark Resolved" FontSize="10" Padding="6,2"
-                                                Style="{StaticResource ToolbarButton}"
-                                                Command="{Binding DataContext.MarkResolvedCommand,
-                                                          RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}"/>
-                                    </StackPanel>
-                                    <Grid.ContextMenu>
-                                        <ContextMenu>
-                                            <MenuItem Header="Resolve Using Mine"
-                                                      Command="{Binding PlacementTarget.Tag.TakeOursCommand,
-                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                            <MenuItem Header="Resolve Using Theirs"
-                                                      Command="{Binding PlacementTarget.Tag.TakeTheirsCommand,
-                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                            <Separator/>
-                                            <MenuItem Header="Open in Merge Editor"
-                                                      Command="{Binding PlacementTarget.Tag.OpenMergeEditorCommand,
-                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                            <MenuItem Header="Mark as Resolved"
-                                                      Command="{Binding PlacementTarget.Tag.MarkResolvedCommand,
-                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                        </ContextMenu>
-                                    </Grid.ContextMenu>
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <!-- Per-file actions (Take Ours/Theirs, Open Merge Editor, Mark Resolved) live on
+                         the Unstaged Files list's own context menu now (conflicted files always show
+                         there, never in Staged — see FileChange.Kind == Conflicted), so this banner
+                         only needs to state the count and offer one way into the resolver; a
+                         merge/rebase with many conflicts no longer grows an unbounded per-file list
+                         here at all. -->
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   Text="{Binding ConflictInfo.ConflictedFiles.Count, StringFormat='{}{0} conflicted file(s)'}"/>
+                        <Button Grid.Column="1" Content="Resolve Conflicts…" FontSize="11" Padding="8,3"
+                                Style="{StaticResource ToolbarButton}"
+                                Command="{Binding OpenMergeEditorCommand}"/>
+                    </Grid>
                 </StackPanel>
             </Border>
 
@@ -1099,7 +1093,8 @@
                         </i:Interaction.Behaviors>
                         <ListView.ItemTemplate>
                             <DataTemplate DataType="{x:Type models:FileChange}">
-                                <Grid Height="26" Margin="4,0" Background="Transparent"
+                                <Grid Height="26" Margin="4,0"
+                                      Background="{Binding Kind, Converter={StaticResource ConflictRowBg}}"
                                       ToolTip="{Binding Path}"
                                       Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}">
                                     <Grid.ColumnDefinitions>
@@ -1124,6 +1119,45 @@
                                             ToolTip="Stage"/>
                                     <Grid.ContextMenu>
                                         <ContextMenu>
+                                            <!-- Merge-conflict actions — only meaningful (and only
+                                                 ever shown) for a conflicted file, which git status
+                                                 always reports as unstaged, never staged. -->
+                                            <MenuItem Header="Resolve using Ours"
+                                                      Visibility="{Binding PlacementTarget.DataContext.Kind,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                                Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"
+                                                      Command="{Binding PlacementTarget.Tag.TakeOursCommand,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                            <MenuItem Header="Resolve using Theirs"
+                                                      Visibility="{Binding PlacementTarget.DataContext.Kind,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                                Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"
+                                                      Command="{Binding PlacementTarget.Tag.TakeTheirsCommand,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                            <MenuItem Header="Open Merge Editor"
+                                                      Visibility="{Binding PlacementTarget.DataContext.Kind,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                                Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"
+                                                      Command="{Binding PlacementTarget.Tag.OpenMergeEditorCommand,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                            <MenuItem Header="Mark Resolved"
+                                                      Visibility="{Binding PlacementTarget.DataContext.Kind,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                                Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"
+                                                      Command="{Binding PlacementTarget.Tag.MarkResolvedCommand,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                            <Separator
+                                                Visibility="{Binding PlacementTarget.DataContext.Kind,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"/>
                                             <MenuItem Header="Stage"
                                                       Command="{Binding PlacementTarget.Tag.StageFileCommand,
                                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"

@@ -503,7 +503,32 @@ namespace PickleGit.Services
             EnsureOpen();
             var branch = _repo.Branches[branchName];
             if (branch == null) throw new InvalidOperationException($"Branch '{branchName}' not found.");
+            if (Cli != null && Cli.IsAvailable) { CheckoutRefCli(Git.CliGitService.Quote(branchName)); return; }
             Commands.Checkout(_repo, branch);
+        }
+
+        /// <summary>Routes checkout through git.exe when available — real-repo benchmarking (see
+        /// chat: a 34K-file, LFS-heavy repo) measured plain `git checkout` at ~17s versus this
+        /// app's previous libgit2 + separately-scoped-LFS-smudge pipeline taking 80s+ for the same
+        /// switch. The difference isn't the checkout mechanism itself — it's that git.exe's native
+        /// checkout runs git-lfs's real smudge filter inline, in one pass, using the local object
+        /// cache automatically (no network for anything already cached), where this app was instead
+        /// making several extra git-lfs subprocess round-trips afterward to do the same job. No
+        /// GIT_LFS_SKIP_SMUDGE or filter overrides here deliberately — CheckoutRefCli's own history
+        /// (see git log) shows GIT_LFS_SKIP_SMUDGE made things slower by paying filter-invocation
+        /// cost without the smudge benefit, and disabling filter.lfs.clean outright breaks git's
+        /// dirty-file detection (a real reproduced bug: "would be overwritten by checkout" on a
+        /// completely clean file). This intentionally matches SourceTree's own plain-checkout
+        /// behavior, including its tradeoff: if an object is missing from the local cache, git-lfs's
+        /// smudge filter will try to fetch it over the network like any other git tool would.
+        /// RefreshLfsStatusForCheckoutAsync (RepositoryViewModel) still catches and fixes, from the
+        /// local cache only, anything that didn't get smudged (e.g. the libgit2 fallback path below,
+        /// which never smudges at all).</summary>
+        private void CheckoutRefCli(string checkoutArgs)
+        {
+            var result = Cli.RunAsync("checkout " + checkoutArgs).GetAwaiter().GetResult();
+            Reopen();
+            if (!result.Success) throw new InvalidOperationException(result.ErrorText);
         }
 
         public void DeleteBranch(string branchName, bool force = false)
@@ -560,6 +585,7 @@ namespace PickleGit.Services
                 local = _repo.CreateBranch(localName, remoteBranch.Tip);
                 _repo.Branches.Update(local, b => b.TrackedBranch = remoteBranch.CanonicalName);
             }
+            if (Cli != null && Cli.IsAvailable) { CheckoutRefCli(Git.CliGitService.Quote(localName)); return; }
             Commands.Checkout(_repo, local);
         }
 
@@ -569,6 +595,7 @@ namespace PickleGit.Services
             EnsureOpen();
             var commit = _repo.Lookup<Commit>(sha)
                 ?? throw new InvalidOperationException($"Commit {sha} not found.");
+            if (Cli != null && Cli.IsAvailable) { CheckoutRefCli("--detach " + Git.CliGitService.Quote(commit.Sha)); return; }
             Commands.Checkout(_repo, commit);
         }
 
@@ -618,7 +645,124 @@ namespace PickleGit.Services
 
         // ── Staging & Commits ─────────────────────────────────────────────────
 
+        /// <summary>LibGit2Sharp's RetrieveStatus does a full working-tree walk with no access to
+        /// git.exe's untracked-cache/fsmonitor optimizations, and this runs on every refresh — not
+        /// just checkouts — making it one of the most-called expensive operations in the app on a
+        /// large working tree. Prefer git.exe when available.</summary>
         public List<FileChange> GetWorkingDirectoryStatus()
+        {
+            EnsureOpen();
+            if (Cli != null && Cli.IsAvailable)
+            {
+                try { return GetWorkingDirectoryStatusViaCli(); }
+                catch (Exception ex) { AppLog.Warn("GetWorkingDirectoryStatusViaCli failed, falling back to LibGit2Sharp", ex); }
+            }
+            return GetWorkingDirectoryStatusViaLibGit2();
+        }
+
+        /// <summary>Parses `git status --porcelain=v2 -z --untracked-files=all` — verified field
+        /// layout against a real repo (see chat) rather than assumed from memory, covering every
+        /// record type actually needed: ordinary changes ("1"), renames ("2", whose path field is
+        /// followed by a second NUL-terminated origPath token — NOT tab-separated, since -z changes
+        /// that separator too), unmerged/conflicted paths ("u"), and untracked files ("?").
+        /// --untracked-files=all forces individual-file entries instead of a single collapsed
+        /// "newdir/" line for an untracked directory, matching per-file stage/discard expectations.
+        /// For "u" lines, OursMissing/TheirsMissing come directly from stage-2/stage-3 hash fields
+        /// being all-zero (confirmed against real add/add and modify/delete conflicts — an all-zero
+        /// stage-1 hash instead means "no common ancestor", which this model doesn't track and
+        /// doesn't need to: OursMissing/TheirsMissing only ever cared about stage 2/3).</summary>
+        private List<FileChange> GetWorkingDirectoryStatusViaCli()
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var result = Cli.RunAsync("status --porcelain=v2 -z --untracked-files=all").GetAwaiter().GetResult();
+            if (!result.Success) throw new InvalidOperationException(result.ErrorText);
+
+            var list = new List<FileChange>();
+            var tokens = result.StdOut.Split('\0');
+            for (int i = 0; i < tokens.Length; i++)
+            {
+                var token = tokens[i].TrimEnd('\r', '\n');
+                if (token.Length < 2 || token[1] != ' ') continue;
+                switch (token[0])
+                {
+                    case '?':
+                        list.Add(new FileChange
+                        { Path = token.Substring(2), Kind = FileChangeKind.Untracked, IsStaged = false });
+                        break;
+                    case '1':
+                        ParseOrdinaryStatusLine(token, list);
+                        break;
+                    case '2':
+                        // The origPath for a rename/copy is a SEPARATE NUL-terminated token
+                        // immediately following this one (not a same-token field) — consume it here.
+                        var origPath = i + 1 < tokens.Length ? tokens[++i].TrimEnd('\r', '\n') : "";
+                        ParseRenameStatusLine(token, origPath, list);
+                        break;
+                    case 'u':
+                        ParseUnmergedStatusLine(token, list);
+                        break;
+                    // '!' (ignored) never appears — --ignored isn't passed.
+                }
+            }
+            AppLog.Info($"GetWorkingDirectoryStatus (CLI): {list.Count} entries in {sw.ElapsedMilliseconds}ms (in {_repoPath})");
+            return list;
+        }
+
+        /// <summary>`1 XY sub mH mI mW hH hI path` — X = staged status, Y = unstaged status.</summary>
+        private static void ParseOrdinaryStatusLine(string token, List<FileChange> into)
+        {
+            var f = token.Split(new[] { ' ' }, 9);
+            if (f.Length < 9) return;
+            var xy = f[1];
+            var path = f[8];
+            AddStatusSide(into, xy[0], path, null, staged: true);
+            AddStatusSide(into, xy[1], path, null, staged: false);
+        }
+
+        /// <summary>`2 XY sub mH mI mW hH hI Xscore path` (+ origPath as the next NUL token).</summary>
+        private static void ParseRenameStatusLine(string token, string origPath, List<FileChange> into)
+        {
+            var f = token.Split(new[] { ' ' }, 10);
+            if (f.Length < 10) return;
+            var xy = f[1];
+            var path = f[9];
+            AddStatusSide(into, xy[0], path, origPath, staged: true);
+            AddStatusSide(into, xy[1], path, origPath, staged: false);
+        }
+
+        private static void AddStatusSide(List<FileChange> into, char code, string path, string oldPath, bool staged)
+        {
+            FileChangeKind kind;
+            switch (code)
+            {
+                case 'A': kind = FileChangeKind.Added; break;
+                case 'M': kind = FileChangeKind.Modified; break;
+                case 'D': kind = FileChangeKind.Deleted; break;
+                case 'R': kind = FileChangeKind.Renamed; break;
+                default: return; // '.' (no change on this side); copy/typechange codes never appear
+                                  // without --find-copies, which this call doesn't pass.
+            }
+            into.Add(new FileChange { Path = path, OldPath = oldPath, Kind = kind, IsStaged = staged });
+        }
+
+        /// <summary>`u XY sub m1 m2 m3 mW h1 h2 h3 path` — stage 1/2/3 = ancestor/ours/theirs.</summary>
+        private static void ParseUnmergedStatusLine(string token, List<FileChange> into)
+        {
+            var f = token.Split(new[] { ' ' }, 11);
+            if (f.Length < 11) return;
+            into.Add(new FileChange
+            {
+                Path = f[10],
+                Kind = FileChangeKind.Conflicted,
+                IsStaged = false,
+                OursMissing = IsZeroHash(f[8]),
+                TheirsMissing = IsZeroHash(f[9])
+            });
+        }
+
+        private static bool IsZeroHash(string hash) => string.IsNullOrEmpty(hash) || hash.TrimStart('0').Length == 0;
+
+        private List<FileChange> GetWorkingDirectoryStatusViaLibGit2()
         {
             EnsureOpen();
             var status = _repo.RetrieveStatus(new StatusOptions
@@ -1350,6 +1494,7 @@ namespace PickleGit.Services
                 ?? throw new InvalidOperationException($"Tag '{tagName}' not found.");
             var commit = tag.PeeledTarget as Commit
                 ?? throw new InvalidOperationException($"Tag '{tagName}' does not point to a commit.");
+            if (Cli != null && Cli.IsAvailable) { CheckoutRefCli("--detach " + Git.CliGitService.Quote(commit.Sha)); return; }
             Commands.Checkout(_repo, commit);
         }
 

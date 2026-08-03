@@ -109,18 +109,146 @@ namespace PickleGit.ViewModels
 
         /// <summary>Materializes LFS-tracked files that are still raw pointer text using ONLY
         /// already-cached local objects (`git lfs checkout`) — no network access at all, unlike
-        /// `git lfs pull`. libgit2 checkout (used by every branch/tag/commit checkout in this app,
-        /// via GitService.Checkout et al.) never invokes git-lfs's smudge filter, so switching back
-        /// to a branch whose LFS content was already pulled on an earlier visit still needs this
-        /// "finish the checkout" step every single time — run it silently before ever bothering the
-        /// user with a prompt, so a round-trip through already-fetched branches never nags for a
-        /// pull it doesn't actually need. Only objects genuinely missing from the local cache still
-        /// need the explicit, user-initiated "Pull Now" (see PromptLfsPullAfterCheckoutAsync).</summary>
-        private async Task SmudgeLfsFromLocalCacheAsync()
+        /// `git lfs pull`. Checkout (both the CLI path, which runs with GIT_LFS_SKIP_SMUDGE=1, and
+        /// the libgit2 fallback, which never invokes git-lfs's smudge filter at all) leaves
+        /// LFS-tracked content as raw pointer text, so switching back to a branch whose LFS content
+        /// was already pulled on an earlier visit still needs this "finish the checkout" step every
+        /// single time — run it silently before ever bothering the user with a prompt, so a
+        /// round-trip through already-fetched branches never nags for a pull it doesn't actually
+        /// need. Only objects genuinely missing from the local cache still need the explicit,
+        /// user-initiated "Pull Now" (see PromptLfsPullAfterCheckoutAsync).
+        /// <paramref name="paths"/> restricts the smudge to just those files (glob-matched, but a
+        /// literal path is also a valid exact-match glob) instead of scanning/smudging every
+        /// LFS-tracked file in the repo — see RefreshLfsStatusForCheckoutAsync. A checkout that
+        /// touches thousands of files can produce a path list well past Windows' ~32K
+        /// command-line limit (confirmed against a real repo — see chat: a single unbatched
+        /// invocation hit 67,623 characters and failed with Win32Exception "The filename or
+        /// extension is too long"), so the list is chunked via <see cref="ChunkPathsByLength"/>
+        /// into multiple invocations instead of one.</summary>
+        private async Task SmudgeLfsFromLocalCacheAsync(IEnumerable<string> paths = null)
         {
             if (_git.Cli == null || !_git.Cli.IsAvailable) return;
-            try { await _git.Cli.RunAsync("lfs checkout"); }
+            try
+            {
+                if (paths == null) { await _git.Cli.RunAsync("lfs checkout"); return; }
+                var list = paths as IReadOnlyCollection<string> ?? paths.ToList();
+                if (list.Count == 0) return;
+                foreach (var batch in ChunkPathsByLength(list))
+                    await _git.Cli.RunAsync("lfs checkout -- " + string.Join(" ", batch.Select(CliGitService.Quote)));
+            }
             catch (Exception ex) { AppLog.Warn("SmudgeLfsFromLocalCacheAsync failed", ex); }
+        }
+
+        /// <summary>Splits a path list into batches whose joined length stays comfortably under
+        /// Windows' ~32,767-character command-line limit — see SmudgeLfsFromLocalCacheAsync and
+        /// GetUnpulledLfsPathsAsync, the two callers that turn a path list into a single git-lfs
+        /// command-line argument.</summary>
+        private const int PathArgBudgetChars = 20000;
+        private static IEnumerable<List<string>> ChunkPathsByLength(IReadOnlyCollection<string> paths)
+        {
+            var batch = new List<string>();
+            int len = 0;
+            foreach (var p in paths)
+            {
+                var addLen = p.Length + 1;
+                if (batch.Count > 0 && len + addLen > PathArgBudgetChars)
+                {
+                    yield return batch;
+                    batch = new List<string>();
+                    len = 0;
+                }
+                batch.Add(p);
+                len += addLen;
+            }
+            if (batch.Count > 0) yield return batch;
+        }
+
+        /// <summary>Checkout-scoped LFS follow-up. Earlier versions of this detected still-pointer
+        /// files by asking git-lfs itself (`git lfs ls-files --json`, scoped to the checkout's
+        /// changed paths) — real-repo benchmarking (34K files, LFS-heavy — see chat) showed that
+        /// alone cost ~35-50s (two git-lfs subprocess round-trips over ~1000 changed paths, chunked),
+        /// which is *more* than git.exe's entire native checkout of the same branches (~17s). The
+        /// fix isn't a smarter git-lfs query — it's not asking git-lfs at all when we don't need to.
+        /// Checkout (GitService.Checkout et al.) now runs through git.exe with its real smudge
+        /// filter active, so it already materializes every LFS object it can from the local cache
+        /// as part of the checkout itself; this method's job shrinks to "did anything NOT get
+        /// smudged" (offline, object missing upstream, or the libgit2 fallback path, which never
+        /// smudges at all). That's answered with a plain local file-header read — a real git-lfs
+        /// pointer file's content always starts with the fixed, documented signature checked by
+        /// LooksLikeLfsPointer (confirmed against a real pointer file — see chat) — instead of a
+        /// git-lfs process call, so the common "checkout already smudged everything" case costs a
+        /// handful of tiny file reads, not a single subprocess spawn.
+        /// LfsUnpulledCount (the repo-wide total the persistent "Pull LFS objects" banner reads) is
+        /// adjusted by the before/after delta among just the changed paths rather than re-deriving
+        /// the whole-repo total from scratch — an approximation (it can't know those paths' state
+        /// under the OLD tree), same as before; drift self-corrects at the next full rescan.</summary>
+        private async Task RefreshLfsStatusForCheckoutAsync(string preHeadSha)
+        {
+            if (!RepoUsesLfs())
+            {
+                LfsUnpulledCount = 0;
+                return;
+            }
+            if (string.IsNullOrEmpty(preHeadSha)) { await RefreshLfsStatusAsync(); return; }
+            try
+            {
+                var postHeadSha = await _git.Executor.RunAsync(() => _git.GetHeadSha());
+                if (string.IsNullOrEmpty(postHeadSha) ||
+                    string.Equals(preHeadSha, postHeadSha, StringComparison.Ordinal))
+                    return; // HEAD didn't move (e.g. re-checking out the already-current branch) — nothing to re-check.
+
+                var changedPaths = await _git.Executor.RunAsync(
+                    () => _git.GetChangedFiles(preHeadSha, postHeadSha).Select(f => f.Path).ToList());
+                if (changedPaths.Count == 0) return;
+
+                var workDir = _git.WorkingDirectory;
+                var stillPointer = await _git.Executor.RunAsync(() =>
+                    changedPaths.Where(p => LooksLikeLfsPointer(Path.Combine(workDir, p))).ToList());
+                if (stillPointer.Count == 0) return;
+
+                if (_git.Cli == null || !_git.Cli.IsAvailable)
+                {
+                    // No git.exe at all — nothing can smudge these; just report the count.
+                    LfsUnpulledCount += stillPointer.Count;
+                    return;
+                }
+
+                await SmudgeLfsFromLocalCacheAsync(stillPointer);
+                var stillUnresolved = await _git.Executor.RunAsync(() =>
+                    stillPointer.Where(p => LooksLikeLfsPointer(Path.Combine(workDir, p))).ToList());
+                AppLog.Info($"RefreshLfsStatusForCheckoutAsync: {changedPaths.Count} changed paths, " +
+                    $"{stillPointer.Count} still pointer before local-cache smudge, " +
+                    $"{stillUnresolved.Count} still pointer after, LfsUnpulledCount {LfsUnpulledCount} -> " +
+                    $"{Math.Max(0, LfsUnpulledCount - (stillPointer.Count - stillUnresolved.Count))}");
+                LfsUnpulledCount = Math.Max(0, LfsUnpulledCount - (stillPointer.Count - stillUnresolved.Count));
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("RefreshLfsStatusForCheckoutAsync failed, falling back to a full rescan", ex);
+                await RefreshLfsStatusAsync();
+            }
+        }
+
+        /// <summary>True when <paramref name="absolutePath"/>'s content starts with the git-lfs
+        /// pointer-file signature ("version https://git-lfs.github.com/spec/v1") — confirmed
+        /// byte-for-byte against a real pointer file (see chat), not assumed from memory. Reads
+        /// only the first few dozen bytes, so this is a cheap local check even across hundreds of
+        /// files — no git-lfs process involved at all.</summary>
+        private static bool LooksLikeLfsPointer(string absolutePath)
+        {
+            const string Signature = "version https://git-lfs.github.com/spec/v1";
+            try
+            {
+                using (var stream = File.OpenRead(absolutePath))
+                {
+                    var buffer = new byte[Signature.Length];
+                    int read = stream.Read(buffer, 0, buffer.Length);
+                    if (read < Signature.Length) return false;
+                    return Encoding.ASCII.GetString(buffer, 0, read) == Signature;
+                }
+            }
+            catch (IOException) { return false; } // deleted/renamed/locked — not a pointer we can fix here
+            catch (UnauthorizedAccessException) { return false; }
         }
 
         /// <summary>Runs the actual `git lfs pull` — only ever user-initiated (the "Pull LFS

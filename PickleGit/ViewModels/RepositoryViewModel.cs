@@ -811,7 +811,14 @@ namespace PickleGit.ViewModels
             TakeTheirsCommand = new RelayCommand(
                 p => { if (p is FileChange fc) _ = ResolveConflictSideAsync(fc, "theirs"); }, _ => HasRepo);
             MarkResolvedCommand = new RelayCommand(p => _ = MarkResolvedAsync(p), _ => HasRepo);
-            OpenMergeEditorCommand = new RelayCommand(OpenMergeEditor, _ => HasRepo);
+            // Guards against the banner's "Resolve Conflicts…" button (no file parameter) silently
+            // doing nothing once every conflict is already resolved — OpenMergeEditor bails out
+            // early with nothing to show in that case, so disable the button instead of leaving a
+            // click with no visible effect. The context-menu items call this with a specific
+            // FileChange, which only exists (and only shows the menu item at all — see
+            // CommitDetailView.xaml's Kind==Conflicted Visibility binding) while a conflict remains,
+            // so this tighter check never blocks that path.
+            OpenMergeEditorCommand = new RelayCommand(OpenMergeEditor, _ => HasRepo && ConflictedFileChanges.Any());
             UndoCommand = new RelayCommand(async () => await UndoLastAsync(), () => CanUndo && !IsBusy);
             StageHunkOrLinesCommand = new RelayCommand(p => _ = StageHunkOrLinesAsync(p), _ => HasRepo);
             DiscardHunkOrLinesCommand = new RelayCommand(p => _ = DiscardHunkOrLinesAsync(p), _ => HasRepo);
@@ -1607,34 +1614,24 @@ namespace PickleGit.ViewModels
             finally { IsBusy = false; }
         }
 
-        /// <summary>Like RunThenRefresh, for checkouts — also re-checks for now-stale LFS pointer
-        /// files before refreshing (see RefreshLfsStatusAsync).</summary>
         /// <summary>HEAD and the working tree genuinely change on every checkout and must stay
         /// full-cost, but tags/stashes don't — worth skipping given GetTags is an uncached
         /// peel-and-sort over every tag in the repo, every refresh.</summary>
         private const RefreshScope CheckoutRefreshScope =
             RefreshScope.WorkingDir | RefreshScope.History | RefreshScope.Branches | RefreshScope.Remotes;
 
+        /// <summary>Like RunThenRefresh, for checkouts — also re-checks for now-stale LFS pointer
+        /// files before refreshing (see RefreshLfsStatusForCheckoutAsync).</summary>
         private async Task<bool> RunThenRefreshCheckout(string status, Action work)
         {
             if (!TryEnterBusyScope()) return false;
             try
             {
                 var preLfsUnpulled = LfsUnpulledCount;
+                var preHeadSha = await _git.Executor.RunAsync(() => _git.GetHeadSha());
                 var ok = await RunWorkAsync(status, work);
                 if (ok)
-                {
-                    await RefreshLfsStatusAsync();
-                    // libgit2 checkout (used here) never runs git-lfs's smudge filter, so
-                    // switching back to a branch whose LFS content was already pulled before
-                    // still needs this local-cache-only "finish the checkout" step every time —
-                    // try it before ever counting this as something the user needs to act on.
-                    if (LfsUnpulledCount > 0)
-                    {
-                        await SmudgeLfsFromLocalCacheAsync();
-                        await RefreshLfsStatusAsync();
-                    }
-                }
+                    await RefreshLfsStatusForCheckoutAsync(preHeadSha);
                 await RefreshAsync(false, CheckoutRefreshScope);
                 // Only pop the popup when THIS checkout is what caused (or grew) the gap — not on
                 // every checkout while an earlier, already-dismissed shortfall is still sitting

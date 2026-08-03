@@ -230,10 +230,13 @@
                             </ItemsPanelTemplate>
                         </ListView.ItemsPanel>
                         <ListView.ItemContainerStyle>
+                            <!-- No IsHitTestVisible=False here: that would disable mouse hit-testing
+                                 for this ListViewItem's entire visual subtree, silently making every
+                                 Accept Mine/Theirs/Both button and Keep/Delete radio button inside
+                                 unclickable (confirmed live — the exact bug this fixes). -->
                             <Style TargetType="ListViewItem" BasedOn="{StaticResource DarkListViewItem}">
                                 <Setter Property="Padding" Value="0"/>
                                 <Setter Property="Focusable" Value="False"/>
-                                <Setter Property="IsHitTestVisible" Value="False"/>
                             </Style>
                         </ListView.ItemContainerStyle>
                     </ListView>
