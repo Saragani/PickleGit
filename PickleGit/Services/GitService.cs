@@ -630,6 +630,9 @@ namespace PickleGit.Services
             EnsureOpen();
             var commit = _repo.Lookup<Commit>(sha)
                 ?? throw new InvalidOperationException($"Commit {sha} not found.");
+            // Route through git.exe so an LFS-tracked file touched by the revert gets smudged
+            // inline from the local cache, same as GitService.Checkout.
+            if (Cli != null && Cli.IsAvailable) { RevertCli(commit.Sha); return; }
             var sig = _repo.Config.BuildSignature(DateTimeOffset.Now)
                       ?? new Signature("PickleGit", "picklegit@localhost", DateTimeOffset.Now);
             var result = _repo.Revert(commit, sig);
@@ -638,12 +641,43 @@ namespace PickleGit.Services
             // Conflicts are left in the index/working tree and surfaced via GetConflictState().
         }
 
+        private void RevertCli(string sha)
+        {
+            // git.exe (unlike libgit2's Repository.Revert) has no built-in fallback identity and
+            // refuses to commit with none configured — reproduce the same fallback used below via
+            // an inline config override, but only when no identity is actually configured.
+            var configArgs = "";
+            if (_repo.Config.BuildSignature(DateTimeOffset.Now) == null)
+                configArgs = "-c " + Git.CliGitService.Quote("user.name=PickleGit") +
+                             " -c " + Git.CliGitService.Quote("user.email=picklegit@localhost") + " ";
+            var result = Cli.RunAsync(configArgs + "revert --no-edit " + Git.CliGitService.Quote(sha))
+                .GetAwaiter().GetResult();
+            Reopen();
+            if (result.Success) return;
+            if (_repo.Index.Conflicts.Any()) return; // left for resolution, matches GetConflictState()
+            // Verified directly: an empty revert (changes already absent) exits 1 with this exact
+            // message on stdout, not a real error — distinct from a genuine failure.
+            if (result.StdOut != null &&
+                result.StdOut.IndexOf("nothing to commit", StringComparison.OrdinalIgnoreCase) >= 0)
+                throw new InvalidOperationException("Nothing to revert — the changes are already absent.");
+            throw new InvalidOperationException(result.ErrorText);
+        }
+
         public MergeResult Merge(string branchName, string authorName, string authorEmail,
             GitMergeMode mode = GitMergeMode.Default)
         {
             EnsureOpen();
             var branch = _repo.Branches[branchName];
             if (branch == null) throw new InvalidOperationException($"Branch '{branchName}' not found.");
+            // Route through git.exe so a merge's working-tree checkout smudges any LFS-tracked file
+            // from the local cache, same as GitService.Checkout. MergeResult is unused by every
+            // caller (conflicts are surfaced separately via GetConflictState()), so the CLI path
+            // just returns null.
+            if (Cli != null && Cli.IsAvailable)
+            {
+                MergeCli(branchName, authorName, authorEmail, mode);
+                return null;
+            }
             var sig = new Signature(authorName, authorEmail, DateTimeOffset.Now);
             var opts = new MergeOptions();
             switch (mode)
@@ -652,6 +686,22 @@ namespace PickleGit.Services
                 case GitMergeMode.FastForwardOnly: opts.FastForwardStrategy = FastForwardStrategy.FastForwardOnly; break;
             }
             return _repo.Merge(branch, sig, opts);
+        }
+
+        private void MergeCli(string branchName, string authorName, string authorEmail, GitMergeMode mode)
+        {
+            var args = "-c " + Git.CliGitService.Quote("user.name=" + authorName) +
+                       " -c " + Git.CliGitService.Quote("user.email=" + authorEmail) + " merge ";
+            switch (mode)
+            {
+                case GitMergeMode.NoFastForward: args += "--no-ff "; break;
+                case GitMergeMode.FastForwardOnly: args += "--ff-only "; break;
+            }
+            args += Git.CliGitService.Quote(branchName);
+            var result = Cli.RunAsync(args).GetAwaiter().GetResult();
+            Reopen();
+            if (!result.Success && !_repo.Index.Conflicts.Any())
+                throw new InvalidOperationException(result.ErrorText);
         }
 
         // ── Staging & Commits ─────────────────────────────────────────────────
@@ -1728,6 +1778,17 @@ namespace PickleGit.Services
             EnsureOpen();
             var commit = _repo.Lookup<Commit>(sha)
                 ?? throw new InvalidOperationException($"Commit {sha} not found.");
+            // Route through git.exe so an LFS-tracked file touched by the cherry-pick gets smudged
+            // inline from the local cache, same as GitService.Checkout.
+            if (Cli != null && Cli.IsAvailable)
+            {
+                var result = Cli.RunAsync("cherry-pick " + Git.CliGitService.Quote(commit.Sha))
+                    .GetAwaiter().GetResult();
+                Reopen();
+                if (!result.Success && !_repo.Index.Conflicts.Any())
+                    throw new InvalidOperationException(result.ErrorText);
+                return;
+            }
             var identity = new Identity(
                 _repo.Config.Get<string>("user.name")?.Value ?? "Unknown",
                 _repo.Config.Get<string>("user.email")?.Value ?? "unknown@example.com");
