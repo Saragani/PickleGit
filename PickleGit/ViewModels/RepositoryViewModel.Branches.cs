@@ -333,7 +333,7 @@ namespace PickleGit.ViewModels
                 var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, remoteUrl);
                 var cliOk = await RunCliAsync($"Pushing tag {ti.Name} to {remoteName}…",
                     $"push {CliGitService.Quote(remoteName)} {CliGitService.Quote("refs/tags/" + ti.Name)}",
-                    "Push tag", env: env);
+                    "Push tag", env: env, authRetryRemoteUrl: remoteUrl);
                 if (cliOk && _credentialsFromDialog) SaveCredentials();
                 return;
             }

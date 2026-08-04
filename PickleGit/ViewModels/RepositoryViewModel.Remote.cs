@@ -92,6 +92,15 @@ namespace PickleGit.ViewModels
                                 var args = $"fetch {(prune ? "--prune " : "")}{CliGitService.Quote(r.Name)}";
                                 var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, r.Url);
                                 var result = _git.Cli.RunAsync(args, new GitCliOptions { Progress = progress, Env = env }).GetAwaiter().GetResult();
+                                if (!result.Success && IsAuthRejectionSignature(result.ErrorText))
+                                {
+                                    PurgeRejectedCredentialForRetry(r.Url);
+                                    if (TryAutoResolveCredential(r.Url))
+                                    {
+                                        var freshEnv = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, r.Url);
+                                        result = _git.Cli.RunAsync(args, new GitCliOptions { Progress = progress, Env = freshEnv }).GetAwaiter().GetResult();
+                                    }
+                                }
                                 _git.Reopen();
                                 if (!result.Success) throw new InvalidOperationException(result.ErrorText);
                             }
@@ -120,7 +129,8 @@ namespace PickleGit.ViewModels
                 {
                     var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, remote?.Url);
                     var cliOk = await RunCliAsync(status,
-                        $"fetch {(prune ? "--prune " : "")}{CliGitService.Quote(remoteName)}", "Fetch", env: env);
+                        $"fetch {(prune ? "--prune " : "")}{CliGitService.Quote(remoteName)}", "Fetch", env: env,
+                        authRetryRemoteUrl: remote?.Url);
                     if (cliOk && _credentialsFromDialog) SaveCredentials();
                     await RefreshAsync(false, FetchRefreshScope);
                     return;
@@ -166,9 +176,16 @@ namespace PickleGit.ViewModels
         /// Runs a git.exe-backed operation with the standard busy/error handling.
         /// Credentials come from git's own credential helpers (GCM). Reopens the
         /// libgit2 handle afterwards because the CLI may have mutated refs/index.
+        ///
+        /// When <paramref name="authRetryRemoteUrl"/> is set (an HTTPS remote URL) and the first
+        /// attempt fails with a credential-rejection signature, this purges the stale credential and
+        /// makes one silent retry with a freshly auto-resolved one before giving up — see
+        /// TryAutoResolveCredential's remarks. Only if that retry also fails does the exception
+        /// propagate to RunWorkAsync's catch, which shows the error and forces the interactive
+        /// dialog on the *next* explicit attempt, exactly as before.
         /// </summary>
         private async Task<bool> RunCliAsync(string status, string args, string featureName, string stdIn = null,
-            IDictionary<string, string> env = null)
+            IDictionary<string, string> env = null, string authRetryRemoteUrl = null)
         {
             if (_git.Cli == null || !_git.Cli.IsAvailable)
             {
@@ -187,6 +204,22 @@ namespace PickleGit.ViewModels
                     Env = env,
                     Progress = new Progress<string>(ReportProgress)
                 }, OpToken).GetAwaiter().GetResult();
+
+                if (!result.Success && authRetryRemoteUrl != null && IsAuthRejectionSignature(result.ErrorText))
+                {
+                    PurgeRejectedCredentialForRetry(authRetryRemoteUrl);
+                    if (TryAutoResolveCredential(authRetryRemoteUrl))
+                    {
+                        var freshEnv = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, authRetryRemoteUrl);
+                        result = _git.Cli.RunAsync(args, new GitCliOptions
+                        {
+                            StdIn = stdIn,
+                            Env = freshEnv,
+                            Progress = new Progress<string>(ReportProgress)
+                        }, OpToken).GetAwaiter().GetResult();
+                    }
+                }
+
                 _git.Reopen();
                 if (!result.Success)
                     throw new InvalidOperationException(result.ErrorText);
@@ -197,9 +230,10 @@ namespace PickleGit.ViewModels
         /// Like RunCliAsync, but for ops that can legitimately "fail" (non-zero exit) by
         /// stopping for conflict resolution — rebase, pull --rebase. In that case the conflict
         /// banner takes over instead of an error dialog; only a genuine failure still throws.
+        /// See RunCliAsync's remarks for the <paramref name="authRetryRemoteUrl"/> silent-retry behavior.
         /// </summary>
         private async Task<bool> RunCliAllowingConflictAsync(string status, string args, string featureName,
-            IDictionary<string, string> env = null)
+            IDictionary<string, string> env = null, string authRetryRemoteUrl = null)
         {
             if (_git.Cli == null || !_git.Cli.IsAvailable)
             {
@@ -215,6 +249,21 @@ namespace PickleGit.ViewModels
                     Env = env,
                     Progress = new Progress<string>(ReportProgress)
                 }, OpToken).GetAwaiter().GetResult();
+
+                if (!result.Success && authRetryRemoteUrl != null && IsAuthRejectionSignature(result.ErrorText))
+                {
+                    PurgeRejectedCredentialForRetry(authRetryRemoteUrl);
+                    if (TryAutoResolveCredential(authRetryRemoteUrl))
+                    {
+                        var freshEnv = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, authRetryRemoteUrl);
+                        result = _git.Cli.RunAsync(args, new GitCliOptions
+                        {
+                            Env = freshEnv,
+                            Progress = new Progress<string>(ReportProgress)
+                        }, OpToken).GetAwaiter().GetResult();
+                    }
+                }
+
                 _git.Reopen();
                 if (!result.Success && !_git.GetConflictState().HasConflicts)
                     throw new InvalidOperationException(result.ErrorText);
@@ -280,7 +329,8 @@ namespace PickleGit.ViewModels
                     env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, remoteUrl);
                 }
                 var preHead = await _git.Executor.RunAsync(() => _git.GetHeadSha());
-                var ok = await RunCliAllowingConflictAsync("Pulling…", "pull --autostash", "Pull", env);
+                var ok = await RunCliAllowingConflictAsync("Pulling…", "pull --autostash", "Pull", env,
+                    authRetryRemoteUrl: isSsh ? null : remoteUrl);
                 if (ok)
                 {
                     var conflict = await _git.Executor.RunAsync(() => _git.GetConflictState());
@@ -327,7 +377,8 @@ namespace PickleGit.ViewModels
                 {
                     var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, remoteUrl);
                     var cliOk = await RunCliAsync($"Pushing to {remoteName}…",
-                        $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(branch)}", "Push", env: env);
+                        $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(branch)}", "Push", env: env,
+                        authRetryRemoteUrl: remoteUrl);
                     if (cliOk && _credentialsFromDialog) SaveCredentials();
                     if (cliOk) await RefreshAsync(false, PushRefreshScope);
                     return cliOk;
@@ -369,7 +420,8 @@ namespace PickleGit.ViewModels
                 {
                     var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, remoteUrl);
                     var cliOk = await RunCliAsync($"Pushing {bi.Name} to {remoteName}…",
-                        $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(bi.Name)}", "Push", env: env);
+                        $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(bi.Name)}", "Push", env: env,
+                        authRetryRemoteUrl: remoteUrl);
                     if (cliOk && _credentialsFromDialog) SaveCredentials();
                     if (cliOk) await RefreshAsync(false, PushRefreshScope);
                     return cliOk;
@@ -387,6 +439,94 @@ namespace PickleGit.ViewModels
         }
 
         // ── Credential helpers ────────────────────────────────────────────────
+
+        /// <summary>Mirrors the credential-rejection signature check in RunWorkAsync's catch block
+        /// (RepositoryViewModel.cs) — duplicated rather than shared because that check runs strictly
+        /// AFTER an operation has already been given up on, while this one runs on the git.exe CLI
+        /// path's first failure to decide whether a silent retry is worth attempting at all. Keep
+        /// the two lists of signatures in sync if either changes.</summary>
+        private static bool IsAuthRejectionSignature(string msg)
+        {
+            if (string.IsNullOrEmpty(msg)) return false;
+            return msg.IndexOf("authentication replays", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   msg.IndexOf("status code: 401", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   msg.IndexOf("status code: 403", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   msg.IndexOf("status code: 410", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   msg.IndexOf("returned error: 401", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   msg.IndexOf("returned error: 403", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   msg.IndexOf("returned error: 410", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   msg.IndexOf("could not read username", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   msg.IndexOf("could not read password", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>Clears a rejected HTTPS credential from memory and PickleGit's own store, and
+        /// tells the system credential helper (GCM, wincred, ...) it was rejected — the same cleanup
+        /// RunWorkAsync's catch does for a definitive failure, but WITHOUT forcing the interactive
+        /// dialog, since the caller is about to give TryAutoResolveCredential a chance to find a
+        /// fresh one first. Safe to call from the executor thread — RemoteUsername/RemotePassword
+        /// are plain auto-properties with no change notification, so there's no cross-thread hazard.</summary>
+        private void PurgeRejectedCredentialForRetry(string remoteUrl)
+        {
+            var failedUser = RemoteUsername;
+            var failedPassword = RemotePassword;
+            RemoteUsername = null;
+            RemotePassword = null;
+            if (string.IsNullOrEmpty(failedUser) || string.IsNullOrEmpty(remoteUrl)) return;
+            try
+            {
+                if (Uri.TryCreate(remoteUrl, UriKind.Absolute, out var uri))
+                    Services.CredentialStore.Delete(uri.Host, failedUser);
+            }
+            catch { }
+            Services.CredentialStore.RejectViaGitCredentialHelper(remoteUrl, failedUser, failedPassword);
+        }
+
+        /// <summary>Synchronous variant of EnsureCredentialsAsync's auto-lookup chain (own store →
+        /// git credential helper → raw Credential Manager), safe to call from the executor thread —
+        /// never shows the interactive dialog. Used for one silent recovery attempt right after
+        /// PurgeRejectedCredentialForRetry: a token-based credential manager (GCM) can rotate/refresh
+        /// a rejected token in the background with no visible prompt, so re-asking immediately often
+        /// already has a fresh one ready — confirmed this happens in practice against Bitbucket.</summary>
+        private bool TryAutoResolveCredential(string remoteUrl)
+        {
+            if (string.IsNullOrEmpty(remoteUrl)) return false;
+            try
+            {
+                if (Uri.TryCreate(remoteUrl, UriKind.Absolute, out var uri))
+                {
+                    foreach (var (host, user) in Services.CredentialStore.ListAll())
+                    {
+                        if (!string.Equals(host, uri.Host, StringComparison.OrdinalIgnoreCase)) continue;
+                        var pw = Services.CredentialStore.Load(host, user);
+                        if (pw != null) { RemoteUsername = user; RemotePassword = pw; return true; }
+                    }
+                }
+            }
+            catch { }
+            try
+            {
+                var (gitUser, gitPass) = Services.CredentialStore.LoadViaGitCredentialHelper(remoteUrl);
+                if (!string.IsNullOrEmpty(gitUser) && !string.IsNullOrEmpty(gitPass))
+                {
+                    RemoteUsername = gitUser;
+                    RemotePassword = gitPass;
+                    return true;
+                }
+            }
+            catch { }
+            try
+            {
+                var (gcmUser, gcmPass) = Services.CredentialStore.LoadFromGitCredentialManager(remoteUrl);
+                if (!string.IsNullOrEmpty(gcmUser) && !string.IsNullOrEmpty(gcmPass))
+                {
+                    RemoteUsername = gcmUser;
+                    RemotePassword = gcmPass;
+                    return true;
+                }
+            }
+            catch { }
+            return false;
+        }
 
         private async Task<bool> EnsureCredentialsAsync()
         {
