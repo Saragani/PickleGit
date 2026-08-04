@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -57,6 +58,35 @@ namespace PickleGit.Services.Git
         /// leaves a trailing backslash run un-doubled, which lets it escape the closing quote
         /// instead of terminating the argument (e.g. a path ending in "\" with a space in it).
         /// </summary>
+        /// <summary>
+        /// Builds env vars that authenticate an HTTPS git.exe invocation without ever putting the
+        /// credential in ProcessStartInfo.Arguments (which GitCli.RunAsync logs verbatim via AppLog)
+        /// or in the remote URL. GIT_CONFIG_KEY/VALUE injects an Authorization header via
+        /// http.extraheader — verified directly that git sends it on the very first request, so nothing
+        /// prompts on the success path.
+        ///
+        /// credential.helper is cleared and GIT_ASKPASS is pointed at git.exe itself (a fast, always-
+        /// present binary that just fails as an invalid subcommand) so a REJECTED header fails fast
+        /// instead of falling through to the system credential manager. Verified directly: with this
+        /// machine's configured credential.helper=manager (Git Credential Manager) left enabled, a
+        /// rejected credential made git.exe hang indefinitely (>60s, force-kill required) waiting on an
+        /// invisible GCM prompt; disabling both here instead fails in under a second with a clear
+        /// "could not read Username ... terminal prompts disabled" / "returned error: 4xx" stderr message.
+        /// </summary>
+        public static IDictionary<string, string> BuildHttpAuthEnv(string username, string password)
+        {
+            var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
+            return new Dictionary<string, string>
+            {
+                ["GIT_CONFIG_COUNT"] = "2",
+                ["GIT_CONFIG_KEY_0"] = "http.extraheader",
+                ["GIT_CONFIG_VALUE_0"] = "Authorization: Basic " + token,
+                ["GIT_CONFIG_KEY_1"] = "credential.helper",
+                ["GIT_CONFIG_VALUE_1"] = "",
+                ["GIT_ASKPASS"] = GitCli.ResolveGitPath() ?? "",
+            };
+        }
+
         public static string Quote(string arg)
         {
             if (string.IsNullOrEmpty(arg)) return "\"\"";

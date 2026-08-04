@@ -327,6 +327,15 @@ namespace PickleGit.ViewModels
                 return;
             }
             if (!await EnsureCredentialsAsync()) return;
+            if (_git.Cli != null && _git.Cli.IsAvailable)
+            {
+                var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword);
+                var cliOk = await RunCliAsync($"Pushing tag {ti.Name} to {remoteName}…",
+                    $"push {CliGitService.Quote(remoteName)} {CliGitService.Quote("refs/tags/" + ti.Name)}",
+                    "Push tag", env: env);
+                if (cliOk && _credentialsFromDialog) SaveCredentials();
+                return;
+            }
             var ok = await RunAsync($"Pushing tag {ti.Name} to {remoteName}…",
                 () => _git.PushTag(ti.Name, remoteName, RemoteUsername, RemotePassword));
             if (ok && _credentialsFromDialog) SaveCredentials();

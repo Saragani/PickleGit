@@ -1749,10 +1749,19 @@ namespace PickleGit.ViewModels
                 // Basic-Auth passwords/app-passwords entirely) fundamentally unusable credentials
                 // — so it gets the same treatment: purge the stale credential and force a fresh
                 // prompt next attempt instead of silently replaying the same broken one forever.
+                // git.exe's HTTPS CLI path (see CliGitService.BuildHttpAuthEnv) deliberately disables
+                // credential.helper/GIT_ASKPASS so a rejected credential fails fast instead of hanging
+                // on an interactive system prompt — verified directly, this is git's own wording for
+                // that failure mode, distinct from (and in addition to) libgit2's "status code: NNN".
                 var isRejectedAuthStatus =
                     msg.IndexOf("status code: 401", StringComparison.OrdinalIgnoreCase) >= 0 ||
                     msg.IndexOf("status code: 403", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    msg.IndexOf("status code: 410", StringComparison.OrdinalIgnoreCase) >= 0;
+                    msg.IndexOf("status code: 410", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    msg.IndexOf("returned error: 401", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    msg.IndexOf("returned error: 403", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    msg.IndexOf("returned error: 410", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    msg.IndexOf("could not read username", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    msg.IndexOf("could not read password", StringComparison.OrdinalIgnoreCase) >= 0;
                 if (msg.IndexOf("authentication replays", StringComparison.OrdinalIgnoreCase) >= 0 ||
                     isRejectedAuthStatus)
                 {
