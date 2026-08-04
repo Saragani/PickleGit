@@ -1042,7 +1042,7 @@ namespace PickleGit.ViewModels
                     // credential-manager prompt (GCM, browser OAuth, ...) is the only way this can
                     // ever succeed, and is exactly what a plain `git clone` from a terminal would do.
                     var env = (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
-                        ? CliGitService.BuildHttpAuthEnv(username, password)
+                        ? CliGitService.BuildHttpAuthEnv(username, password, url)
                         : null;
                     await RunAsync($"Cloning {url}…", () =>
                     {

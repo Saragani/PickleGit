@@ -62,26 +62,47 @@ namespace PickleGit.Services.Git
         /// Builds env vars that authenticate an HTTPS git.exe invocation without ever putting the
         /// credential in ProcessStartInfo.Arguments (which GitCli.RunAsync logs verbatim via AppLog)
         /// or in the remote URL. GIT_CONFIG_KEY/VALUE injects an Authorization header via
-        /// http.extraheader — verified directly that git sends it on the very first request, so nothing
-        /// prompts on the success path.
+        /// http.&lt;url&gt;.extraheader — verified directly that git sends it on the very first request, so
+        /// nothing prompts on the success path.
         ///
-        /// credential.helper is cleared and GIT_ASKPASS is pointed at git.exe itself (a fast, always-
-        /// present binary that just fails as an invalid subcommand) so a REJECTED header fails fast
-        /// instead of falling through to the system credential manager. Verified directly: with this
+        /// Both the extraheader and the credential.helper override are scoped to <paramref
+        /// name="remoteUrl"/>'s scheme+host+port (via git's URL-prefix config matching, verified
+        /// directly with `git config --get-urlmatch`) rather than the bare unscoped keys. A single git.exe
+        /// invocation can talk to more than one host — e.g. a push to Bitbucket that also triggers an LFS
+        /// lock-verify request against a *different* server. An unscoped http.extraheader/credential.helper
+        /// applies to every HTTP request that process makes, so it was leaking this host's Basic-auth header
+        /// (and disabling the credential helper) onto that unrelated host too, breaking its own independent
+        /// auth. Scoping to this remote's origin only reproduced in a real repo with a separate LFS remote.
+        ///
+        /// credential.helper is cleared (for this host only) and GIT_ASKPASS is pointed at git.exe itself (a
+        /// fast, always-present binary that just fails as an invalid subcommand) so a REJECTED header fails
+        /// fast instead of falling through to the system credential manager. Verified directly: with this
         /// machine's configured credential.helper=manager (Git Credential Manager) left enabled, a
         /// rejected credential made git.exe hang indefinitely (>60s, force-kill required) waiting on an
         /// invisible GCM prompt; disabling both here instead fails in under a second with a clear
         /// "could not read Username ... terminal prompts disabled" / "returned error: 4xx" stderr message.
+        /// GIT_ASKPASS itself can't be scoped per-host (git has no such mechanism) but in practice is only
+        /// reached when a host's credential.helper doesn't resolve anything — untouched for every host
+        /// other than remoteUrl's, so this doesn't affect them.
         /// </summary>
-        public static IDictionary<string, string> BuildHttpAuthEnv(string username, string password)
+        public static IDictionary<string, string> BuildHttpAuthEnv(string username, string password, string remoteUrl)
         {
             var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
+            string urlScope;
+            try
+            {
+                urlScope = new Uri(remoteUrl).GetLeftPart(UriPartial.Authority) + "/";
+            }
+            catch (Exception)
+            {
+                urlScope = remoteUrl;
+            }
             return new Dictionary<string, string>
             {
                 ["GIT_CONFIG_COUNT"] = "2",
-                ["GIT_CONFIG_KEY_0"] = "http.extraheader",
+                ["GIT_CONFIG_KEY_0"] = $"http.{urlScope}.extraheader",
                 ["GIT_CONFIG_VALUE_0"] = "Authorization: Basic " + token,
-                ["GIT_CONFIG_KEY_1"] = "credential.helper",
+                ["GIT_CONFIG_KEY_1"] = $"credential.{urlScope}.helper",
                 ["GIT_CONFIG_VALUE_1"] = "",
                 ["GIT_ASKPASS"] = GitCli.ResolveGitPath() ?? "",
             };

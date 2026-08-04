@@ -90,7 +90,7 @@ namespace PickleGit.ViewModels
                             else if (_git.Cli != null && _git.Cli.IsAvailable)
                             {
                                 var args = $"fetch {(prune ? "--prune " : "")}{CliGitService.Quote(r.Name)}";
-                                var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword);
+                                var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, r.Url);
                                 var result = _git.Cli.RunAsync(args, new GitCliOptions { Progress = progress, Env = env }).GetAwaiter().GetResult();
                                 _git.Reopen();
                                 if (!result.Success) throw new InvalidOperationException(result.ErrorText);
@@ -118,7 +118,7 @@ namespace PickleGit.ViewModels
                 if (!await EnsureCredentialsAsync()) return;
                 if (_git.Cli != null && _git.Cli.IsAvailable)
                 {
-                    var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword);
+                    var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, remote?.Url);
                     var cliOk = await RunCliAsync(status,
                         $"fetch {(prune ? "--prune " : "")}{CliGitService.Quote(remoteName)}", "Fetch", env: env);
                     if (cliOk && _credentialsFromDialog) SaveCredentials();
@@ -268,7 +268,8 @@ namespace PickleGit.ViewModels
         private async Task PullAsync()
         {
             await RefreshCurrentBranchAsync();
-            var isSsh = GitCli.IsSshUrl(Remotes.FirstOrDefault()?.Url);
+            var remoteUrl = Remotes.FirstOrDefault()?.Url;
+            var isSsh = GitCli.IsSshUrl(remoteUrl);
             var cliAvailable = _git.Cli != null && _git.Cli.IsAvailable;
             if (isSsh || cliAvailable)
             {
@@ -276,7 +277,7 @@ namespace PickleGit.ViewModels
                 if (!isSsh)
                 {
                     if (!await EnsureCredentialsAsync()) return;
-                    env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword);
+                    env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, remoteUrl);
                 }
                 var preHead = await _git.Executor.RunAsync(() => _git.GetHeadSha());
                 var ok = await RunCliAllowingConflictAsync("Pulling…", "pull --autostash", "Pull", env);
@@ -310,10 +311,11 @@ namespace PickleGit.ViewModels
         {
             var branch = await RefreshCurrentBranchAsync();
             var remoteName = Remotes.FirstOrDefault()?.Name ?? "origin";
+            var remoteUrl = Remotes.FirstOrDefault()?.Url;
             if (!TryEnterBusyScope()) return false;
             try
             {
-                if (GitCli.IsSshUrl(Remotes.FirstOrDefault()?.Url))
+                if (GitCli.IsSshUrl(remoteUrl))
                 {
                     var cliOk = await RunCliAsync($"Pushing to {remoteName}…",
                         $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(branch)}", "Push");
@@ -323,7 +325,7 @@ namespace PickleGit.ViewModels
                 if (!await EnsureCredentialsAsync()) return false;
                 if (_git.Cli != null && _git.Cli.IsAvailable)
                 {
-                    var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword);
+                    var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, remoteUrl);
                     var cliOk = await RunCliAsync($"Pushing to {remoteName}…",
                         $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(branch)}", "Push", env: env);
                     if (cliOk && _credentialsFromDialog) SaveCredentials();
@@ -351,10 +353,11 @@ namespace PickleGit.ViewModels
         {
             if (!(param is BranchInfo bi) || bi.IsRemote) return false;
             var remoteName = Remotes.FirstOrDefault()?.Name ?? "origin";
+            var remoteUrl = Remotes.FirstOrDefault()?.Url;
             if (!TryEnterBusyScope()) return false;
             try
             {
-                if (GitCli.IsSshUrl(Remotes.FirstOrDefault()?.Url))
+                if (GitCli.IsSshUrl(remoteUrl))
                 {
                     var cliOk = await RunCliAsync($"Pushing {bi.Name} to {remoteName}…",
                         $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(bi.Name)}", "Push");
@@ -364,7 +367,7 @@ namespace PickleGit.ViewModels
                 if (!await EnsureCredentialsAsync()) return false;
                 if (_git.Cli != null && _git.Cli.IsAvailable)
                 {
-                    var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword);
+                    var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, remoteUrl);
                     var cliOk = await RunCliAsync($"Pushing {bi.Name} to {remoteName}…",
                         $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(bi.Name)}", "Push", env: env);
                     if (cliOk && _credentialsFromDialog) SaveCredentials();

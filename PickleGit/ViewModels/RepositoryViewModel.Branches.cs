@@ -320,7 +320,8 @@ namespace PickleGit.ViewModels
         {
             if (!(param is TagInfo ti)) return;
             var remoteName = Remotes.FirstOrDefault()?.Name ?? "origin";
-            if (GitCli.IsSshUrl(Remotes.FirstOrDefault()?.Url))
+            var remoteUrl = Remotes.FirstOrDefault()?.Url;
+            if (GitCli.IsSshUrl(remoteUrl))
             {
                 await RunCliAsync($"Pushing tag {ti.Name} to {remoteName}…",
                     $"push {CliGitService.Quote(remoteName)} {CliGitService.Quote("refs/tags/" + ti.Name)}", "Push tag");
@@ -329,7 +330,7 @@ namespace PickleGit.ViewModels
             if (!await EnsureCredentialsAsync()) return;
             if (_git.Cli != null && _git.Cli.IsAvailable)
             {
-                var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword);
+                var env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, remoteUrl);
                 var cliOk = await RunCliAsync($"Pushing tag {ti.Name} to {remoteName}…",
                     $"push {CliGitService.Quote(remoteName)} {CliGitService.Quote("refs/tags/" + ti.Name)}",
                     "Push tag", env: env);
