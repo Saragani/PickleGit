@@ -1015,16 +1015,49 @@ namespace PickleGit.ViewModels
                             throw new InvalidOperationException(result.ErrorText);
                     });
                 }
+                else if (GitCli.IsGitAvailable)
+                {
+                    // Blank credentials passed straight into libgit2's CredentialsHandler as empty
+                    // strings make a private/auth-required remote reject repeatedly until libgit2
+                    // gives up with "too many redirects or authentication replays" — so before
+                    // falling back to that, ask git's own configured credential helper (same call
+                    // Push/Pull already use) for cached creds.
+                    if (string.IsNullOrEmpty(username) && string.IsNullOrEmpty(password))
+                    {
+                        var (helperUser, helperPass) = CredentialStore.LoadViaGitCredentialHelper(url);
+                        if (!string.IsNullOrEmpty(helperPass))
+                        {
+                            username = helperUser;
+                            password = helperPass;
+                        }
+                    }
+                    var parentDir = Path.GetDirectoryName(localPath.TrimEnd('\\', '/'));
+                    if (string.IsNullOrEmpty(parentDir)) parentDir = Environment.CurrentDirectory;
+                    var extra = !string.IsNullOrWhiteSpace(branch)
+                        ? $" --branch {CliGitService.Quote(branch.Trim())}" : "";
+                    // Only inject the Authorization-header env override (see
+                    // CliGitService.BuildHttpAuthEnv) when we actually have a resolved credential to
+                    // protect — otherwise leave git.exe's ambient credential resolution alone, since
+                    // for a brand-new clone with nothing cached anywhere, a real interactive
+                    // credential-manager prompt (GCM, browser OAuth, ...) is the only way this can
+                    // ever succeed, and is exactly what a plain `git clone` from a terminal would do.
+                    var env = (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
+                        ? CliGitService.BuildHttpAuthEnv(username, password)
+                        : null;
+                    await RunAsync($"Cloning {url}…", () =>
+                    {
+                        var result = GitCli.RunAsync(parentDir,
+                            $"clone{extra} {CliGitService.Quote(url)} {CliGitService.Quote(localPath)}",
+                            new GitCliOptions { Progress = new Progress<string>(ReportProgress), Env = env }, OpToken)
+                            .GetAwaiter().GetResult();
+                        if (!result.Success)
+                            throw new InvalidOperationException(result.ErrorText);
+                    });
+                }
                 else
                 {
                     await RunAsync($"Cloning {url}…", () =>
                     {
-                        // Blank credentials go straight into libgit2's CredentialsHandler as empty
-                        // strings, which a private/auth-required remote rejects repeatedly until
-                        // libgit2 gives up with "too many redirects or authentication replays" — so
-                        // before falling back to that, ask git's own configured credential helper
-                        // (same call Push/Pull already use) for cached creds, or to run its normal
-                        // interactive/browser prompt (e.g. GCM) if nothing is cached yet.
                         if (string.IsNullOrEmpty(username) && string.IsNullOrEmpty(password))
                         {
                             var (helperUser, helperPass) = CredentialStore.LoadViaGitCredentialHelper(url);
