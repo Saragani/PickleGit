@@ -150,7 +150,9 @@ namespace PickleGit.ViewModels
             var result = new List<SideBySideItem>();
             foreach (var hunk in hunks)
             {
-                result.Add(new SideBySideItem { Kind = DiffItemKind.HunkHeader, Header = hunk.Header, Hunk = hunk });
+                // See BuildFlatDiffItems — a headerless filler hunk has nothing to stage/discard.
+                if (HunkHasChanges(hunk))
+                    result.Add(new SideBySideItem { Kind = DiffItemKind.HunkHeader, Header = hunk.Header, Hunk = hunk });
                 var lines = hunk.Lines;
                 int i = 0;
                 while (i < lines.Count)
@@ -234,12 +236,19 @@ namespace PickleGit.ViewModels
             return bmp;
         }
 
+        private static bool HunkHasChanges(DiffHunk h) =>
+            h.Lines.Any(l => l.Kind == DiffLineKind.Added || l.Kind == DiffLineKind.Deleted);
+
         private static List<DiffItem> BuildFlatDiffItems(List<DiffHunk> hunks)
         {
             var flat = new List<DiffItem>(hunks.Sum(h => h.Lines.Count + 1));
             foreach (var hunk in hunks)
             {
-                flat.Add(new DiffItem { Kind = DiffItemKind.HunkHeader, Header = hunk.Header, Hunk = hunk });
+                // A "filler" hunk from ReconstructHunkBoundaries (unchanged lines between two real
+                // changes, kept visible for "Show entire file") gets no header row — there's nothing
+                // to stage/discard there, and a Stage-Hunk button with no effect would be confusing.
+                if (HunkHasChanges(hunk))
+                    flat.Add(new DiffItem { Kind = DiffItemKind.HunkHeader, Header = hunk.Header, Hunk = hunk });
                 foreach (var line in hunk.Lines)
                     flat.Add(new DiffItem { Kind = DiffItemKind.Line, Line = line, Hunk = hunk });
             }
@@ -293,8 +302,15 @@ namespace PickleGit.ViewModels
             }
             _pendingLargeDiff = null;
             IsLargeDiffPending = false;
-            FlatDiffItems = BuildFlatDiffItems(diff.Hunks);
-            SideBySideItems = BuildSideBySideItems(diff.Hunks);
+            // ShowEntireFile fetches the diff with an enormous context radius (see ContextLines), so
+            // git's own hunk-merge rule (any two changes within the context radius merge into one
+            // hunk) collapses the whole file into a single mega-hunk — correct content, but only one
+            // header/Stage-Hunk button at the very top instead of one per actual change, and staging
+            // that "hunk" would stage the entire file at once. Re-chunk it back into the boundaries a
+            // normal small-context diff would have before rendering.
+            var hunks = ShowEntireFile ? ReconstructHunkBoundaries(diff.Hunks) : diff.Hunks;
+            FlatDiffItems = BuildFlatDiffItems(hunks);
+            SideBySideItems = BuildSideBySideItems(hunks);
             IsLfsPointerDiff = DetectLfsPointer(diff.Hunks);
             IsBinaryDiff = diff.IsBinary;
             if (IsDiffSearchOpen) RecomputeDiffSearch(); // matches referenced the old items
@@ -306,13 +322,113 @@ namespace PickleGit.ViewModels
             if (pending != null) ApplyDiffResult(pending, bypassSizeGuard: true);
         }
 
+        /// <summary>Splits each mega-hunk produced by the huge-context "Show entire file" fetch back
+        /// into the boundaries a normal DefaultContextLines diff would have — grouping changes
+        /// separated by more than 2×DefaultContextLines of untouched lines into distinct hunks —
+        /// while keeping every line of the file visible. The untouched stretches between hunks (and
+        /// before/after the first/last one) become headerless "filler" hunks; BuildFlatDiffItems/
+        /// BuildSideBySideItems skip the header row for any hunk with no Added/Deleted lines.</summary>
+        private static List<DiffHunk> ReconstructHunkBoundaries(List<DiffHunk> hunks)
+        {
+            var result = new List<DiffHunk>();
+            foreach (var mega in hunks) result.AddRange(SplitMegaHunk(mega));
+            return result;
+        }
+
+        private static List<DiffHunk> SplitMegaHunk(DiffHunk mega)
+        {
+            const int context = GitService.DefaultContextLines;
+            var lines = mega.Lines;
+            var changeIdx = new List<int>();
+            for (int i = 0; i < lines.Count; i++)
+                if (lines[i].Kind == DiffLineKind.Added || lines[i].Kind == DiffLineKind.Deleted)
+                    changeIdx.Add(i);
+            if (changeIdx.Count == 0) return new List<DiffHunk> { mega }; // no changes at all — leave as-is
+
+            // Cluster change lines into blocks: consecutive changes separated by more than
+            // 2*context untouched lines would already have been split by git itself at normal
+            // context — anything closer merges, matching git's own hunk-merge rule.
+            var blocks = new List<(int Start, int End)>();
+            int blockStart = changeIdx[0], blockEnd = changeIdx[0];
+            for (int k = 1; k < changeIdx.Count; k++)
+            {
+                int gapLines = changeIdx[k] - blockEnd - 1;
+                if (gapLines > 2 * context)
+                {
+                    blocks.Add((blockStart, blockEnd));
+                    blockStart = changeIdx[k];
+                }
+                blockEnd = changeIdx[k];
+            }
+            blocks.Add((blockStart, blockEnd));
+
+            // Old/new line numbers "at" each index, recomputed the same way GitService.ParsePatch
+            // derived them originally — needed so a sub-hunk starting on an Added-only or
+            // Deleted-only line (no context before it, e.g. a change right at file start) still gets
+            // a correct @@ header for both sides.
+            var oldAt = new int[lines.Count];
+            var newAt = new int[lines.Count];
+            int oldC = mega.OldStart, newC = mega.NewStart;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                oldAt[i] = oldC;
+                newAt[i] = newC;
+                switch (lines[i].Kind)
+                {
+                    case DiffLineKind.Context: oldC++; newC++; break;
+                    case DiffLineKind.Added: newC++; break;
+                    case DiffLineKind.Deleted: oldC++; break;
+                }
+            }
+
+            var result = new List<DiffHunk>();
+            int cursor = 0;
+            for (int b = 0; b < blocks.Count; b++)
+            {
+                var (cs, ce) = blocks[b];
+                int hunkStart = Math.Max(cs - context, cursor);
+                int hunkEnd = Math.Min(ce + context, lines.Count - 1);
+                if (b + 1 < blocks.Count) hunkEnd = Math.Min(hunkEnd, blocks[b + 1].Start - 1);
+
+                if (hunkStart > cursor)
+                    result.Add(BuildSubHunk(lines, oldAt, newAt, cursor, hunkStart - 1));
+                result.Add(BuildSubHunk(lines, oldAt, newAt, hunkStart, hunkEnd));
+                cursor = hunkEnd + 1;
+            }
+            if (cursor <= lines.Count - 1)
+                result.Add(BuildSubHunk(lines, oldAt, newAt, cursor, lines.Count - 1));
+
+            return result;
+        }
+
+        private static DiffHunk BuildSubHunk(List<DiffLine> lines, int[] oldAt, int[] newAt, int start, int end)
+        {
+            var sub = new DiffHunk { OldStart = oldAt[start], NewStart = newAt[start] };
+            sub.Lines = lines.GetRange(start, end - start + 1);
+            int oldCount = sub.Lines.Count(l => l.Kind == DiffLineKind.Context || l.Kind == DiffLineKind.Deleted);
+            int newCount = sub.Lines.Count(l => l.Kind == DiffLineKind.Context || l.Kind == DiffLineKind.Added);
+            sub.Header = $"@@ -{sub.OldStart},{oldCount} +{sub.NewStart},{newCount} @@";
+            return sub;
+        }
+
+        /// <summary>
+        /// A real LFS pointer file's first line is always exactly this (per the LFS pointer spec) —
+        /// anchoring on the full line, not a loose substring, matters: the old check
+        /// (IndexOf("git-lfs.github.com/spec")) matched any line CONTAINING that fragment anywhere,
+        /// so viewing this very method's own diff (its signature constant literally contains that
+        /// text) falsely showed the "this file is an LFS pointer" banner over an ordinary C# file.
+        /// </summary>
         private static bool DetectLfsPointer(List<DiffHunk> hunks)
         {
-            const string signature = "git-lfs.github.com/spec";
+            const string signature = "version https://git-lfs.github.com/spec/v1";
             foreach (var h in hunks)
                 foreach (var l in h.Lines)
-                    if (l.Content != null && l.Content.IndexOf(signature, StringComparison.OrdinalIgnoreCase) >= 0)
-                        return true;
+                {
+                    if (l.Content == null) continue;
+                    // Content still carries its leading +/- /space diff marker — skip it before comparing.
+                    var text = l.Content.Length > 0 ? l.Content.Substring(1).TrimStart() : l.Content;
+                    if (text.StartsWith(signature, StringComparison.OrdinalIgnoreCase)) return true;
+                }
             return false;
         }
 
