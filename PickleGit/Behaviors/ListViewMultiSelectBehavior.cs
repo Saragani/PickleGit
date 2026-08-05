@@ -61,20 +61,43 @@ namespace PickleGit.Behaviors
 
         // User clicked in the ListView → push changes into the ViewModel collection.
         //
-        // The TabControl hides an inactive tab's content (IsVisible flips to false — the whole
-        // tab's Grid, not this ListView specifically, per DarkTabControl's template) rather than
-        // tearing it out of the visual tree: switching away from a tab with a selected commit
-        // fires a SelectionChanged clearing it (removed=N, added=0) while the ListView itself is
-        // still IsLoaded/still attached to a PresentationSource — those two don't distinguish it
-        // from a real user deselect. Confirmed via direct instrumentation (AppLog) capturing
-        // IsLoaded/HasSource/IsVisible at the moment of the clearing event: IsVisible was the only
-        // one of the three that actually flipped. Without this guard, that WPF-internal clear
-        // mirrors straight into the persisted ViewModel collection, permanently wiping the
-        // selection a tab switch is supposed to preserve (SelectedNode/SelectedNodes are otherwise
-        // plain VM state that survives switching tabs untouched).
+        // The TabControl hides an inactive tab's content rather than tearing it out of the visual
+        // tree: switching away from a tab with a selected commit fires a SelectionChanged clearing
+        // it (removed=N, added=0). Checking AssociatedObject.IsVisible synchronously at that point
+        // is NOT reliable — confirmed via direct instrumentation (AppLog) that it can still read
+        // True at the exact moment this fires (timing depends on how much layout work the newly
+        // active tab's content needs; a heavier destination tab can leave the old tab's IsVisible
+        // flip until later). Without a guard, this WPF-internal clear mirrors straight into the
+        // persisted ViewModel collection, permanently wiping the selection a tab switch is supposed
+        // to preserve (SelectedNode/SelectedNodes are otherwise plain VM state that survives
+        // switching tabs untouched).
+        //
+        // Fix: a "cleared to nothing, nothing added" change is the only ambiguous shape (a genuine
+        // partial selection change, e.g. picking a different row, always has AddedItems.Count > 0
+        // and is relayed immediately below). For that one ambiguous shape, defer the relay one
+        // dispatcher pass and re-check IsVisible then — by Background priority the layout pass that
+        // actually hides the old tab's content has had time to run, so a real tab-switch clear now
+        // reads False while a genuine user deselect (Ctrl+click, clicking empty space) still reads
+        // True. The one-tick delay on a real deselect is imperceptible (there's nothing to load for
+        // an empty selection anyway).
         private void OnListViewSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_updating || SelectedItems == null || AssociatedObject?.IsVisible == false) return;
+            if (_updating || SelectedItems == null) return;
+
+            if (e.AddedItems.Count == 0 && e.RemovedItems.Count > 0)
+            {
+                var removed = new ArrayList(e.RemovedItems);
+                var lv = AssociatedObject;
+                lv.Dispatcher.BeginInvoke(new System.Action(() =>
+                {
+                    if (_updating || SelectedItems == null || lv.IsVisible == false) return;
+                    _updating = true;
+                    try { foreach (var item in removed) SelectedItems.Remove(item); }
+                    finally { _updating = false; }
+                }), System.Windows.Threading.DispatcherPriority.Background);
+                return;
+            }
+
             _updating = true;
             try
             {
