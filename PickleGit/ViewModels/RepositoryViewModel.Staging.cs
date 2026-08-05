@@ -250,14 +250,25 @@ namespace PickleGit.ViewModels
             }
         }
 
+        // The Suppress() scope spans the git call AND the two follow-up re-reads below, not just the
+        // git call — narrower used to leave a window where the RepositoryWatcher's own debounced
+        // refresh (it isn't paused by anything else here) could fire its own LoadWorkingDirAsync/
+        // SyncDiffPaneAfterFileListChangeAsync concurrently with this method's, racing over the same
+        // WorkingDirFiles/StagedFiles/_currentDiffFile state. Confirmed directly via instrumentation:
+        // staging a file's diff pane closed it (by design), then unstaging while the watcher's own
+        // refresh was interleaved reopened a completely different file's diff. Suppress() coalesces
+        // rather than drops events (see RepositoryWatcher.cs), so widening this costs nothing — any
+        // real external change during the scope still refreshes once this resolves.
         private async Task StageFileAsync(object param)
         {
             var targets = StagingService.ResolveTargets(_selectedWorkingFiles, param);
             if (targets.Count == 0) return;
             using (_watcher?.Suppress())
+            {
                 await _staging.StageAsync(targets.Select(f => f.Path));
-            await LoadWorkingDirAsync();
-            await SyncDiffPaneAfterFileListChangeAsync();
+                await LoadWorkingDirAsync();
+                await SyncDiffPaneAfterFileListChangeAsync();
+            }
         }
 
         private async Task UnstageFileAsync(object param)
@@ -265,9 +276,11 @@ namespace PickleGit.ViewModels
             var targets = StagingService.ResolveTargets(_selectedStagedFiles, param);
             if (targets.Count == 0) return;
             using (_watcher?.Suppress())
+            {
                 await _staging.UnstageAsync(targets.Select(f => f.Path));
-            await LoadWorkingDirAsync();
-            await SyncDiffPaneAfterFileListChangeAsync();
+                await LoadWorkingDirAsync();
+                await SyncDiffPaneAfterFileListChangeAsync();
+            }
         }
 
         /// <summary>Stages everything, unless 2+ files are multi-selected — then only those.
@@ -276,34 +289,38 @@ namespace PickleGit.ViewModels
         /// (viewing that file's diff) as a deliberate "act on just this one" gesture.</summary>
         private async Task StageAllAsync()
         {
-            if (_selectedWorkingFiles.Count >= 2)
+            using (_watcher?.Suppress())
             {
-                var targets = _selectedWorkingFiles.ToList();
-                using (_watcher?.Suppress())
+                if (_selectedWorkingFiles.Count >= 2)
+                {
+                    var targets = _selectedWorkingFiles.ToList();
                     await _staging.StageAsync(targets.Select(f => f.Path));
+                }
+                else
+                {
+                    await RunAsync("Staging all…", () => _git.StageAll());
+                }
+                await LoadWorkingDirAsync();
+                await SyncDiffPaneAfterFileListChangeAsync();
             }
-            else
-            {
-                await RunAsync("Staging all…", () => _git.StageAll());
-            }
-            await LoadWorkingDirAsync();
-            await SyncDiffPaneAfterFileListChangeAsync();
         }
 
         private async Task UnstageAllAsync()
         {
-            if (_selectedStagedFiles.Count >= 2)
+            using (_watcher?.Suppress())
             {
-                var targets = _selectedStagedFiles.ToList();
-                using (_watcher?.Suppress())
+                if (_selectedStagedFiles.Count >= 2)
+                {
+                    var targets = _selectedStagedFiles.ToList();
                     await _staging.UnstageAsync(targets.Select(f => f.Path));
+                }
+                else
+                {
+                    await RunAsync("Unstaging all…", () => _git.UnstageAll());
+                }
+                await LoadWorkingDirAsync();
+                await SyncDiffPaneAfterFileListChangeAsync();
             }
-            else
-            {
-                await RunAsync("Unstaging all…", () => _git.UnstageAll());
-            }
-            await LoadWorkingDirAsync();
-            await SyncDiffPaneAfterFileListChangeAsync();
         }
 
         /// <summary>Blocks commit-creating operations that would otherwise fall back to the bogus

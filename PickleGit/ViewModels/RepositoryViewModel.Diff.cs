@@ -617,9 +617,12 @@ namespace PickleGit.ViewModels
             if (AppSettings.LoadConfirmBeforeDiscard() && !DialogService.Confirm("Discard Changes",
                     message, "Discard", danger: true))
                 return;
-            await RunAsync("Discarding changes…", () => _git.DiscardFiles(targets));
-            await LoadWorkingDirAsync();
-            await SyncDiffPaneAfterFileListChangeAsync();
+            using (_watcher?.Suppress())
+            {
+                await RunAsync("Discarding changes…", () => _git.DiscardFiles(targets));
+                await LoadWorkingDirAsync();
+                await SyncDiffPaneAfterFileListChangeAsync();
+            }
         }
 
         /// <summary>Context-menu/row "Discard changes" for an unstaged file (or the current
