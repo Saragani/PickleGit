@@ -303,10 +303,10 @@
                     <Separator Width="1" Height="20" Background="{DynamicResource BorderBrush}" Margin="0,0,8,0"/>
                     <Button Content="↻  Fetch" Style="{StaticResource ToolbarButton}"
                             Command="{Binding ActiveTab.FetchCommand}" Margin="2,0,0,0" ToolTip="Fetch from remote"
-                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}"/>
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}, FallbackValue=False}"/>
                     <Button Style="{StaticResource DropdownArrow}" Click="DropdownButton_Click"
                             ToolTip="Fetch options"
-                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}">
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}, FallbackValue=False}">
                         <Button.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Fetch"
@@ -320,10 +320,10 @@
                     </Button>
                     <Button Content="⬇  Pull" Style="{StaticResource ToolbarButton}"
                             Command="{Binding ActiveTab.PullCommand}" Margin="2,0,0,0" ToolTip="Pull (merge)"
-                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}"/>
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}, FallbackValue=False}"/>
                     <Button Style="{StaticResource DropdownArrow}" Click="DropdownButton_Click"
                             ToolTip="Pull options"
-                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}">
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}, FallbackValue=False}">
                         <Button.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Pull (merge)"
@@ -335,10 +335,10 @@
                     </Button>
                     <Button Content="⬆  Push" Style="{StaticResource ToolbarButton}"
                             Command="{Binding ActiveTab.PushCommand}" Margin="2,0,0,0" ToolTip="Push"
-                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}"/>
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}, FallbackValue=False}"/>
                     <Button Style="{StaticResource DropdownArrow}" Click="DropdownButton_Click"
                             ToolTip="Push options"
-                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}">
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}, FallbackValue=False}">
                         <Button.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Push"
@@ -351,10 +351,10 @@
                     <Separator Width="1" Height="20" Background="{DynamicResource BorderBrush}" Margin="8,0"/>
                     <Button Content="⎇  Branch" Style="{StaticResource ToolbarButton}"
                             Command="{Binding ActiveTab.CreateBranchCommand}" Margin="2,0" ToolTip="Create branch"
-                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}"/>
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}, FallbackValue=False}"/>
                     <Button Content="📦  Stash" Style="{StaticResource ToolbarButton}"
                             Command="{Binding ActiveTab.StashCommand}" Margin="2,0" ToolTip="Stash changes"
-                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}}"/>
+                            IsEnabled="{Binding ActiveTab.IsBusy, Converter={StaticResource InverseBool}, FallbackValue=False}"/>
                     <Separator Width="1" Height="20" Background="{DynamicResource BorderBrush}" Margin="8,0"/>
                     <Button Content="±  Commit" Style="{StaticResource ToolbarButton}"
                             Command="{Binding ActiveTab.ShowWorkingDirCommand}" Margin="2,0" ToolTip="Show staging area"/>
@@ -461,12 +461,12 @@
             <Grid>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="⎇ " Foreground="{DynamicResource AccentBrush}" FontSize="12"
-                               Visibility="{Binding ActiveTab.CurrentBranch, Converter={StaticResource InvertDetachedVis}}"/>
+                               Visibility="{Binding ActiveTab.CurrentBranch, Converter={StaticResource InvertDetachedVis}, FallbackValue=Collapsed}"/>
                     <TextBlock Text="{Binding ActiveTab.CurrentBranch, FallbackValue=''}"
                                Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12"
-                               Visibility="{Binding ActiveTab.CurrentBranch, Converter={StaticResource InvertDetachedVis}}"/>
+                               Visibility="{Binding ActiveTab.CurrentBranch, Converter={StaticResource InvertDetachedVis}, FallbackValue=Collapsed}"/>
                     <Border Background="{DynamicResource DetachedBadgeBrush}" CornerRadius="3" Padding="6,1"
-                            Visibility="{Binding ActiveTab.CurrentBranch, Converter={StaticResource DetachedVis}}">
+                            Visibility="{Binding ActiveTab.CurrentBranch, Converter={StaticResource DetachedVis}, FallbackValue=Collapsed}">
                         <Border.ToolTip>
                             <!-- MaxWidth + Wrap: DetachedHeadTooltip's commit message line can be long. -->
                             <TextBlock MaxWidth="360" TextWrapping="Wrap">
@@ -486,12 +486,12 @@
                     <Button Content="&#x2715; Cancel" FontSize="11" Padding="6,1" Margin="0,0,10,0"
                             Style="{StaticResource DangerButton}"
                             Command="{Binding ActiveTab.CancelOperationCommand}"
-                            Visibility="{Binding ActiveTab.CanCancel, Converter={StaticResource BoolToVis}}"
+                            Visibility="{Binding ActiveTab.CanCancel, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"
                             ToolTip="Cancel the running operation"/>
                     <Button Content="&#x21A9; Undo" FontSize="11" Padding="6,1" Margin="0,0,10,0"
                             Style="{StaticResource ToolbarButton}"
                             Command="{Binding ActiveTab.UndoCommand}"
-                            Visibility="{Binding ActiveTab.CanUndo, Converter={StaticResource BoolToVis}}"
+                            Visibility="{Binding ActiveTab.CanUndo, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"
                             ToolTip="{Binding ActiveTab.LastUndo.Description, StringFormat='Undo: {0}'}"/>
                     <ProgressBar Width="120" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
                                  Minimum="0" Maximum="100"

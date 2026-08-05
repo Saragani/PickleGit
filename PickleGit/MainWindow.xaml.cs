@@ -83,6 +83,22 @@ namespace PickleGit
                 {
                     _trackedTab.ScrollToNodeRequested += OnScrollToNodeRequested;
                     _trackedTab.ScrollToDiffItemRequested += OnScrollToDiffItemRequested;
+
+                    // The TabControl doesn't keep an inactive tab's visual tree alive — switching
+                    // back rebuilds a brand-new CommitListView bound to the same (persisted)
+                    // RepositoryViewModel. SelectedNode/SelectedNodes survive that (they're plain VM
+                    // state), and the multi-select behavior re-syncs the highlight on attach, but the
+                    // freshly-realized ListView still starts scrolled to the top — bring the already-
+                    // selected commit back into view, same as picking a branch/tag does.
+                    var restoreNode = _trackedTab.SelectedNode;
+                    if (restoreNode != null)
+                    {
+                        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+                        {
+                            MainTabControl.UpdateLayout();
+                            OnScrollToNodeRequested(this, restoreNode);
+                        }));
+                    }
                 }
             };
 

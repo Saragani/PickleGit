@@ -30,6 +30,15 @@ namespace PickleGit.ViewModels
             ScrollToNodeRequested?.Invoke(this, target);
         }
 
+        private void SelectTag(object param)
+        {
+            if (!(param is TagInfo ti)) return;
+            var target = GraphNodes.FirstOrDefault(n => n.Commit?.Sha == ti.TargetSha);
+            if (target == null) return;
+            SelectedNode = target;
+            ScrollToNodeRequested?.Invoke(this, target);
+        }
+
         // ── Detail panels ─────────────────────────────────────────────────────
 
         private async void LoadCommitDetail(string sha)

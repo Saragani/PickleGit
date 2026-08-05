@@ -101,6 +101,16 @@ namespace PickleGit.Views
             if (e.PropertyName != nameof(RepositoryViewModel.FlatDiffItems) &&
                 e.PropertyName != nameof(RepositoryViewModel.SideBySideItems))
                 return;
+
+            // Captured synchronously, before this event's ItemsSource swap has had a chance to
+            // reach a layout pass — WPF only resets a ScrollViewer's offset to 0 during Arrange,
+            // which happens later (Dispatcher render), so reading VerticalOffset here still reflects
+            // where the user was scrolled to right before FlatDiffItems/SideBySideItems just got
+            // reassigned to a new collection instance (every reload replaces the list wholesale,
+            // even a same-file refresh with near-identical content).
+            var unifiedOffset = _unifiedScroll?.VerticalOffset ?? 0;
+            var sideBySideOffset = _leftScroll?.VerticalOffset ?? 0;
+
             // Unlike the scroll-reset flag below (which deliberately skips the pre-load empty-clear
             // and only acts once real content arrives), a stale text selection must be dropped
             // immediately on EVERY change, including that first empty clear — the (row, char) pairs
@@ -109,11 +119,32 @@ namespace PickleGit.Views
             _sideBySideLeftTextSelection.ClearSelection();
             _sideBySideRightTextSelection.ClearSelection();
 
-            if (!_pendingDiffScrollReset) return;
             var vm = (RepositoryViewModel)sender;
             if (vm.FlatDiffItems.Count == 0 && vm.SideBySideItems.Count == 0) return; // the pre-load clear, not real content yet
-            _pendingDiffScrollReset = false;
-            ResetDiffScrollToTop();
+
+            if (_pendingDiffScrollReset)
+            {
+                _pendingDiffScrollReset = false;
+                ResetDiffScrollToTop();
+            }
+            else
+            {
+                // Not a file switch — e.g. staging/unstaging/discarding a hunk while this same
+                // file's diff is open re-fetches and reassigns the whole list. Restore the offset
+                // the user actually had instead of leaving it at whatever WPF's own ItemsSource-swap
+                // layout pass lands on (top).
+                RestoreDiffScrollOffset(unifiedOffset, sideBySideOffset);
+            }
+        }
+
+        private void RestoreDiffScrollOffset(double unifiedOffset, double sideBySideOffset)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _unifiedScroll?.ScrollToVerticalOffset(unifiedOffset);
+                _leftScroll?.ScrollToVerticalOffset(sideBySideOffset);
+                _rightScroll?.ScrollToVerticalOffset(sideBySideOffset);
+            }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void OnBlameLinesChangedForScrollReset(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)

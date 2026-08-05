@@ -353,11 +353,16 @@ namespace PickleGit.Views
 
         private void SidebarList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (SidebarList.SelectedItem is SidebarRow row
+            var row = SidebarList.SelectedItem as SidebarRow;
+            if (row != null
                 && (row.Kind == SidebarRowKind.LocalBranchLeaf || row.Kind == SidebarRowKind.RemoteBranchLeaf)
                 && row.Payload is BranchNodeViewModel node)
             {
                 _repo?.SelectBranchCommand.Execute(node.BranchInfo);
+            }
+            else if (row?.Kind == SidebarRowKind.Tag && row.Payload is TagInfo tag)
+            {
+                _repo?.SelectTagCommand.Execute(tag);
             }
         }
 

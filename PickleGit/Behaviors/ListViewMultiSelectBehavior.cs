@@ -60,9 +60,21 @@ namespace PickleGit.Behaviors
         }
 
         // User clicked in the ListView → push changes into the ViewModel collection.
+        //
+        // The TabControl hides an inactive tab's content (IsVisible flips to false — the whole
+        // tab's Grid, not this ListView specifically, per DarkTabControl's template) rather than
+        // tearing it out of the visual tree: switching away from a tab with a selected commit
+        // fires a SelectionChanged clearing it (removed=N, added=0) while the ListView itself is
+        // still IsLoaded/still attached to a PresentationSource — those two don't distinguish it
+        // from a real user deselect. Confirmed via direct instrumentation (AppLog) capturing
+        // IsLoaded/HasSource/IsVisible at the moment of the clearing event: IsVisible was the only
+        // one of the three that actually flipped. Without this guard, that WPF-internal clear
+        // mirrors straight into the persisted ViewModel collection, permanently wiping the
+        // selection a tab switch is supposed to preserve (SelectedNode/SelectedNodes are otherwise
+        // plain VM state that survives switching tabs untouched).
         private void OnListViewSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_updating || SelectedItems == null) return;
+            if (_updating || SelectedItems == null || AssociatedObject?.IsVisible == false) return;
             _updating = true;
             try
             {

@@ -587,6 +587,7 @@ namespace PickleGit.ViewModels
         public ICommand MergeBranchSquashCommand { get; }
         public ICommand CreateTagCommand { get; }
         public ICommand SelectBranchCommand { get; }
+        public ICommand SelectTagCommand { get; }
         public ICommand StageFileCommand { get; }
         public ICommand UnstageFileCommand { get; }
         public ICommand StageAllCommand { get; }
@@ -735,6 +736,7 @@ namespace PickleGit.ViewModels
             CheckoutRemoteBranchCommand = new RelayCommand(CheckoutRemoteBranch, _ => HasRepo);
             CreateTagCommand = new RelayCommand(CreateTag, _ => HasRepo);
             SelectBranchCommand = new RelayCommand(SelectBranch, _ => HasRepo);
+            SelectTagCommand = new RelayCommand(SelectTag, _ => HasRepo);
             CheckoutCommitCommand = new RelayCommand(CheckoutCommit,
                 _ => HasRepo && SelectedNode?.Commit?.IsUncommitted != true);
             ResetToCommitCommand = new RelayCommand(ResetToCommit,

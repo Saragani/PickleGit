@@ -613,7 +613,8 @@
                           BorderBrush="{DynamicResource BorderBrush}">
                     <ListView.ItemTemplate>
                         <DataTemplate DataType="{x:Type models:CommitInfo}">
-                            <StackPanel Margin="6,4">
+                            <StackPanel Margin="6,4" ToolTip="{Binding Message}"
+                                        ToolTipService.InitialShowDelay="600">
                                 <TextBlock Text="{Binding MessageShort}" FontSize="12" TextTrimming="CharacterEllipsis"/>
                                 <TextBlock FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}">
                                     <Run Text="{Binding ShortSha, Mode=OneWay}"/>
