@@ -122,8 +122,24 @@ namespace PickleGit.Services
         /// <summary>
         /// Asks git's configured credential helper for credentials (same path git CLI uses).
         /// Works regardless of which helper is configured — GCM, wincred, store, etc.
+        ///
+        /// <paramref name="timeoutMs"/> matters a lot more than it looks: when nothing is cached yet,
+        /// a helper like Git Credential Manager doesn't just fail — it runs its own interactive
+        /// sign-in (for Bitbucket/GitHub, opening a real browser tab for OAuth), exactly like it does
+        /// when plain `git push` from a terminal needs a credential. That flow takes as long as the
+        /// human needs to complete it. The original hardcoded 5-second timeout was fine for the
+        /// silent, already-cached-or-nothing lookups this method is also used for (see
+        /// TryAutoResolveCredential's default-argument call), but killed the process long before an
+        /// interactive OAuth login could ever finish — so the "ask git's own helper" step always
+        /// failed for a brand-new sign-in and silently fell through to PickleGit's own username/
+        /// password dialog instead, even though GCM would have handled it via browser exactly like
+        /// the command line does. EnsureCredentialsAsync's primary lookup now passes a long timeout
+        /// (plus <paramref name="ct"/> so the app's own Cancel button can still abort a stuck one) to
+        /// give that real sign-in a chance; nothing here forces the dialog anymore for a host GCM can
+        /// authenticate on its own.
         /// </summary>
-        public static (string username, string password) LoadViaGitCredentialHelper(string remoteUrl)
+        public static (string username, string password) LoadViaGitCredentialHelper(
+            string remoteUrl, int timeoutMs = 5000, System.Threading.CancellationToken ct = default)
         {
             if (!Uri.TryCreate(remoteUrl, UriKind.Absolute, out var uri))
                 return default;
@@ -146,31 +162,34 @@ namespace PickleGit.Services
                 using (var proc = System.Diagnostics.Process.Start(psi))
                 {
                     if (proc == null) return default;
-                    proc.StandardInput.Write(input);
-                    proc.StandardInput.Close();
-                    // Collect stdout and drain stderr asynchronously to prevent pipe-buffer deadlock
-                    var stdoutLines = new List<string>();
-                    proc.OutputDataReceived += (_, e) => { if (e.Data != null) stdoutLines.Add(e.Data); };
-                    proc.ErrorDataReceived += (_, __) => { };
-                    proc.BeginOutputReadLine();
-                    proc.BeginErrorReadLine();
-                    if (!proc.WaitForExit(5000)) { try { proc.Kill(); } catch { } return default; }
-                    proc.WaitForExit(); // flush any remaining async-read callbacks
-                    if (proc.ExitCode != 0) return default;
-                    var output = string.Join("\n", stdoutLines);
-
-                    string username = null, password = null;
-                    foreach (var line in output.Split('\n'))
+                    using (ct.Register(() => { try { proc.Kill(); } catch { } }))
                     {
-                        var eq = line.IndexOf('=');
-                        if (eq <= 0) continue;
-                        var key = line.Substring(0, eq).Trim();
-                        var val = line.Substring(eq + 1).Trim();
-                        if (key == "username") username = val;
-                        else if (key == "password") password = val;
+                        proc.StandardInput.Write(input);
+                        proc.StandardInput.Close();
+                        // Collect stdout and drain stderr asynchronously to prevent pipe-buffer deadlock
+                        var stdoutLines = new List<string>();
+                        proc.OutputDataReceived += (_, e) => { if (e.Data != null) stdoutLines.Add(e.Data); };
+                        proc.ErrorDataReceived += (_, __) => { };
+                        proc.BeginOutputReadLine();
+                        proc.BeginErrorReadLine();
+                        if (!proc.WaitForExit(timeoutMs)) { try { proc.Kill(); } catch { } return default; }
+                        proc.WaitForExit(); // flush any remaining async-read callbacks
+                        if (proc.ExitCode != 0) return default;
+                        var output = string.Join("\n", stdoutLines);
+
+                        string username = null, password = null;
+                        foreach (var line in output.Split('\n'))
+                        {
+                            var eq = line.IndexOf('=');
+                            if (eq <= 0) continue;
+                            var key = line.Substring(0, eq).Trim();
+                            var val = line.Substring(eq + 1).Trim();
+                            if (key == "username") username = val;
+                            else if (key == "password") password = val;
+                        }
+                        return (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
+                            ? (username, password) : default;
                     }
-                    return (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
-                        ? (username, password) : default;
                 }
             }
             catch { return default; }

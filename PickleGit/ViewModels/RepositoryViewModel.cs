@@ -1682,7 +1682,19 @@ namespace PickleGit.ViewModels
         // One CTS per running operation. CLI paths pass the token to git.exe (the process is
         // killed on cancel); libgit2 network ops poll it from their transfer-progress callbacks.
         private System.Threading.CancellationTokenSource _opCts;
-        public bool CanCancel => _opCts != null;
+
+        /// <summary>Covers the credential-helper sign-in wait inside EnsureCredentialsAsync, which
+        /// runs BEFORE RunWorkAsync creates the real _opCts for the git.exe call it's resolving
+        /// credentials for. Deliberately a separate field, never assigned to/from _opCts: RunWorkAsync
+        /// can be invoked reentrantly while IsBusy is already true (e.g. Commit's CanExecute doesn't
+        /// check IsBusy, so it can run while a Push is still mid-flight) — RunAsync's reentrant branch
+        /// then overwrites _opCts with the reentrant call's own CancellationTokenSource. Borrowing
+        /// _opCts here and nulling it back afterward used to null out THAT unrelated, still-running
+        /// operation's token out from under it, crashing its catch block with a NullReferenceException
+        /// on `_opCts.IsCancellationRequested` — confirmed exactly this way in practice.</summary>
+        private System.Threading.CancellationTokenSource _credentialWaitCts;
+
+        public bool CanCancel => _opCts != null || _credentialWaitCts != null;
         public ICommand CancelOperationCommand { get; private set; }
 
         /// <summary>The running operation's token ('None' when idle). Safe to capture inside work lambdas.</summary>
@@ -1691,6 +1703,7 @@ namespace PickleGit.ViewModels
         private void CancelOperation()
         {
             try { _opCts?.Cancel(); } catch { }
+            try { _credentialWaitCts?.Cancel(); } catch { }
             StatusMessage = "Cancelling…";
         }
 
