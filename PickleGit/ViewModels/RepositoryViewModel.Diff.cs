@@ -26,6 +26,11 @@ namespace PickleGit.ViewModels
             IsBinaryDiff = false;
             IsLargeDiffPending = false;
             IsImageDiff = false;
+            // A historical commit diff can be shown right after a conflicted working-dir file was
+            // viewed (LoadWorkingDiffAsync sets this true and never gets a chance to reset it here,
+            // since that's a different code path) — without resetting it explicitly, the stale
+            // "unresolved merge conflicts" banner leaks onto an unrelated commit's file diff.
+            IsConflictedFileDiff = false;
             OldImage = null;
             NewImage = null;
             RaisePropertyChanged(nameof(IsWorkingDirDiff));

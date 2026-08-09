@@ -16,6 +16,14 @@ namespace PickleGit.Models
         /// <summary>diff3-style common-ancestor text, or null when not present.</summary>
         public string BaseText { get; set; }
 
+        /// <summary>Line-level breakdown of OursText/BaseText/TheirsText, for the per-line-pick
+        /// merge editor (ViewModels/MergeConflictEditorViewModel.cs). BaseLines is empty (not
+        /// null) when there's no diff3 base section — matches OursLines/TheirsLines always being
+        /// present, even if empty for a pure add/delete side of the conflict.</summary>
+        public List<string> OursLines { get; set; } = new List<string>();
+        public List<string> BaseLines { get; set; } = new List<string>();
+        public List<string> TheirsLines { get; set; } = new List<string>();
+
         /// <summary>Exact original marker span (including &lt;&lt;&lt;&lt;&lt;&lt;&lt;/=======/&gt;&gt;&gt;&gt;&gt;&gt;&gt;), used to locate and replace this block in the live result text.</summary>
         public string RawText { get; set; }
 

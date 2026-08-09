@@ -539,18 +539,57 @@ namespace PickleGit.Converters
         }
     }
 
-    /// <summary>Picks the context-text vs conflict-block row template for the merge editor's
-    /// flattened, interleaved document view (MergeConflictFileViewModel.FlatItems).</summary>
-    public class ConflictViewItemTemplateSelector : DataTemplateSelector
+    /// <summary>Picks the row template for the merge editor's two-pane Ours/Theirs view
+    /// (MergeConflictFileViewModel.PaneItems) by ConflictPaneRowKind. One instance of this
+    /// selector is used per pane (Left/Right) — both share the same ContextTemplate/
+    /// BlockToolbarTemplate/BlockBaseLineTemplate (identical content is rendered in both panes,
+    /// the same duplication convention DiffItemTemplateSelector's HunkTemplate already uses), and
+    /// each is given its own BlockLineTemplate projecting LeftLine or RightLine respectively.</summary>
+    public class ConflictPaneItemTemplateSelector : DataTemplateSelector
     {
         public DataTemplate ContextTemplate { get; set; }
-        public DataTemplate BlockTemplate { get; set; }
+        public DataTemplate BlockToolbarTemplate { get; set; }
+        public DataTemplate BlockBaseLineTemplate { get; set; }
+        public DataTemplate BlockLineTemplate { get; set; }
 
         public override DataTemplate SelectTemplate(object item, DependencyObject container)
         {
-            if (item is ConflictViewItem ci)
-                return ci.Kind == ConflictDocItemKind.Block ? BlockTemplate : ContextTemplate;
-            return ContextTemplate;
+            if (!(item is ConflictPaneItem row)) return ContextTemplate;
+            switch (row.Kind)
+            {
+                case ConflictPaneRowKind.BlockToolbar: return BlockToolbarTemplate;
+                case ConflictPaneRowKind.BlockBaseLine: return BlockBaseLineTemplate;
+                case ConflictPaneRowKind.BlockLine: return BlockLineTemplate;
+                default: return ContextTemplate;
+            }
+        }
+    }
+
+    /// <summary>Picks the row template for the merge editor's read-only Result pane
+    /// (MergeConflictFileViewModel.ResultItems) by ConflictResultRowKind.</summary>
+    public class ConflictResultItemTemplateSelector : DataTemplateSelector
+    {
+        public DataTemplate ContextTemplate { get; set; }
+        public DataTemplate ResolvedLineTemplate { get; set; }
+        public DataTemplate ResolvedBaseLabelTemplate { get; set; }
+        public DataTemplate ResolvedBaseLineTemplate { get; set; }
+        public DataTemplate DefaultBaseLabelTemplate { get; set; }
+        public DataTemplate DefaultBaseLineTemplate { get; set; }
+        public DataTemplate UnresolvedTemplate { get; set; }
+
+        public override DataTemplate SelectTemplate(object item, DependencyObject container)
+        {
+            if (!(item is ConflictResultItem row)) return ContextTemplate;
+            switch (row.Kind)
+            {
+                case ConflictResultRowKind.ResolvedLine: return ResolvedLineTemplate;
+                case ConflictResultRowKind.ResolvedBaseLabel: return ResolvedBaseLabelTemplate;
+                case ConflictResultRowKind.ResolvedBaseLine: return ResolvedBaseLineTemplate;
+                case ConflictResultRowKind.DefaultBaseLabel: return DefaultBaseLabelTemplate;
+                case ConflictResultRowKind.DefaultBaseLine: return DefaultBaseLineTemplate;
+                case ConflictResultRowKind.Unresolved: return UnresolvedTemplate;
+                default: return ContextTemplate;
+            }
         }
     }
 

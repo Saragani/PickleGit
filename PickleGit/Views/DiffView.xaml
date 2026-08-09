@@ -739,8 +739,13 @@
             </ListView>
             <!-- Text-selection highlight overlay for UnifiedListView — see DiffTextSelectionController.
                  IsHitTestVisible=False so it never intercepts mouse input; positioned as a same-column
-                 sibling so its coordinate space matches the ListView it decorates. -->
-            <Canvas x:Name="UnifiedTextSelectionOverlay" Grid.Column="0"
+                 sibling so its coordinate space matches the ListView it decorates. ClipToBounds=True is
+                 required: a "select whole line" rectangle's right edge is the RowText TextBlock's own
+                 ActualWidth, which for a horizontally-scrollable row can legitimately extend past this
+                 pane's own viewport (e.g. a long connectionString line scrolled out of view) — Canvas
+                 does not clip its children by default, so without this that overflow rendered straight
+                 through into whatever sits visually next to this pane instead of stopping at its edge. -->
+            <Canvas x:Name="UnifiedTextSelectionOverlay" Grid.Column="0" ClipToBounds="True"
                     IsHitTestVisible="False" Panel.ZIndex="10"/>
             </Grid>
 
@@ -794,7 +799,10 @@
                         </Style>
                     </ListView.ItemContainerStyle>
                 </ListView>
-                <Canvas x:Name="SideBySideLeftTextSelectionOverlay" Grid.Column="0"
+                <!-- ClipToBounds=True — see UnifiedTextSelectionOverlay's comment above; without it a
+                     "select whole line" rectangle bled rightward past the GridSplitter into the right
+                     pane whenever this pane's row content was wider than its own viewport. -->
+                <Canvas x:Name="SideBySideLeftTextSelectionOverlay" Grid.Column="0" ClipToBounds="True"
                         IsHitTestVisible="False" Panel.ZIndex="10"/>
 
                 <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
@@ -839,7 +847,10 @@
                         </Style>
                     </ListView.ItemContainerStyle>
                 </ListView>
-                <Canvas x:Name="SideBySideRightTextSelectionOverlay" Grid.Column="2"
+                <!-- ClipToBounds=True — see UnifiedTextSelectionOverlay's comment above; this pane's
+                     own left edge sits at the GridSplitter, so unclipped overflow here would bleed
+                     leftward into the left pane instead. -->
+                <Canvas x:Name="SideBySideRightTextSelectionOverlay" Grid.Column="2" ClipToBounds="True"
                         IsHitTestVisible="False" Panel.ZIndex="10"/>
             </Grid>
 

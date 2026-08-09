@@ -28,28 +28,119 @@ namespace PickleGit.Controls
         private readonly ListView _listView;
         private readonly Canvas _overlay;
         private readonly Func<object, string> _getRowText;
+        private readonly Func<object, int> _getSelectableStart;
 
         private (int Row, int Ch)? _anchor;
         private (int Row, int Ch)? _focus;
         private Point _lastMousePosition;
         private int _autoScrollDirection;
         private ScrollViewer _scrollViewer;
+        private double? _pendingOffset;
         private readonly DispatcherTimer _autoScrollTimer;
 
         private const double AutoScrollMargin = 24;
         private const double AutoScrollStep = 28;
 
-        public DiffTextSelectionController(ListView listView, Canvas overlay, Func<object, string> getRowText)
+        /// <param name="getSelectableStart">Number of leading characters of a row's text that are
+        /// never selectable/copyable — e.g. 1 for a diff line, whose model text carries a leading
+        /// '+'/'-'/' ' marker character rendered inline as part of "RowText" (see CLAUDE.md), or 0
+        /// for a row with no such marker (a hunk header's literal text).</param>
+        public DiffTextSelectionController(ListView listView, Canvas overlay, Func<object, string> getRowText,
+            Func<object, int> getSelectableStart)
         {
             _listView = listView;
             _overlay = overlay;
             _getRowText = getRowText;
-            _autoScrollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            _getSelectableStart = getSelectableStart;
+            // DispatcherPriority.Normal (the default) is HIGHER priority than the Render pass that
+            // actually applies a ScrollToVerticalOffset request to this non-virtualizing ListView's
+            // panel (IsVirtualizing="False", needed for smooth pixel scrolling elsewhere — see
+            // CLAUDE.md). At Normal priority, this timer's ticks can fire back-to-back faster than
+            // layout ever gets a turn, so several offset requests pile up before the panel's
+            // IScrollInfo bookkeeping catches up — confirmed by instrumenting VerticalOffset
+            // directly: it periodically snapped back to 0 mid-drag even with cross-pane sync fully
+            // disabled, i.e. a single ListView scrolling itself was enough to reproduce it. Running
+            // the timer at Render priority instead means each tick waits for the previous layout
+            // pass to actually finish first.
+            _autoScrollTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(50) };
             _autoScrollTimer.Tick += OnAutoScrollTick;
         }
 
         public bool IsSelecting { get; private set; }
         public bool HasSelection => _anchor != null && _focus != null;
+
+        private int SelectableStart(int rowIndex) => _getSelectableStart(_listView.Items[rowIndex]);
+
+        /// <summary>Ctrl+click range-select (set a start point, hold Ctrl, click an end point) —
+        /// keeps the existing anchor and only moves focus, unlike BeginSelection which always
+        /// starts a fresh anchor at the click point. Behaves like BeginSelection when there's no
+        /// existing anchor yet (first click of the pair).</summary>
+        public void ExtendTo(ListViewItem container, TextBlock rowText, Point pointInRowText)
+        {
+            int rowIndex = _listView.ItemContainerGenerator.IndexFromContainer(container);
+            if (rowIndex < 0) return;
+            int textLength = (_getRowText(_listView.Items[rowIndex]) ?? string.Empty).Length;
+            int ch = Math.Max(PlainCharIndexAt(rowText, pointInRowText, textLength), SelectableStart(rowIndex));
+            if (_anchor == null) _anchor = (rowIndex, ch);
+            _focus = (rowIndex, ch);
+            Recompute();
+        }
+
+        /// <summary>Ctrl+A — selects the entire pane's text, first row through last.</summary>
+        public void SelectAll()
+        {
+            if (_listView.Items.Count == 0) return;
+            int lastIndex = _listView.Items.Count - 1;
+            int lastLen = (_getRowText(_listView.Items[lastIndex]) ?? string.Empty).Length;
+            _anchor = (0, SelectableStart(0));
+            _focus = (lastIndex, lastLen);
+            Recompute();
+        }
+
+        /// <summary>Arrow-key caret movement, like a normal text editor: Left/Right by character
+        /// (wrapping to the adjacent row at a line boundary), Up/Down to the same column in the
+        /// neighboring row (clamped to that row's length). Only moves the existing caret/selection
+        /// focus — a no-op (returns false) until a click has established one. Shift held extends
+        /// the selection from the current anchor instead of collapsing it to the new point, same
+        /// as BeginSelection/ExtendTo's own anchor-preserving convention.</summary>
+        public bool MoveCaret(Key key, bool extendSelection)
+        {
+            if (_focus == null || _listView.Items.Count == 0) return false;
+            var (row, ch) = _focus.Value;
+            string rowText = _getRowText(_listView.Items[row]) ?? string.Empty;
+
+            switch (key)
+            {
+                case Key.Left:
+                    if (ch > SelectableStart(row)) ch--;
+                    else if (row > 0) { row--; rowText = _getRowText(_listView.Items[row]) ?? string.Empty; ch = rowText.Length; }
+                    else return true;
+                    break;
+                case Key.Right:
+                    if (ch < rowText.Length) ch++;
+                    else if (row < _listView.Items.Count - 1) { row++; ch = SelectableStart(row); }
+                    else return true;
+                    break;
+                case Key.Up:
+                    if (row == 0) return true;
+                    row--;
+                    ch = Math.Max(SelectableStart(row), Math.Min(ch, (_getRowText(_listView.Items[row]) ?? string.Empty).Length));
+                    break;
+                case Key.Down:
+                    if (row >= _listView.Items.Count - 1) return true;
+                    row++;
+                    ch = Math.Max(SelectableStart(row), Math.Min(ch, (_getRowText(_listView.Items[row]) ?? string.Empty).Length));
+                    break;
+                default:
+                    return false;
+            }
+
+            _focus = (row, ch);
+            if (!extendSelection) _anchor = _focus;
+            Recompute();
+            if (_listView.Items.Count > row) _listView.ScrollIntoView(_listView.Items[row]);
+            return true;
+        }
 
         /// <summary>Starts a new selection at the given row/content element. Called by the view's
         /// mouse-down handler once it has already decided this is a content-region click (not the
@@ -61,7 +152,7 @@ namespace PickleGit.Controls
             int rowIndex = _listView.ItemContainerGenerator.IndexFromContainer(container);
             if (rowIndex < 0) { e.Handled = true; return; }
             int textLength = (_getRowText(_listView.Items[rowIndex]) ?? string.Empty).Length;
-            int ch = PlainCharIndexAt(rowText, e.GetPosition(rowText), textLength);
+            int ch = Math.Max(PlainCharIndexAt(rowText, e.GetPosition(rowText), textLength), SelectableStart(rowIndex));
             _anchor = _focus = (rowIndex, ch);
             IsSelecting = true;
             _listView.Focus();
@@ -114,46 +205,67 @@ namespace PickleGit.Controls
             {
                 var container = _listView.ItemContainerGenerator.ContainerFromIndex(i) as ListViewItem;
                 if (container == null || !container.IsArrangeValid) continue;
+                var textBlock = FindNamedDescendant<TextBlock>(container, "RowText");
+                if (textBlock == null) continue;
 
                 double left, right;
                 var topLeft = container.TransformToVisual(_overlay).Transform(new Point(0, 0));
                 var bottomRight = container.TransformToVisual(_overlay).Transform(new Point(container.ActualWidth, container.ActualHeight));
+                // A full-line span's end X must stay within the "RowText" TextBlock's own bounds,
+                // not the row container's — the container's left edge sits at the row's true x=0,
+                // which for a side-by-side line row is the line-number gutter column
+                // (Grid.Column="0", 36px), one column to the left of where the code text actually
+                // starts. Using the container's edge here drew the highlight bleeding leftward over
+                // the gutter (and, for the hunk-header row, past its own padding) instead of
+                // stopping exactly where the visible text starts/ends. The start X is computed via
+                // XForCharIndex below instead (skipping the row's own marker character too).
+                var textBottomRight = textBlock.TransformToVisual(_overlay).Transform(new Point(textBlock.ActualWidth, textBlock.ActualHeight));
 
                 int rowTextLength = (_getRowText(_listView.Items[i]) ?? string.Empty).Length;
+                // A row's own text starts with its unselectable marker character(s) (see the
+                // constructor doc on getSelectableStart) — a "whole line" span (every row except
+                // the drag's own start/end row) must start after that marker too, not at plain
+                // character 0, or the '+'/'-'/' ' glyph itself would sit inside the highlight.
+                int selectableStart = SelectableStart(i);
 
                 if (i == lo && i == hi)
                 {
-                    var textBlock = FindNamedDescendant<TextBlock>(container, "RowText");
-                    if (textBlock == null) continue;
-                    left = XForCharIndex(textBlock, loCh, rowTextLength);
+                    left = XForCharIndex(textBlock, Math.Max(loCh, selectableStart), rowTextLength);
                     right = XForCharIndex(textBlock, hiCh, rowTextLength);
                 }
                 else if (i == lo)
                 {
-                    var textBlock = FindNamedDescendant<TextBlock>(container, "RowText");
-                    left = textBlock != null ? XForCharIndex(textBlock, loCh, rowTextLength) : topLeft.X;
-                    right = bottomRight.X;
+                    left = XForCharIndex(textBlock, Math.Max(loCh, selectableStart), rowTextLength);
+                    right = textBottomRight.X;
                 }
                 else if (i == hi)
                 {
-                    var textBlock = FindNamedDescendant<TextBlock>(container, "RowText");
-                    left = topLeft.X;
-                    right = textBlock != null ? XForCharIndex(textBlock, hiCh, rowTextLength) : bottomRight.X;
+                    left = XForCharIndex(textBlock, selectableStart, rowTextLength);
+                    right = XForCharIndex(textBlock, hiCh, rowTextLength);
                 }
                 else
                 {
-                    left = topLeft.X;
-                    right = bottomRight.X;
+                    left = XForCharIndex(textBlock, selectableStart, rowTextLength);
+                    right = textBottomRight.X;
                 }
 
                 if (right < left) { var t = left; left = right; right = t; }
+
+                // A zero-length selection (click without drag, or the first click of a Ctrl+click
+                // pair) has no highlight to show — draw a thin blinking-caret-style line instead
+                // so "where did my click land" is never invisible, matching a normal text editor.
+                // (XForCharIndex already returns each boundary's true on-screen position — see its
+                // own doc — so the caret needs no further correction beyond that.)
+                bool isCaret = lo == hi && loCh == hiCh;
+                double caretLeft = left;
+
                 var rect = new System.Windows.Shapes.Rectangle
                 {
-                    Width = Math.Max(0, right - left),
+                    Width = isCaret ? 1.5 : Math.Max(0, right - left),
                     Height = Math.Max(0, bottomRight.Y - topLeft.Y),
-                    Fill = brush
+                    Fill = isCaret ? (_overlay.TryFindResource("AccentBrush") as Brush ?? brush) : brush
                 };
-                Canvas.SetLeft(rect, left);
+                Canvas.SetLeft(rect, isCaret ? caretLeft - 0.75 : left);
                 Canvas.SetTop(rect, topLeft.Y);
                 _overlay.Children.Add(rect);
             }
@@ -173,10 +285,11 @@ namespace PickleGit.Controls
             for (int i = lo; i <= hi; i++)
             {
                 var text = _getRowText(items[i]) ?? string.Empty;
-                string line = (lo == hi) ? SafeSubstring(text, loCh, hiCh)
-                    : i == lo ? SafeSubstring(text, loCh, text.Length)
-                    : i == hi ? SafeSubstring(text, 0, hiCh)
-                    : text;
+                int start = SelectableStart(i);
+                string line = (lo == hi) ? SafeSubstring(text, Math.Max(loCh, start), hiCh)
+                    : i == lo ? SafeSubstring(text, Math.Max(loCh, start), text.Length)
+                    : i == hi ? SafeSubstring(text, start, hiCh)
+                    : SafeSubstring(text, start, text.Length);
                 if (i > lo) sb.Append(Environment.NewLine);
                 sb.Append(line);
             }
@@ -198,7 +311,7 @@ namespace PickleGit.Controls
             if (textBlock == null) return;
             var pointInText = _listView.TranslatePoint(pointInListView, textBlock);
             int textLength = (_getRowText(_listView.Items[rowIndex]) ?? string.Empty).Length;
-            int ch = PlainCharIndexAt(textBlock, pointInText, textLength);
+            int ch = Math.Max(PlainCharIndexAt(textBlock, pointInText, textLength), SelectableStart(rowIndex));
             _focus = (rowIndex, ch);
             Recompute();
         }
@@ -222,14 +335,37 @@ namespace PickleGit.Controls
             }
             else
             {
+                _pendingOffset = null;
                 _autoScrollTimer.Stop();
             }
         }
 
+        // ScrollViewer.ScrollToVerticalOffset only REQUESTS a scroll — the actual Measure/Arrange
+        // pass that applies it happens on a later, independent dispatcher pass. On this ListView
+        // (IsVirtualizing="False", every row always realized, needed for smooth pixel scrolling —
+        // see CLAUDE.md), issuing repeated requests during auto-scroll-while-dragging without ever
+        // waiting for that pass to land let them race: instrumentation confirmed VerticalOffset
+        // would intermittently snap back to 0 between ticks even though ExtentHeight/ViewportHeight
+        // stayed perfectly constant throughout (ruling out a measurement/extent glitch) — something
+        // in the deferred layout pass was corrupting the ScrollViewer's own bookkeeping. Forcing
+        // that pass to complete synchronously via UpdateLayout() right after each request — and
+        // re-issuing if it didn't land where asked — eliminates the race entirely: verified across
+        // repeated 3-second holds with zero deviation from the intended offset on any tick.
         private void OnAutoScrollTick(object sender, EventArgs e)
         {
             if (_autoScrollDirection == 0 || _scrollViewer == null) { _autoScrollTimer.Stop(); return; }
-            _scrollViewer.ScrollToVerticalOffset(_scrollViewer.VerticalOffset + _autoScrollDirection * AutoScrollStep);
+            if (_pendingOffset == null) _pendingOffset = _scrollViewer.VerticalOffset;
+            _pendingOffset = Math.Max(0, _pendingOffset.Value + _autoScrollDirection * AutoScrollStep);
+            double lastActual = double.NaN;
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                _scrollViewer.ScrollToVerticalOffset(_pendingOffset.Value);
+                _listView.UpdateLayout();
+                var actual = _scrollViewer.VerticalOffset;
+                if (Math.Abs(actual - _pendingOffset.Value) < 0.5) break; // matched what we asked for
+                if (Math.Abs(actual - lastActual) < 0.5) break; // stable but short of it — a real clamp (end of content), not the transient race
+                lastActual = actual;
+            }
             // The cursor is stationary on screen but content just scrolled underneath it — re-running
             // the same hit-test at the same screen point naturally discovers whichever row/character
             // has scrolled into that position, with no manual coordinate translation needed.
@@ -265,18 +401,15 @@ namespace PickleGit.Controls
             return Math.Max(0, Math.Min(count, textLength));
         }
 
-        /// <summary>Inverse of <see cref="PlainCharIndexAt"/>: finds the on-screen X coordinate (in
-        /// overlay space) of the boundary just before character <paramref name="ch"/>. There is no
-        /// direct "offset → Rect" API usable here — <c>TextPointer.GetPositionAtOffset</c> counts
-        /// "symbols" (which include extra positions at each Run boundary WordDiffHighlighter
-        /// introduces), not plain characters, so it doesn't reliably line up with the same
-        /// <paramref name="ch"/> this class uses everywhere else. Binary-searching X positions through
-        /// the already-verified <see cref="PlainCharIndexAt"/> avoids needing that mapping at all, at
-        /// the cost of ~15 cheap iterations — negligible since this only runs for the (at most two)
-        /// boundary rows of a selection, never the full range.</summary>
-        private double XForCharIndex(TextBlock textBlock, int ch, int textLength)
+        /// <summary>Binary-searches, via <see cref="PlainCharIndexAt"/>, the local (textBlock-space) X
+        /// where its nearest-boundary snap flips from ch-1 to ch. For ch &gt; 0 that's the MIDPOINT of
+        /// character ch-1's glyph, not its true right edge — half a character width to the left of the
+        /// real boundary (unambiguous only at ch == 0, the text's own start, which has no preceding
+        /// glyph to snap against). Kept separate from <see cref="XForCharIndex"/> so
+        /// <see cref="EstimateCharWidth"/> can measure a raw glyph width without going through the
+        /// corrected, mutually-recursive path.</summary>
+        private static double RawBoundaryX(TextBlock textBlock, int ch, int textLength)
         {
-            if (textLength == 0) return textBlock.TransformToVisual(_overlay).Transform(new Point(0, 0)).X;
             ch = Math.Max(0, Math.Min(ch, textLength));
             double lo = 0, hi = Math.Max(textBlock.ActualWidth, 20000);
             double midY = Math.Max(textBlock.ActualHeight / 2, 1);
@@ -286,7 +419,41 @@ namespace PickleGit.Controls
                 int idxAtMid = PlainCharIndexAt(textBlock, new Point(mid, midY), textLength);
                 if (idxAtMid < ch) lo = mid; else hi = mid;
             }
-            return textBlock.TransformToVisual(_overlay).Transform(new Point(hi, 0)).X;
+            return hi;
+        }
+
+        /// <summary>Finds the true on-screen X coordinate (in overlay space) of the boundary just
+        /// before character <paramref name="ch"/> — i.e. <see cref="RawBoundaryX"/> corrected back by
+        /// half a character's width for any ch &gt; 0 (see its doc for why that boundary is otherwise
+        /// biased left). This being uncorrected was a real, visible bug, not just an internal
+        /// implementation detail some earlier comment claimed "cancels out": a SPAN's width (right -
+        /// left) is unaffected since both ends share the identical bias, but the span's absolute
+        /// position was still shifted left by half a character as a whole — a selection starting right
+        /// after a skipped marker character rendered back into that marker, and a selection's right
+        /// edge stopped half a character before the actually-included character. There is no direct
+        /// "offset → Rect" API usable here in the first place — <c>TextPointer.GetPositionAtOffset</c>
+        /// counts "symbols" (which include extra positions at each Run boundary WordDiffHighlighter
+        /// introduces), not plain characters, so it doesn't reliably line up with the same
+        /// <paramref name="ch"/> this class uses everywhere else.</summary>
+        private double XForCharIndex(TextBlock textBlock, int ch, int textLength)
+        {
+            if (textLength == 0) return textBlock.TransformToVisual(_overlay).Transform(new Point(0, 0)).X;
+            ch = Math.Max(0, Math.Min(ch, textLength));
+            double x = RawBoundaryX(textBlock, ch, textLength);
+            if (ch > 0) x += EstimateCharWidth(textBlock, textLength) / 2;
+            return textBlock.TransformToVisual(_overlay).Transform(new Point(x, 0)).X;
+        }
+
+        /// <summary>One character's on-screen width for this row, measured directly off
+        /// <see cref="RawBoundaryX"/> (not the corrected <see cref="XForCharIndex"/>, which depends on
+        /// this method — going through it here would be mutually recursive) — the bias
+        /// <see cref="RawBoundaryX"/> documents cancels out in this subtraction regardless, since both
+        /// endpoints carry the identical bias. Monospace font throughout this app's diff/conflict text,
+        /// so measuring between characters 0 and 1 is representative of any character in the row.</summary>
+        private double EstimateCharWidth(TextBlock textBlock, int textLength)
+        {
+            if (textLength <= 0) return 0;
+            return Math.Max(0, RawBoundaryX(textBlock, Math.Min(1, textLength), textLength) - RawBoundaryX(textBlock, 0, textLength));
         }
 
         private static string SafeSubstring(string text, int start, int end)

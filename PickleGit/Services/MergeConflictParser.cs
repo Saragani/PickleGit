@@ -39,7 +39,12 @@ namespace PickleGit.Services
                     doc.Items.Add(new ConflictDocItem
                     {
                         Kind = ConflictDocItemKind.Context,
-                        ContextText = string.Join("\n", context)
+                        // Matches RawText's own newline treatment below: the merge editor's Result
+                        // pane rebuilds ResultText by joining Items back together (see
+                        // MergeConflictFileViewModel.RebuildResultText), so ContextText must carry
+                        // the file's real newline style, not the "\n" used only for internal
+                        // scanning — otherwise every context run would flatten to LF-only on save.
+                        ContextText = string.Join("\n", context).Replace("\n", newline)
                     });
                 foreach (var l in context)
                 {
@@ -109,7 +114,10 @@ namespace PickleGit.Services
                         OursText = string.Join("\n", oursLines),
                         TheirsText = string.Join("\n", theirsLines),
                         BaseText = baseLines.Count > 0 ? string.Join("\n", baseLines) : null,
-                        RawText = string.Join("\n", rawLines).Replace("\n", newline)
+                        RawText = string.Join("\n", rawLines).Replace("\n", newline),
+                        OursLines = oursLines,
+                        BaseLines = baseLines,
+                        TheirsLines = theirsLines
                     };
                     doc.Blocks.Add(block);
                     doc.Items.Add(new ConflictDocItem { Kind = ConflictDocItemKind.Block, Block = block });

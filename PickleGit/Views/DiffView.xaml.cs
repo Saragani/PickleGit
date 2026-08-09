@@ -24,11 +24,12 @@ namespace PickleGit.Views
         public DiffView()
         {
             InitializeComponent();
-            _unifiedTextSelection = new DiffTextSelectionController(UnifiedListView, UnifiedTextSelectionOverlay, GetUnifiedRowText);
+            _unifiedTextSelection = new DiffTextSelectionController(UnifiedListView, UnifiedTextSelectionOverlay,
+                GetUnifiedRowText, GetUnifiedSelectableStart);
             _sideBySideLeftTextSelection = new DiffTextSelectionController(SideBySideLeftListView, SideBySideLeftTextSelectionOverlay,
-                item => GetSideBySideRowText(item, isLeftPane: true));
+                item => GetSideBySideRowText(item, isLeftPane: true), GetSideBySideSelectableStart);
             _sideBySideRightTextSelection = new DiffTextSelectionController(SideBySideRightListView, SideBySideRightTextSelectionOverlay,
-                item => GetSideBySideRowText(item, isLeftPane: false));
+                item => GetSideBySideRowText(item, isLeftPane: false), GetSideBySideSelectableStart);
         }
 
         private static string GetUnifiedRowText(object item)
@@ -45,6 +46,17 @@ namespace PickleGit.Views
             if (sbi.Kind == DiffItemKind.HunkHeader) return sbi.Header;
             return (isLeftPane ? sbi.Left : sbi.Right)?.Content;
         }
+
+        // A line row's model text (DiffLine.Content) carries a leading '+'/'-'/' ' diff-marker
+        // character that WordDiffHighlighter renders inline as the first glyph of "RowText" (see
+        // CLAUDE.md) — visually distinct from the line-number gutter, but still not something a
+        // user selecting/copying code actually wants. A hunk header's Header text has no such
+        // marker, so it alone is fully selectable from character 0.
+        private static int GetUnifiedSelectableStart(object item) =>
+            (item as DiffItem)?.Kind == DiffItemKind.HunkHeader ? 0 : 1;
+
+        private static int GetSideBySideSelectableStart(object item) =>
+            (item as SideBySideItem)?.Kind == DiffItemKind.HunkHeader ? 0 : 1;
 
         private RepositoryViewModel RepoVm => DataContext as RepositoryViewModel;
 

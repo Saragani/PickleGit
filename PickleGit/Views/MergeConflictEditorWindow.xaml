@@ -3,8 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:PickleGit.ViewModels"
         xmlns:conv="clr-namespace:PickleGit.Converters"
+        xmlns:behaviors="clr-namespace:PickleGit.Behaviors"
         Title="Resolve Conflicts"
-        Width="1240" Height="780" MinWidth="900" MinHeight="520"
+        Width="1360" Height="860" MinWidth="960" MinHeight="560"
         WindowStartupLocation="CenterOwner"
         Icon="pack://application:,,,/Resources/pickle.ico"
         Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextPrimaryBrush}">
@@ -15,106 +16,368 @@
                 <ResourceDictionary Source="../Themes/DarkTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
-            <conv:ConflictViewItemTemplateSelector x:Key="ConflictItemSelector">
-                <conv:ConflictViewItemTemplateSelector.ContextTemplate>
-                    <DataTemplate DataType="{x:Type vm:ConflictViewItem}">
-                        <TextBlock Text="{Binding ContextText}" FontFamily="Consolas" FontSize="11"
-                                   TextWrapping="Wrap" Margin="4,2"
-                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
-                    </DataTemplate>
-                </conv:ConflictViewItemTemplateSelector.ContextTemplate>
-                <conv:ConflictViewItemTemplateSelector.BlockTemplate>
-                    <DataTemplate DataType="{x:Type vm:ConflictViewItem}">
-                        <Border Margin="0,4" Padding="10" CornerRadius="4" BorderThickness="1"
-                                BorderBrush="{DynamicResource BorderBrush}"
-                                Background="{DynamicResource BackgroundBrush}">
-                            <Grid>
-                                <!-- Unresolved: Ours / (Base) / Theirs stacked, each with its own accept
-                                     button — no "current block" navigation needed, any block can be
-                                     resolved directly from its own card. -->
-                                <StackPanel Visibility="{Binding Block.Resolution, Converter={StaticResource UnresolvedVis}}">
-                                    <DockPanel Margin="0,0,0,6" LastChildFill="False">
-                                        <TextBlock DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="11"
-                                                   Foreground="{DynamicResource AccentBrush}"
-                                                   Text="{Binding Block.OursLabel}"/>
-                                        <Border DockPanel.Dock="Right" HorizontalAlignment="Right">
-                                            <StackPanel Orientation="Horizontal">
-                                                <Button Content="Accept Mine" Style="{StaticResource ToolbarButton}"
-                                                        Padding="8,3" Margin="0,0,4,0"
-                                                        Command="{Binding AcceptMineCommand}"/>
-                                                <Button Content="Accept Theirs" Style="{StaticResource ToolbarButton}"
-                                                        Padding="8,3" Margin="0,0,4,0"
-                                                        Command="{Binding AcceptTheirsCommand}"/>
-                                                <Button Content="Accept Base" Style="{StaticResource ToolbarButton}"
-                                                        Padding="8,3" Margin="0,0,4,0"
-                                                        Command="{Binding AcceptBaseCommand}"
-                                                        Visibility="{Binding Block.BaseText, Converter={StaticResource NullToVis}}"/>
-                                                <Button Content="Both" Style="{StaticResource ToolbarButton}"
-                                                        Padding="8,3" Margin="0,0,4,0"
-                                                        ToolTip="Keep both — mine, then theirs"
-                                                        Command="{Binding AcceptBothCommand}"/>
-                                                <Button Content="Both ⇅" Style="{StaticResource ToolbarButton}"
-                                                        Padding="8,3" ToolTip="Keep both — theirs, then mine"
-                                                        Command="{Binding AcceptBothReverseCommand}"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </DockPanel>
-                                    <Border BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" Margin="0,0,0,4">
-                                        <TextBox Text="{Binding Block.OursText, Mode=OneWay}" IsReadOnly="True"
-                                                 AcceptsReturn="True" TextWrapping="NoWrap"
-                                                 FontFamily="Consolas" FontSize="11"
-                                                 Background="{DynamicResource BackgroundBrush}"
-                                                 Foreground="{DynamicResource TextPrimaryBrush}"
-                                                 BorderThickness="0" MaxHeight="160"
-                                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
-                                    </Border>
-                                    <Border BorderBrush="{DynamicResource TextSecondaryBrush}" BorderThickness="1" Margin="0,0,0,4"
-                                            Visibility="{Binding Block.BaseText, Converter={StaticResource NullToVis}}">
-                                        <TextBox Text="{Binding Block.BaseText, Mode=OneWay}" IsReadOnly="True"
-                                                 AcceptsReturn="True" TextWrapping="NoWrap"
-                                                 FontFamily="Consolas" FontSize="11"
-                                                 Background="{DynamicResource BackgroundBrush}"
-                                                 Foreground="{DynamicResource TextSecondaryBrush}"
-                                                 BorderThickness="0" MaxHeight="120"
-                                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
-                                    </Border>
-                                    <TextBlock FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4"
-                                               Foreground="{DynamicResource WarningBrush}"
-                                               Text="{Binding Block.TheirsLabel}"/>
-                                    <Border BorderBrush="{DynamicResource WarningBrush}" BorderThickness="1">
-                                        <TextBox Text="{Binding Block.TheirsText, Mode=OneWay}" IsReadOnly="True"
-                                                 AcceptsReturn="True" TextWrapping="NoWrap"
-                                                 FontFamily="Consolas" FontSize="11"
-                                                 Background="{DynamicResource BackgroundBrush}"
-                                                 Foreground="{DynamicResource TextPrimaryBrush}"
-                                                 BorderThickness="0" MaxHeight="160"
-                                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
-                                    </Border>
-                                </StackPanel>
+            <!-- ── Two-pane (Ours/Theirs) row templates ──────────────────────────────────────
+                 Context/BlockToolbar/BlockBaseLine render identical content in both panes (the
+                 same duplication convention DiffView.xaml's SideBySideHunkTemplate already uses
+                 for hunk headers) — only BlockLineTemplate differs per side, projecting LeftLine
+                 or RightLine. Hosted in a plain StackPanel (see the ListViews below), not a
+                 virtualized panel: rows vary hugely in height (a one-line code row vs a full
+                 toolbar) and a single file's conflict count is always small enough that this
+                 costs nothing — same reasoning already documented for this window's old
+                 flattened single-column view. -->
+            <DataTemplate x:Key="ConflictPaneLeftContextTemplate" DataType="{x:Type vm:ConflictPaneItem}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding ContextOldLineNumber}" FontFamily="Consolas" FontSize="11"
+                               TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="RowText" Grid.Column="2" Text="{Binding ContextText}" FontFamily="Consolas" FontSize="11"
+                               Margin="2,2" TextWrapping="NoWrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                </Grid>
+            </DataTemplate>
+            <DataTemplate x:Key="ConflictPaneRightContextTemplate" DataType="{x:Type vm:ConflictPaneItem}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding ContextNewLineNumber}" FontFamily="Consolas" FontSize="11"
+                               TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="RowText" Grid.Column="2" Text="{Binding ContextText}" FontFamily="Consolas" FontSize="11"
+                               Margin="2,2" TextWrapping="NoWrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                </Grid>
+            </DataTemplate>
 
-                                <!-- Resolved: collapsed single strip showing what was kept -->
-                                <Border Visibility="{Binding Block.Resolution, Converter={StaticResource ResolvedVis}}"
-                                        BorderBrush="{DynamicResource SuccessBrush}" BorderThickness="0,0,0,0"
-                                        Padding="0">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding ResolvedLabel}" FontSize="10" FontStyle="Italic"
-                                                   Foreground="{DynamicResource SuccessBrush}" Margin="0,0,0,4"/>
-                                        <Border BorderBrush="{DynamicResource SuccessBrush}" BorderThickness="1">
-                                            <TextBox Text="{Binding ResolvedText, Mode=OneWay}" IsReadOnly="True"
-                                                     AcceptsReturn="True" TextWrapping="NoWrap"
-                                                     FontFamily="Consolas" FontSize="11"
-                                                     Background="{DynamicResource BackgroundBrush}"
-                                                     Foreground="{DynamicResource TextPrimaryBrush}"
-                                                     BorderThickness="0" MaxHeight="160"
-                                                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Border>
+            <!-- Per-hunk "select all" checkbox — GitKraken has exactly one of these per pane per
+                 hunk. Left pane's checkbox bulk-includes/excludes every Ours line for this block
+                 only; the right pane's is the same idea for Theirs. Use Base/Reset stay as small
+                 secondary links, left pane only (showing them on both sides would just be the
+                 confusing double-button problem again). -->
+            <DataTemplate x:Key="ConflictBlockToolbarTemplate" DataType="{x:Type vm:ConflictPaneItem}">
+                <Border Background="{DynamicResource HunkHeaderBrush}" Padding="8,6">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <CheckBox Content="Select All Mine" IsChecked="{Binding BlockVm.AllOursChecked}"
+                                  VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBlock Text="{Binding BlockVm.ResolvedSummary}" FontSize="10" FontStyle="Italic"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"
+                                   Foreground="{DynamicResource SuccessBrush}"/>
+                        <Button Content="Use Base" Style="{StaticResource ToolbarButton}"
+                                Padding="6,2" Margin="0,0,4,0" VerticalAlignment="Center"
+                                Command="{Binding BlockVm.UseBaseCommand}"
+                                Visibility="{Binding BlockVm.HasBase, Converter={StaticResource BoolToVis}}"/>
+                        <Button Content="Reset" Style="{StaticResource ToolbarButton}" Padding="6,2"
+                                VerticalAlignment="Center" Command="{Binding BlockVm.ResetCommand}"
+                                Visibility="{Binding BlockVm.Touched, Converter={StaticResource BoolToVis}}"/>
+                    </StackPanel>
+                </Border>
+            </DataTemplate>
+
+            <DataTemplate x:Key="ConflictBlockToolbarRightTemplate" DataType="{x:Type vm:ConflictPaneItem}">
+                <Border Background="{DynamicResource HunkHeaderBrush}" Padding="8,6">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <CheckBox Content="Select All Theirs" IsChecked="{Binding BlockVm.AllTheirsChecked}"
+                                  VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBlock Text="{Binding BlockVm.ResolvedSummary}" FontSize="10" FontStyle="Italic"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource SuccessBrush}"/>
+                    </StackPanel>
+                </Border>
+            </DataTemplate>
+
+            <DataTemplate x:Key="ConflictBaseLineTemplate" DataType="{x:Type vm:ConflictPaneItem}">
+                <Border Padding="6,1">
+                    <TextBlock x:Name="RowText" Text="{Binding BaseLine.Text}" FontFamily="Consolas" FontSize="11"
+                               TextWrapping="NoWrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                </Border>
+            </DataTemplate>
+
+            <!-- Per-line pick affordance: a +/−/✓ glyph, not a checkbox — hidden until Included or
+                 hovered (GitKraken's hover-to-reveal), showing green "+" while unchecked+hovered,
+                 green "✓" while checked (even without hovering, so a resolved pick stays visible),
+                 and red "−" while checked AND hovered (signaling "click to remove"). The glyph is
+                 purely decorative (IsHitTestVisible="False") — clicking anywhere on the row toggles
+                 the line via the MouseBinding on RowRoot, not just the glyph itself. The small
+                 PickOrder number shows the click order CurrentText actually assembles from, once
+                 more than one line is picked. -->
+            <DataTemplate x:Key="ConflictPaneLeftLineTemplate" DataType="{x:Type vm:ConflictPaneItem}">
+                <Border x:Name="RowRoot" Height="22"
+                        Background="{Binding LeftLine.Display.Kind, Converter={StaticResource DiffLineBg}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="36"/>
+                            <ColumnDefinition Width="24"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding LeftLine.Display.OldLineNumber}"
+                                   FontFamily="Consolas" FontSize="11" TextAlignment="Right"
+                                   Padding="0,1,6,0" Opacity="0.6" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <!-- Its own click target (not the row-wide toggle used before) — the rest of
+                             the row is now plain selectable/copyable text; see MergeConflictEditorWindow
+                             .xaml.cs for the drag-selection-driven toggle that replaces "click anywhere". -->
+                        <Border x:Name="GlyphCircle" Grid.Column="1" Width="15" Height="15" CornerRadius="8"
+                                Cursor="Hand" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                Visibility="Collapsed" Background="{DynamicResource SuccessBrush}">
+                            <Border.InputBindings>
+                                <MouseBinding Gesture="LeftClick" Command="{Binding LeftLine.ToggleCommand}"/>
+                            </Border.InputBindings>
+                            <Grid>
+                                <TextBlock x:Name="GlyphText" Text="+" FontWeight="Bold" FontSize="10"
+                                           Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Margin="0,-1,0,0"/>
+                                <Rectangle x:Name="MinusBar" Width="7" Height="1.6" RadiusX="0.8" RadiusY="0.8"
+                                           Fill="White" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Visibility="Collapsed"/>
                             </Grid>
                         </Border>
-                    </DataTemplate>
-                </conv:ConflictViewItemTemplateSelector.BlockTemplate>
-            </conv:ConflictViewItemTemplateSelector>
+                        <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding LeftLine.Display}"
+                                   FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
+                                   Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
+                                   TextWrapping="NoWrap"
+                                   Foreground="{Binding LeftLine.Display.Kind, Converter={StaticResource DiffLineFg}}"/>
+                    </Grid>
+                </Border>
+                <DataTemplate.Triggers>
+                    <Trigger SourceName="RowRoot" Property="IsMouseOver" Value="True">
+                        <Setter TargetName="GlyphCircle" Property="Visibility" Value="Visible"/>
+                    </Trigger>
+                    <DataTrigger Binding="{Binding LeftLine.Included}" Value="True">
+                        <Setter TargetName="GlyphCircle" Property="Visibility" Value="Visible"/>
+                        <Setter TargetName="GlyphText" Property="Text" Value="✓"/>
+                    </DataTrigger>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsMouseOver, ElementName=RowRoot}" Value="True"/>
+                            <Condition Binding="{Binding LeftLine.Included}" Value="True"/>
+                        </MultiDataTrigger.Conditions>
+                        <Setter TargetName="GlyphText" Property="Visibility" Value="Collapsed"/>
+                        <Setter TargetName="MinusBar" Property="Visibility" Value="Visible"/>
+                        <Setter TargetName="GlyphCircle" Property="Background" Value="{DynamicResource DangerBrush}"/>
+                    </MultiDataTrigger>
+                    <!-- Declared last so it wins over everything above — a filler row (no Ours
+                         line here) must never show a glyph, even on hover. -->
+                    <DataTrigger Binding="{Binding LeftLine}" Value="{x:Null}">
+                        <Setter TargetName="GlyphCircle" Property="Visibility" Value="Collapsed"/>
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <DataTemplate x:Key="ConflictPaneRightLineTemplate" DataType="{x:Type vm:ConflictPaneItem}">
+                <Border x:Name="RowRoot" Height="22"
+                        Background="{Binding RightLine.Display.Kind, Converter={StaticResource DiffLineBg}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="36"/>
+                            <ColumnDefinition Width="24"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding RightLine.Display.NewLineNumber}"
+                                   FontFamily="Consolas" FontSize="11" TextAlignment="Right"
+                                   Padding="0,1,6,0" Opacity="0.6" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <Border x:Name="GlyphCircle" Grid.Column="1" Width="15" Height="15" CornerRadius="8"
+                                Cursor="Hand" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                Visibility="Collapsed" Background="{DynamicResource SuccessBrush}">
+                            <Border.InputBindings>
+                                <MouseBinding Gesture="LeftClick" Command="{Binding RightLine.ToggleCommand}"/>
+                            </Border.InputBindings>
+                            <Grid>
+                                <TextBlock x:Name="GlyphText" Text="+" FontWeight="Bold" FontSize="10"
+                                           Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Margin="0,-1,0,0"/>
+                                <Rectangle x:Name="MinusBar" Width="7" Height="1.6" RadiusX="0.8" RadiusY="0.8"
+                                           Fill="White" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding RightLine.Display}"
+                                   FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
+                                   Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
+                                   TextWrapping="NoWrap"
+                                   Foreground="{Binding RightLine.Display.Kind, Converter={StaticResource DiffLineFg}}"/>
+                    </Grid>
+                </Border>
+                <DataTemplate.Triggers>
+                    <Trigger SourceName="RowRoot" Property="IsMouseOver" Value="True">
+                        <Setter TargetName="GlyphCircle" Property="Visibility" Value="Visible"/>
+                    </Trigger>
+                    <DataTrigger Binding="{Binding RightLine.Included}" Value="True">
+                        <Setter TargetName="GlyphCircle" Property="Visibility" Value="Visible"/>
+                        <Setter TargetName="GlyphText" Property="Text" Value="✓"/>
+                    </DataTrigger>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsMouseOver, ElementName=RowRoot}" Value="True"/>
+                            <Condition Binding="{Binding RightLine.Included}" Value="True"/>
+                        </MultiDataTrigger.Conditions>
+                        <Setter TargetName="GlyphText" Property="Visibility" Value="Collapsed"/>
+                        <Setter TargetName="MinusBar" Property="Visibility" Value="Visible"/>
+                        <Setter TargetName="GlyphCircle" Property="Background" Value="{DynamicResource DangerBrush}"/>
+                    </MultiDataTrigger>
+                    <!-- Declared last so it wins over everything above — a filler row (no Theirs
+                         line here) must never show a glyph, even on hover. -->
+                    <DataTrigger Binding="{Binding RightLine}" Value="{x:Null}">
+                        <Setter TargetName="GlyphCircle" Property="Visibility" Value="Collapsed"/>
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <conv:ConflictPaneItemTemplateSelector x:Key="ConflictPaneLeftSelector"
+                ContextTemplate="{StaticResource ConflictPaneLeftContextTemplate}"
+                BlockToolbarTemplate="{StaticResource ConflictBlockToolbarTemplate}"
+                BlockBaseLineTemplate="{StaticResource ConflictBaseLineTemplate}"
+                BlockLineTemplate="{StaticResource ConflictPaneLeftLineTemplate}"/>
+            <conv:ConflictPaneItemTemplateSelector x:Key="ConflictPaneRightSelector"
+                ContextTemplate="{StaticResource ConflictPaneRightContextTemplate}"
+                BlockToolbarTemplate="{StaticResource ConflictBlockToolbarRightTemplate}"
+                BlockBaseLineTemplate="{StaticResource ConflictBaseLineTemplate}"
+                BlockLineTemplate="{StaticResource ConflictPaneRightLineTemplate}"/>
+
+            <!-- ── Result pane row templates ───────────────────────────────────────────────────
+                 Same numbered, 36px-gutter shape as the Ours/Theirs panes (own running line count,
+                 since the assembled output's length generally differs from either source's) — same
+                 selection/copy/scroll behavior follows for free from sharing that shape and the
+                 "RowText" naming convention the DiffTextSelectionController relies on. -->
+            <DataTemplate x:Key="ConflictResultContextTemplate" DataType="{x:Type vm:ConflictResultItem}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding LineNumber}" FontFamily="Consolas" FontSize="11"
+                               TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="RowText" Grid.Column="1" Text="{Binding LineText}" FontFamily="Consolas" FontSize="11"
+                               Margin="2,1" TextWrapping="NoWrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                </Grid>
+            </DataTemplate>
+
+            <!-- Small unnumbered label preceding a block's ResolvedBaseLine/DefaultBaseLine rows —
+                 states why those lines have no per-line "−" (UseBaseVerbatim/nothing-picked, or an
+                 untouched block defaulting to base, have no single source ConflictLineOption). -->
+            <DataTemplate x:Key="ConflictResultBaseLabelTemplate" DataType="{x:Type vm:ConflictResultItem}">
+                <TextBlock Text="{Binding BlockVm.ResolvedSummary}" FontSize="10" FontStyle="Italic" Margin="36,2,0,0"
+                           Foreground="{DynamicResource SuccessBrush}"/>
+            </DataTemplate>
+            <DataTemplate x:Key="ConflictResultDefaultBaseLabelTemplate" DataType="{x:Type vm:ConflictResultItem}">
+                <TextBlock Text="Using base — no line picked yet, click a line above to override"
+                           FontSize="10" FontStyle="Italic" Margin="36,2,0,0"
+                           Foreground="{DynamicResource AccentBrush}"/>
+            </DataTemplate>
+
+            <DataTemplate x:Key="ConflictResultBaseLineTemplate" DataType="{x:Type vm:ConflictResultItem}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding LineNumber}" FontFamily="Consolas" FontSize="11"
+                               TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="RowText" Grid.Column="1" Text="{Binding LineText}" FontFamily="Consolas" FontSize="11"
+                               Margin="2,1" TextWrapping="NoWrap" Foreground="{DynamicResource SuccessBrush}"/>
+                </Grid>
+            </DataTemplate>
+            <DataTemplate x:Key="ConflictResultDefaultBaseLineTemplate" DataType="{x:Type vm:ConflictResultItem}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding LineNumber}" FontFamily="Consolas" FontSize="11"
+                               TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="RowText" Grid.Column="1" Text="{Binding LineText}" FontFamily="Consolas" FontSize="11"
+                               Margin="2,1" TextWrapping="NoWrap" Foreground="{DynamicResource AccentBrush}"/>
+                </Grid>
+            </DataTemplate>
+
+            <!-- One individually-removable output line — hovering reveals a red "−" (its own click
+                 target, not the whole row) that unchecks SourceLine back in its source pane. -->
+            <DataTemplate x:Key="ConflictResultLineTemplate" DataType="{x:Type vm:ConflictResultItem}">
+                <Border x:Name="RowRoot" Height="22">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="36"/>
+                            <ColumnDefinition Width="24"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding LineNumber}" FontFamily="Consolas" FontSize="11"
+                                   TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <Border x:Name="GlyphCircle" Grid.Column="1" Width="15" Height="15" CornerRadius="8"
+                                Cursor="Hand" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                Visibility="Collapsed" Background="{DynamicResource DangerBrush}">
+                            <Border.InputBindings>
+                                <MouseBinding Gesture="LeftClick" Command="{Binding SourceLine.ToggleCommand}"/>
+                            </Border.InputBindings>
+                            <Rectangle Width="7" Height="1.6" RadiusX="0.8" RadiusY="0.8" Fill="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock x:Name="RowText" Grid.Column="2" Text="{Binding SourceLine.Text}"
+                                   FontFamily="Cascadia Code, Consolas" FontSize="12" Margin="2,1" TextWrapping="NoWrap"/>
+                    </Grid>
+                </Border>
+                <DataTemplate.Triggers>
+                    <Trigger SourceName="RowRoot" Property="IsMouseOver" Value="True">
+                        <Setter TargetName="GlyphCircle" Property="Visibility" Value="Visible"/>
+                    </Trigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <DataTemplate x:Key="ConflictResultUnresolvedTemplate" DataType="{x:Type vm:ConflictResultItem}">
+                <Border Background="{DynamicResource DiffDeletedBgBrush}" BorderBrush="{DynamicResource WarningBrush}"
+                        BorderThickness="1" Margin="0,2" Padding="6,3">
+                    <TextBlock FontSize="11" FontStyle="Italic" Foreground="{DynamicResource WarningBrush}"
+                               Text="⚠ Unresolved conflict — resolve above"/>
+                </Border>
+            </DataTemplate>
+
+            <conv:ConflictResultItemTemplateSelector x:Key="ConflictResultSelector"
+                ContextTemplate="{StaticResource ConflictResultContextTemplate}"
+                ResolvedLineTemplate="{StaticResource ConflictResultLineTemplate}"
+                ResolvedBaseLabelTemplate="{StaticResource ConflictResultBaseLabelTemplate}"
+                ResolvedBaseLineTemplate="{StaticResource ConflictResultBaseLineTemplate}"
+                DefaultBaseLabelTemplate="{StaticResource ConflictResultDefaultBaseLabelTemplate}"
+                DefaultBaseLineTemplate="{StaticResource ConflictResultDefaultBaseLineTemplate}"
+                UnresolvedTemplate="{StaticResource ConflictResultUnresolvedTemplate}"/>
+
+            <!-- SelectionMode=Single (not the default Extended) deliberately — these rows never
+                 use ListView's own native multi-select, and Extended mode's built-in Ctrl+A
+                 "select all rows" keybinding would otherwise intercept Ctrl+A (marking it Handled
+                 in the ListView's own OnKeyDown, before it ever reaches this window's plain
+                 KeyDown handler) instead of the Ctrl+A/text-selection this window implements.
+
+                 IsVirtualizing=False (not a plain StackPanel ItemsPanel) — rows vary hugely in
+                 height so nothing here should ever be recycled, but DarkListView's ScrollViewer
+                 has CanContentScroll="True" hardcoded directly in its ControlTemplate (not a
+                 TemplateBinding, so no Setter from here can override it). Swapping to a plain
+                 StackPanel — which implements no IScrollInfo at all — left that ScrollViewer
+                 falling back to a coarse per-item approximation of "logical" scrolling: every
+                 wheel notch, scrollbar drag, and ScrollToVerticalOffset call (including the
+                 cross-pane scroll sync and the text-selection auto-scroll-while-dragging) jumped
+                 by whole rows instead of pixels. A VirtualizingStackPanel always implements real
+                 IScrollInfo regardless of IsVirtualizing, so turning virtualization off (nothing
+                 is ever recycled, so the variable-row-height pitfall doesn't apply) while keeping
+                 the real panel type restores smooth, pixel-accurate scrolling. -->
+            <Style x:Key="NoVirtualizeListView" TargetType="ListView" BasedOn="{StaticResource DarkListView}">
+                <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="False"/>
+                <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel"/>
+                <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+                <Setter Property="SelectionMode" Value="Single"/>
+            </Style>
+            <!-- No IsHitTestVisible=False here — that would disable mouse hit-testing for the
+                 whole row (see the old editor's identical comment); it would silently make every
+                 checkbox and toolbar button unclickable. -->
+            <Style x:Key="NoFocusListViewItem" TargetType="ListViewItem" BasedOn="{StaticResource DarkListViewItem}">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Focusable" Value="False"/>
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -173,7 +436,7 @@
                 </ListView>
             </Border>
 
-            <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch"/>
+            <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Focusable="False"/>
 
             <!-- Selected file detail -->
             <Grid Grid.Column="2" DataContext="{Binding CurrentFile}">
@@ -184,6 +447,7 @@
 
                 <Grid Visibility="{Binding ., Converter={StaticResource NullToVis}}">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
@@ -196,7 +460,7 @@
                     </TextBlock>
 
                     <!-- Existence (add/delete) conflict: no content to diff — keep or delete instead -->
-                    <Border Grid.Row="1" Padding="16" VerticalAlignment="Top"
+                    <Border Grid.Row="1" Grid.RowSpan="2" Padding="16" VerticalAlignment="Top"
                             Visibility="{Binding IsExistenceConflict, Converter={StaticResource BoolToVis}}"
                             Background="{DynamicResource BackgroundBrush}" BorderThickness="1"
                             BorderBrush="{DynamicResource WarningBrush}" CornerRadius="4">
@@ -213,33 +477,134 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Content conflict: flattened, interleaved merged view — non-conflicting text
-                         renders normally, each conflict block inline with its own accept buttons. -->
-                    <ListView Grid.Row="1" ItemsSource="{Binding FlatItems}"
-                              Style="{StaticResource DarkListView}"
-                              ItemTemplateSelector="{StaticResource ConflictItemSelector}"
-                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                              Visibility="{Binding IsExistenceConflict, Converter={StaticResource InvertBoolToVis}}">
-                        <!-- Rows vary hugely in height (a one-line context run vs a full Ours/Theirs
-                             card) — plain StackPanel host, no virtualization; a single file's conflict
-                             count is always small enough that this costs nothing (see CLAUDE.md's
-                             VirtualizingStackPanel variable-height-row note for why this matters). -->
-                        <ListView.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel/>
-                            </ItemsPanelTemplate>
-                        </ListView.ItemsPanel>
-                        <ListView.ItemContainerStyle>
-                            <!-- No IsHitTestVisible=False here: that would disable mouse hit-testing
-                                 for this ListViewItem's entire visual subtree, silently making every
-                                 Accept Mine/Theirs/Both button and Keep/Delete radio button inside
-                                 unclickable (confirmed live — the exact bug this fixes). -->
-                            <Style TargetType="ListViewItem" BasedOn="{StaticResource DarkListViewItem}">
-                                <Setter Property="Padding" Value="0"/>
-                                <Setter Property="Focusable" Value="False"/>
-                            </Style>
-                        </ListView.ItemContainerStyle>
-                    </ListView>
+                    <!-- Content conflict: nav bar + two-pane Ours/Theirs editor + live Result preview -->
+                    <DockPanel Grid.Row="1" Margin="0,0,0,6"
+                               Visibility="{Binding IsExistenceConflict, Converter={StaticResource InvertBoolToVis}}">
+                        <Button DockPanel.Dock="Left" Content="◀ Prev" Style="{StaticResource ToolbarButton}"
+                                Padding="8,3" Margin="0,0,6,0" Command="{Binding PrevConflictCommand}"/>
+                        <Button DockPanel.Dock="Left" Content="Next ▶" Style="{StaticResource ToolbarButton}"
+                                Padding="8,3" Margin="0,0,10,0" Command="{Binding NextConflictCommand}"/>
+                        <TextBlock Text="{Binding ConflictNavLabel}" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </DockPanel>
+
+                    <Grid Grid.Row="2" Visibility="{Binding IsExistenceConflict, Converter={StaticResource InvertBoolToVis}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1*" MinHeight="80"/>
+                            <RowDefinition Height="6"/>
+                            <RowDefinition Height="1*" MinHeight="80"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Per-pane commit info header (GitKraken: "Commit {sha} on {branch}",
+                             tooltip = full author/date/message) + whole-file "select all" per
+                             pane, above the per-hunk checkboxes. Same commit header for every
+                             file in the session — see MergeConflictSessionViewModel. -->
+                        <Grid Grid.Row="0" Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="6"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding OursCommitLabel}" FontSize="10" FontWeight="SemiBold"
+                                           ToolTip="{Binding OursCommitTooltip}"
+                                           Visibility="{Binding OursCommitLabel, Converter={StaticResource NullToVis}}"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,2"/>
+                                <CheckBox Content="Select All Mine (whole file)"
+                                          IsChecked="{Binding AllMineCheckedWholeFile}" FontSize="11"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="{Binding TheirsCommitLabel}" FontSize="10" FontWeight="SemiBold"
+                                           ToolTip="{Binding TheirsCommitTooltip}"
+                                           Visibility="{Binding TheirsCommitLabel, Converter={StaticResource NullToVis}}"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,2"/>
+                                <CheckBox Content="Select All Theirs (whole file)"
+                                          IsChecked="{Binding AllTheirsCheckedWholeFile}" FontSize="11"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="6"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                                <Grid>
+                                    <ListView x:Name="ConflictLeftListView" ItemsSource="{Binding PaneItems}"
+                                              Style="{StaticResource NoVirtualizeListView}"
+                                              ItemContainerStyle="{StaticResource NoFocusListViewItem}"
+                                              ItemTemplateSelector="{StaticResource ConflictPaneLeftSelector}"
+                                              Loaded="ConflictLeftListView_Loaded" BorderThickness="0"
+                                              PreviewMouseLeftButtonDown="ConflictPaneListView_PreviewMouseLeftButtonDown"
+                                              PreviewMouseMove="ConflictPaneListView_PreviewMouseMove"
+                                              PreviewMouseLeftButtonUp="ConflictPaneListView_PreviewMouseLeftButtonUp"
+                                              PreviewKeyDown="ConflictTextSelection_KeyDown">
+                                        <ListView.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Copy" Click="ConflictLeftCopySelection_Click"/>
+                                            </ContextMenu>
+                                        </ListView.ContextMenu>
+                                    </ListView>
+                                    <Canvas x:Name="ConflictLeftTextSelectionOverlay" IsHitTestVisible="False" Panel.ZIndex="10" ClipToBounds="True"/>
+                                </Grid>
+                            </Border>
+
+                            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Focusable="False"/>
+
+                            <Border Grid.Column="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                                <Grid>
+                                    <ListView x:Name="ConflictRightListView" ItemsSource="{Binding PaneItems}"
+                                              Style="{StaticResource NoVirtualizeListView}"
+                                              ItemContainerStyle="{StaticResource NoFocusListViewItem}"
+                                              ItemTemplateSelector="{StaticResource ConflictPaneRightSelector}"
+                                              Loaded="ConflictRightListView_Loaded" BorderThickness="0"
+                                              PreviewMouseLeftButtonDown="ConflictPaneListView_PreviewMouseLeftButtonDown"
+                                              PreviewMouseMove="ConflictPaneListView_PreviewMouseMove"
+                                              PreviewMouseLeftButtonUp="ConflictPaneListView_PreviewMouseLeftButtonUp"
+                                              PreviewKeyDown="ConflictTextSelection_KeyDown">
+                                        <ListView.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Copy" Click="ConflictRightCopySelection_Click"/>
+                                            </ContextMenu>
+                                        </ListView.ContextMenu>
+                                    </ListView>
+                                    <Canvas x:Name="ConflictRightTextSelectionOverlay" IsHitTestVisible="False" Panel.ZIndex="10" ClipToBounds="True"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" Focusable="False"
+                                      Background="{DynamicResource BorderBrush}"/>
+
+                        <DockPanel Grid.Row="3">
+                            <TextBlock DockPanel.Dock="Top" Text="Result" FontWeight="SemiBold" FontSize="11"
+                                       Margin="2,0,0,4" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                                <Grid>
+                                    <ListView x:Name="ConflictResultListView" ItemsSource="{Binding ResultItems}"
+                                              Style="{StaticResource NoVirtualizeListView}"
+                                              ItemContainerStyle="{StaticResource NoFocusListViewItem}"
+                                              ItemTemplateSelector="{StaticResource ConflictResultSelector}"
+                                              BorderThickness="0" Loaded="ConflictResultListView_Loaded"
+                                              PreviewMouseLeftButtonDown="ConflictPaneListView_PreviewMouseLeftButtonDown"
+                                              PreviewMouseMove="ConflictPaneListView_PreviewMouseMove"
+                                              PreviewMouseLeftButtonUp="ConflictPaneListView_PreviewMouseLeftButtonUp"
+                                              PreviewKeyDown="ConflictTextSelection_KeyDown"
+                                              ScrollViewer.ScrollChanged="ConflictResultListView_ScrollChanged">
+                                        <ListView.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Copy" Click="ConflictResultCopySelection_Click"/>
+                                            </ContextMenu>
+                                        </ListView.ContextMenu>
+                                    </ListView>
+                                    <Canvas x:Name="ConflictResultTextSelectionOverlay" IsHitTestVisible="False" Panel.ZIndex="10" ClipToBounds="True"/>
+                                </Grid>
+                            </Border>
+                        </DockPanel>
+                    </Grid>
                 </Grid>
             </Grid>
         </Grid>

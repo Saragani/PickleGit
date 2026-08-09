@@ -108,6 +108,30 @@ namespace PickleGit.Services.Git
             };
         }
 
+        /// <summary>Fetches the common-ancestor (stage 1) blob for a conflicted path directly from
+        /// git's index, entirely independent of the working file's own marker style or the repo's
+        /// merge.conflictstyle setting. Git always keeps all three stages in the index regardless
+        /// of that setting — it only controls how markers get written to the working tree — so
+        /// this is available even when the on-disk file has plain (non-diff3) markers. The caller
+        /// locates each block's own slice of this ancestor text using the working file's own
+        /// context boundaries (see MergeConflictFileViewModel.ApplyGitAncestorText) rather than by
+        /// independently re-deriving conflict regions (e.g. via `git merge-file`), which was tried
+        /// first and rejected: re-diffing the extracted blobs from scratch can legitimately draw a
+        /// hunk boundary a line or two off from whatever the original merge/rebase/cherry-pick
+        /// produced (confirmed directly — a trailing unchanged line ended up inside the
+        /// re-derived block on one side but left as trailing context on the other), and there's no
+        /// reliable way to tell that apart from a genuine mismatch after the fact. Returns null
+        /// when git.exe is unavailable or there's no ancestor at all (e.g. an add/add conflict).
+        /// </summary>
+        public async Task<string> GetConflictAncestorTextAsync(string relativePath,
+            CancellationToken ct = default(CancellationToken))
+        {
+            if (!IsAvailable) return null;
+            var gitPath = relativePath.Replace('\\', '/');
+            var ancestor = await RunAsync($"show :1:{Quote(gitPath)}", ct: ct).ConfigureAwait(false);
+            return ancestor.Success ? ancestor.StdOut : null;
+        }
+
         public static string Quote(string arg)
         {
             if (string.IsNullOrEmpty(arg)) return "\"\"";

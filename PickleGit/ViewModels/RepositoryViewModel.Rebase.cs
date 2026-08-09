@@ -112,11 +112,46 @@ namespace PickleGit.ViewModels
             await LoadWorkingDirAsync();
         }
 
+        /// <summary>Theirs-side ref for each conflict-producing operation, mirroring the raw
+        /// state-file reads GetConflictState() already does — not read via LibGit2Sharp anywhere
+        /// else in this codebase, but the same ref names resolve the same way through it. Plain
+        /// rebase has no equivalent single ref (the "theirs" commit changes every step and isn't
+        /// tracked by a named ref this codebase already reads), so it's left out — the editor
+        /// just won't show a theirs commit header for a rebase conflict.</summary>
+        private static string TheirsRefFor(ConflictOperation op)
+        {
+            switch (op)
+            {
+                case ConflictOperation.Merge: return "MERGE_HEAD";
+                case ConflictOperation.CherryPick: return "CHERRY_PICK_HEAD";
+                case ConflictOperation.Revert: return "REVERT_HEAD";
+                default: return null;
+            }
+        }
+
         private async void OpenMergeEditor(object param)
         {
             var clicked = param as FileChange;
             var conflicted = ConflictedFileChanges.ToList();
             if (conflicted.Count == 0) return;
+
+            var theirsRef = TheirsRefFor(ConflictInfo?.Operation ?? ConflictOperation.None);
+            var (oursBranch, oursCommit, theirsCommit) = await _git.Executor.RunAsync(() =>
+                (_git.GetCurrentBranch(), _git.GetCommit("HEAD"), theirsRef != null ? _git.GetCommit(theirsRef) : null));
+
+            // Fetch the real common-ancestor blob straight from git's index for every content-
+            // conflicted file, so the Result pane can show real base text for an unresolved block
+            // even when the working file itself only has plain (non-diff3) markers — see
+            // CliGitService.GetConflictAncestorTextAsync. Existence conflicts (add/delete) have no
+            // content to parse at all, so skip those. A failed or unavailable fetch just leaves
+            // that file out of the dictionary — MergeConflictFileViewModel falls back to today's
+            // placeholder for it exactly as before.
+            var ancestorTextByPath = new Dictionary<string, string>();
+            var contentConflicted = conflicted.Where(f => !f.OursMissing && !f.TheirsMissing).ToList();
+            var ancestorResults = await Task.WhenAll(contentConflicted.Select(async f =>
+                (f.Path, Text: await _git.Cli.GetConflictAncestorTextAsync(f.Path))));
+            foreach (var (path, text) in ancestorResults)
+                if (text != null) ancestorTextByPath[path] = text;
 
             var vm = new MergeConflictSessionViewModel(
                 conflicted,
@@ -125,7 +160,8 @@ namespace PickleGit.ViewModels
                 {
                     await RunCliAsync($"Staging {path}…",
                         $"add -- {Services.Git.CliGitService.Quote(path)}", "Mark resolved");
-                });
+                },
+                oursBranch, oursCommit, ConflictInfo?.SourceDescription, theirsCommit, ancestorTextByPath);
 
             if (clicked != null)
             {

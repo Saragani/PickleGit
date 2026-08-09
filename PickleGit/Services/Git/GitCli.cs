@@ -232,6 +232,15 @@ namespace PickleGit.Services.Git
         {
             var buffer = new char[4096];
             var line = new StringBuilder();
+            // Only fired onLine when the buffered line was non-empty — meant to collapse a CRLF
+            // pair into one terminator (the '\r' already fires; skip the immediately-following
+            // '\n', which arrives with nothing newly appended), but as a side effect it also
+            // silently dropped every genuine blank line in git's output (an empty line between two
+            // '\n's hits this exact same "buffer is empty" state with no way to tell the two apart).
+            // Tracking whether the previous character was '\r' distinguishes them directly: skip
+            // firing only for a '\n' that's the second half of a CRLF pair just fired on, and fire
+            // unconditionally otherwise so a real blank line comes through as onLine("").
+            var lastWasCr = false;
             try
             {
                 int read;
@@ -240,17 +249,17 @@ namespace PickleGit.Services.Git
                     for (int i = 0; i < read; i++)
                     {
                         var c = buffer[i];
+                        if (c == '\n' && lastWasCr) { lastWasCr = false; continue; }
                         if (c == '\r' || c == '\n')
                         {
-                            if (line.Length > 0)
-                            {
-                                onLine(line.ToString());
-                                line.Clear();
-                            }
+                            onLine(line.ToString());
+                            line.Clear();
+                            lastWasCr = c == '\r';
                         }
                         else
                         {
                             line.Append(c);
+                            lastWasCr = false;
                         }
                     }
                 }

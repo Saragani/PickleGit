@@ -2278,6 +2278,17 @@ namespace PickleGit.Services
             get { EnsureOpen(); return _repo.Info.IsHeadDetached; }
         }
 
+        /// <summary>Looks up a single commit by SHA or symbolic ref name (e.g. "HEAD",
+        /// "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD") — used by the merge conflict editor's
+        /// per-pane commit info header. Returns null if the ref doesn't resolve (e.g. no
+        /// CHERRY_PICK_HEAD outside a cherry-pick), never throws.</summary>
+        public CommitInfo GetCommit(string refOrSha)
+        {
+            EnsureOpen();
+            var c = _repo.Lookup<Commit>(refOrSha);
+            return c == null ? null : MapCommit(c, BuildRefMap());
+        }
+
         public string GetHeadSha()
         {
             EnsureOpen();
