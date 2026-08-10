@@ -64,6 +64,11 @@ namespace PickleGit.Controls
             // pass to actually finish first.
             _autoScrollTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(50) };
             _autoScrollTimer.Tick += OnAutoScrollTick;
+
+            // Drag continuation (move/up) is handled off the overlay's own capture below, not the
+            // ListView's — see BeginSelection's doc comment for why capture never targets _listView.
+            _overlay.PreviewMouseMove += (s, e) => { if (IsSelecting) UpdateDrag(e); };
+            _overlay.PreviewMouseLeftButtonUp += (s, e) => { if (IsSelecting) EndSelection(); };
         }
 
         public bool IsSelecting { get; private set; }
@@ -144,9 +149,20 @@ namespace PickleGit.Controls
 
         /// <summary>Starts a new selection at the given row/content element. Called by the view's
         /// mouse-down handler once it has already decided this is a content-region click (not the
-        /// gutter). Captures the mouse so drag/release keep routing here even if the cursor leaves
-        /// this ListView's bounds — e.g. dragging across a side-by-side GridSplitter into the other
-        /// pane, which as a side effect keeps the two panes' selections independent for free.</summary>
+        /// gutter). Captures the mouse — on the overlay Canvas, deliberately NOT on the ListView
+        /// itself — so drag/release keep routing here even if the cursor leaves this ListView's
+        /// bounds, e.g. dragging across a side-by-side GridSplitter into the other pane, which as a
+        /// side effect keeps the two panes' selections independent for free.
+        ///
+        /// Capturing on _listView (a ListBox) instead was tried first and is what caused a real,
+        /// visible bug: ListBox.OnMouseMove has its own built-in auto-scroll/navigate-to-item logic
+        /// that runs whenever Mouse.Captured == this ListBox, regardless of who called CaptureMouse
+        /// or why. With no valid "current item" context for it to navigate from (nothing here uses
+        /// native ListBox selection), it fell through to jumping the ScrollViewer straight to the
+        /// very start of the list (offset 0) mid-drag — confirmed via a live call stack showing
+        /// ListBox.OnMouseMove -> ItemsControl.DoAutoScroll -> NavigateByLine -> NavigateByLineInternal
+        /// -> NavigateToStartInternal. Capturing on the overlay Canvas instead (a plain Canvas, never
+        /// a ListBox) makes that condition impossible to satisfy, unconditionally.</summary>
         public void BeginSelection(MouseButtonEventArgs e, ListViewItem container, TextBlock rowText)
         {
             int rowIndex = _listView.ItemContainerGenerator.IndexFromContainer(container);
@@ -156,7 +172,18 @@ namespace PickleGit.Controls
             _anchor = _focus = (rowIndex, ch);
             IsSelecting = true;
             _listView.Focus();
-            _listView.CaptureMouse();
+            // UIElement.CaptureMouse()/Mouse.Capture() silently fails (returns false, capture stays
+            // wherever it was — nobody, typically) for an element with IsHitTestVisible=False, which
+            // the overlay normally is (see its XAML comment — it must let clicks pass through to the
+            // ListView underneath when a drag ISN'T active). Flip it on only for the capture's
+            // lifetime; EndSelection flips it back off. Without this, capture never actually landed on
+            // the overlay at all, so as soon as the drag cursor left the ListView's own hit-test
+            // bounds (e.g. past the pane's top/bottom edge while trying to trigger auto-scroll, or
+            // across the GridSplitter into the other pane), no further move events reached UpdateDrag
+            // — the selection simply stopped growing past whatever row the cursor last crossed while
+            // still inside the pane.
+            _overlay.IsHitTestVisible = true;
+            Mouse.Capture(_overlay);
             e.Handled = true;
             Recompute();
         }
@@ -175,7 +202,8 @@ namespace PickleGit.Controls
             IsSelecting = false;
             _autoScrollDirection = 0;
             _autoScrollTimer.Stop();
-            if (_listView.IsMouseCaptured) _listView.ReleaseMouseCapture();
+            if (Mouse.Captured == _overlay) Mouse.Capture(null);
+            _overlay.IsHitTestVisible = false;
         }
 
         /// <summary>Drops the current selection entirely — must be called whenever the underlying
@@ -302,14 +330,24 @@ namespace PickleGit.Controls
 
         private void UpdateFocusFromListViewPoint(Point pointInListView)
         {
-            var hit = _listView.InputHitTest(pointInListView) as DependencyObject;
+            // InputHitTest returns nothing for a point outside _listView's own rectangle — and a
+            // real drag gesture aimed at the top/bottom auto-scroll margin very easily overshoots
+            // past the ListView's actual edge (the margin is a zone just inside the edge, not a
+            // hard stop). Clamping into the ListView's own bounds before hit-testing means the query
+            // always lands on the nearest real row (the first/last one) instead of hitting nothing
+            // — without this, the selection simply stopped growing the instant the cursor drifted
+            // outside the pane during auto-scroll, even though the timer kept scrolling content.
+            var clamped = new Point(
+                Math.Max(0, Math.Min(pointInListView.X, _listView.ActualWidth - 1)),
+                Math.Max(0, Math.Min(pointInListView.Y, _listView.ActualHeight - 1)));
+            var hit = _listView.InputHitTest(clamped) as DependencyObject;
             var container = FindAncestor<ListViewItem>(hit);
             if (container == null) return; // over the scrollbar, or past the last row — leave focus as-is
             int rowIndex = _listView.ItemContainerGenerator.IndexFromContainer(container);
             if (rowIndex < 0) return;
             var textBlock = FindNamedDescendant<TextBlock>(container, "RowText");
             if (textBlock == null) return;
-            var pointInText = _listView.TranslatePoint(pointInListView, textBlock);
+            var pointInText = _listView.TranslatePoint(clamped, textBlock);
             int textLength = (_getRowText(_listView.Items[rowIndex]) ?? string.Empty).Length;
             int ch = Math.Max(PlainCharIndexAt(textBlock, pointInText, textLength), SelectableStart(rowIndex));
             _focus = (rowIndex, ch);
@@ -407,11 +445,21 @@ namespace PickleGit.Controls
         /// real boundary (unambiguous only at ch == 0, the text's own start, which has no preceding
         /// glyph to snap against). Kept separate from <see cref="XForCharIndex"/> so
         /// <see cref="EstimateCharWidth"/> can measure a raw glyph width without going through the
-        /// corrected, mutually-recursive path.</summary>
+        /// corrected, mutually-recursive path.
+        ///
+        /// ch == 0 is short-circuited to return 0 directly, skipping the search — not just a micro-
+        /// optimization: this is THE hot path for every non-edge row of a multi-row selection (every
+        /// row's left boundary is its SelectableStart, almost always 0), and Recompute() calls this once
+        /// per such row on every scroll tick. Running a ~20-iteration search (each iteration walking a
+        /// TextRange to reconstruct plain text) per row per tick was measured to make a large selection
+        /// visibly lag scrolling and starve the overlay enough that freshly-scrolled-in rows appeared
+        /// unhighlighted until a later tick caught up. ch == 0's answer is already known with certainty
+        /// (see above), so there is nothing to search for.</summary>
         private static double RawBoundaryX(TextBlock textBlock, int ch, int textLength)
         {
             ch = Math.Max(0, Math.Min(ch, textLength));
-            double lo = 0, hi = Math.Max(textBlock.ActualWidth, 20000);
+            if (ch == 0) return 0;
+            double lo = 0, hi = textBlock.ActualWidth > 0 ? textBlock.ActualWidth : 20000;
             double midY = Math.Max(textBlock.ActualHeight / 2, 1);
             for (int iter = 0; iter < 30 && hi - lo > 0.25; iter++)
             {

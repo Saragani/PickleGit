@@ -329,14 +329,6 @@ namespace PickleGit.Views
 
         private void ConflictLeftCopySelection_Click(object sender, RoutedEventArgs e) => _leftTextSelection.TryCopySelection();
 
-        private void ConflictResultListView_ScrollChanged(object sender, ScrollChangedEventArgs e)
-        {
-            if (e.VerticalOffset == 0)
-            {
-
-            }
-        }
-
         private void ConflictRightCopySelection_Click(object sender, RoutedEventArgs e) => _rightTextSelection.TryCopySelection();
         private void ConflictResultCopySelection_Click(object sender, RoutedEventArgs e) => _resultTextSelection.TryCopySelection();
 

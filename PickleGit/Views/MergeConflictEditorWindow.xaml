@@ -592,8 +592,7 @@
                                               PreviewMouseLeftButtonDown="ConflictPaneListView_PreviewMouseLeftButtonDown"
                                               PreviewMouseMove="ConflictPaneListView_PreviewMouseMove"
                                               PreviewMouseLeftButtonUp="ConflictPaneListView_PreviewMouseLeftButtonUp"
-                                              PreviewKeyDown="ConflictTextSelection_KeyDown"
-                                              ScrollViewer.ScrollChanged="ConflictResultListView_ScrollChanged">
+                                              PreviewKeyDown="ConflictTextSelection_KeyDown">
                                         <ListView.ContextMenu>
                                             <ContextMenu>
                                                 <MenuItem Header="Copy" Click="ConflictResultCopySelection_Click"/>
