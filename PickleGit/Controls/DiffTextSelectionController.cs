@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -29,6 +30,7 @@ namespace PickleGit.Controls
         private readonly Canvas _overlay;
         private readonly Func<object, string> _getRowText;
         private readonly Func<object, int> _getSelectableStart;
+        private readonly Func<object, bool> _isRowSelectable;
 
         private (int Row, int Ch)? _anchor;
         private (int Row, int Ch)? _focus;
@@ -45,13 +47,21 @@ namespace PickleGit.Controls
         /// never selectable/copyable — e.g. 1 for a diff line, whose model text carries a leading
         /// '+'/'-'/' ' marker character rendered inline as part of "RowText" (see CLAUDE.md), or 0
         /// for a row with no such marker (a hunk header's literal text).</param>
+        /// <param name="isRowSelectable">Whether a row can take part in text selection at all — e.g.
+        /// false for a diff hunk header ("@@ -12,3 +12,4 @@ ..."), which is metadata rather than
+        /// file content. Null (the default) means every row is selectable, unchanged from before this
+        /// existed. An unselectable row is skipped entirely: it can't anchor a click-drag, never gets
+        /// a highlight rectangle even when a span crosses over it, and its text is left out of a copy
+        /// — the row is invisible to this class as far as content goes, only its index still counts
+        /// for locating the rows around it.</param>
         public DiffTextSelectionController(ListView listView, Canvas overlay, Func<object, string> getRowText,
-            Func<object, int> getSelectableStart)
+            Func<object, int> getSelectableStart, Func<object, bool> isRowSelectable = null)
         {
             _listView = listView;
             _overlay = overlay;
             _getRowText = getRowText;
             _getSelectableStart = getSelectableStart;
+            _isRowSelectable = isRowSelectable;
             // DispatcherPriority.Normal (the default) is HIGHER priority than the Render pass that
             // actually applies a ScrollToVerticalOffset request to this non-virtualizing ListView's
             // panel (IsVirtualizing="False", needed for smooth pixel scrolling elsewhere — see
@@ -75,6 +85,7 @@ namespace PickleGit.Controls
         public bool HasSelection => _anchor != null && _focus != null;
 
         private int SelectableStart(int rowIndex) => _getSelectableStart(_listView.Items[rowIndex]);
+        private bool IsRowSelectable(int rowIndex) => _isRowSelectable == null || _isRowSelectable(_listView.Items[rowIndex]);
 
         /// <summary>Ctrl+click range-select (set a start point, hold Ctrl, click an end point) —
         /// keeps the existing anchor and only moves focus, unlike BeginSelection which always
@@ -166,7 +177,7 @@ namespace PickleGit.Controls
         public void BeginSelection(MouseButtonEventArgs e, ListViewItem container, TextBlock rowText)
         {
             int rowIndex = _listView.ItemContainerGenerator.IndexFromContainer(container);
-            if (rowIndex < 0) { e.Handled = true; return; }
+            if (rowIndex < 0 || !IsRowSelectable(rowIndex)) { e.Handled = true; return; }
             int textLength = (_getRowText(_listView.Items[rowIndex]) ?? string.Empty).Length;
             int ch = Math.Max(PlainCharIndexAt(rowText, e.GetPosition(rowText), textLength), SelectableStart(rowIndex));
             _anchor = _focus = (rowIndex, ch);
@@ -231,6 +242,7 @@ namespace PickleGit.Controls
 
             for (int i = lo; i <= hi; i++)
             {
+                if (!IsRowSelectable(i)) continue; // e.g. a hunk header crossed by a spanning selection
                 var container = _listView.ItemContainerGenerator.ContainerFromIndex(i) as ListViewItem;
                 if (container == null || !container.IsArrangeValid) continue;
                 var textBlock = FindNamedDescendant<TextBlock>(container, "RowText");
@@ -310,16 +322,19 @@ namespace PickleGit.Controls
             if (lo < 0 || hi >= items.Count) return false;
 
             var sb = new StringBuilder();
+            bool appendedAny = false;
             for (int i = lo; i <= hi; i++)
             {
+                if (!IsRowSelectable(i)) continue; // e.g. a hunk header — left out of the copied text entirely
                 var text = _getRowText(items[i]) ?? string.Empty;
                 int start = SelectableStart(i);
                 string line = (lo == hi) ? SafeSubstring(text, Math.Max(loCh, start), hiCh)
                     : i == lo ? SafeSubstring(text, Math.Max(loCh, start), text.Length)
                     : i == hi ? SafeSubstring(text, start, hiCh)
                     : SafeSubstring(text, start, text.Length);
-                if (i > lo) sb.Append(Environment.NewLine);
+                if (appendedAny) sb.Append(Environment.NewLine);
                 sb.Append(line);
+                appendedAny = true;
             }
             if (sb.Length == 0) return false;
             try { Clipboard.SetText(sb.ToString()); return true; }
@@ -443,18 +458,12 @@ namespace PickleGit.Controls
         /// where its nearest-boundary snap flips from ch-1 to ch. For ch &gt; 0 that's the MIDPOINT of
         /// character ch-1's glyph, not its true right edge — half a character width to the left of the
         /// real boundary (unambiguous only at ch == 0, the text's own start, which has no preceding
-        /// glyph to snap against). Kept separate from <see cref="XForCharIndex"/> so
-        /// <see cref="EstimateCharWidth"/> can measure a raw glyph width without going through the
-        /// corrected, mutually-recursive path.
-        ///
-        /// ch == 0 is short-circuited to return 0 directly, skipping the search — not just a micro-
-        /// optimization: this is THE hot path for every non-edge row of a multi-row selection (every
-        /// row's left boundary is its SelectableStart, almost always 0), and Recompute() calls this once
-        /// per such row on every scroll tick. Running a ~20-iteration search (each iteration walking a
-        /// TextRange to reconstruct plain text) per row per tick was measured to make a large selection
-        /// visibly lag scrolling and starve the overlay enough that freshly-scrolled-in rows appeared
-        /// unhighlighted until a later tick caught up. ch == 0's answer is already known with certainty
-        /// (see above), so there is nothing to search for.</summary>
+        /// glyph to snap against — short-circuited below for exactly that reason, not just as a micro-
+        /// optimization). Only called for ch &gt; 1 now (see <see cref="XForCharIndex"/>): the common
+        /// ch &lt;= 1 case — every non-edge row of a multi-row selection's own boundary — is resolved by
+        /// arithmetic off <see cref="EstimateCharWidth"/> instead, since running this ~20-iteration
+        /// search (each iteration walking a TextRange to reconstruct plain text) once per row on every
+        /// scroll tick measurably lagged scrolling for a large selection.</summary>
         private static double RawBoundaryX(TextBlock textBlock, int ch, int textLength)
         {
             ch = Math.Max(0, Math.Min(ch, textLength));
@@ -471,37 +480,45 @@ namespace PickleGit.Controls
         }
 
         /// <summary>Finds the true on-screen X coordinate (in overlay space) of the boundary just
-        /// before character <paramref name="ch"/> — i.e. <see cref="RawBoundaryX"/> corrected back by
-        /// half a character's width for any ch &gt; 0 (see its doc for why that boundary is otherwise
-        /// biased left). This being uncorrected was a real, visible bug, not just an internal
-        /// implementation detail some earlier comment claimed "cancels out": a SPAN's width (right -
-        /// left) is unaffected since both ends share the identical bias, but the span's absolute
-        /// position was still shifted left by half a character as a whole — a selection starting right
-        /// after a skipped marker character rendered back into that marker, and a selection's right
-        /// edge stopped half a character before the actually-included character. There is no direct
-        /// "offset → Rect" API usable here in the first place — <c>TextPointer.GetPositionAtOffset</c>
-        /// counts "symbols" (which include extra positions at each Run boundary WordDiffHighlighter
-        /// introduces), not plain characters, so it doesn't reliably line up with the same
-        /// <paramref name="ch"/> this class uses everywhere else.</summary>
+        /// before character <paramref name="ch"/>. For ch &lt;= 1 (character 0's own start, or the
+        /// boundary right after it) this is pure arithmetic — <paramref name="ch"/> * the row's
+        /// per-character width, no <see cref="RawBoundaryX"/> search at all — since this is THE hot
+        /// path: every non-edge row of a multi-row selection's "whole line" span starts at that row's
+        /// SelectableStart (0 or 1), once per such row on every scroll tick. For ch &gt; 1 (the rare
+        /// case of the drag's own start/end row, wherever the user actually clicked) this falls back to
+        /// <see cref="RawBoundaryX"/> corrected back by half a character's width, since that search's
+        /// nearest-boundary snap is biased left by exactly that much for any ch &gt; 0 (see its own doc).
+        /// This correction being missing was a real, visible bug, not just an internal detail some
+        /// earlier comment claimed "cancels out": a SPAN's width (right - left) is unaffected since both
+        /// ends share the identical bias, but the span's absolute position was still shifted left by half
+        /// a character as a whole — a selection starting right after a skipped marker character rendered
+        /// back into that marker, and a selection's right edge stopped half a character before the
+        /// actually-included character. There is no direct "offset → Rect" API usable here in the first
+        /// place — <c>TextPointer.GetPositionAtOffset</c> counts "symbols" (which include extra positions
+        /// at each Run boundary WordDiffHighlighter introduces), not plain characters, so it doesn't
+        /// reliably line up with the same <paramref name="ch"/> this class uses everywhere else.</summary>
         private double XForCharIndex(TextBlock textBlock, int ch, int textLength)
         {
             if (textLength == 0) return textBlock.TransformToVisual(_overlay).Transform(new Point(0, 0)).X;
             ch = Math.Max(0, Math.Min(ch, textLength));
-            double x = RawBoundaryX(textBlock, ch, textLength);
-            if (ch > 0) x += EstimateCharWidth(textBlock, textLength) / 2;
+            double charWidth = EstimateCharWidth(textBlock);
+            double x = ch <= 1 ? ch * charWidth : RawBoundaryX(textBlock, ch, textLength) + charWidth / 2;
             return textBlock.TransformToVisual(_overlay).Transform(new Point(x, 0)).X;
         }
 
-        /// <summary>One character's on-screen width for this row, measured directly off
-        /// <see cref="RawBoundaryX"/> (not the corrected <see cref="XForCharIndex"/>, which depends on
-        /// this method — going through it here would be mutually recursive) — the bias
-        /// <see cref="RawBoundaryX"/> documents cancels out in this subtraction regardless, since both
-        /// endpoints carry the identical bias. Monospace font throughout this app's diff/conflict text,
-        /// so measuring between characters 0 and 1 is representative of any character in the row.</summary>
-        private double EstimateCharWidth(TextBlock textBlock, int textLength)
+        /// <summary>One character's on-screen width for this row, via direct <see cref="FormattedText"/>
+        /// measurement (same pattern as <see cref="CommitGraphControl"/>) rather than
+        /// <see cref="RawBoundaryX"/>'s hit-test search — O(1) instead of a ~20-iteration search each
+        /// walking a TextRange to reconstruct plain text, which measurably lagged scrolling once a
+        /// multi-row selection existed (every row's boundary needs this). Monospace font throughout
+        /// this app's diff/conflict text, so any single character is representative of the row.</summary>
+        private static double EstimateCharWidth(TextBlock textBlock)
         {
-            if (textLength <= 0) return 0;
-            return Math.Max(0, RawBoundaryX(textBlock, Math.Min(1, textLength), textLength) - RawBoundaryX(textBlock, 0, textLength));
+            var typeface = new Typeface(textBlock.FontFamily, textBlock.FontStyle, textBlock.FontWeight, textBlock.FontStretch);
+            var dpi = VisualTreeHelper.GetDpi(textBlock).PixelsPerDip;
+            var ft = new FormattedText("0", CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                typeface, textBlock.FontSize, Brushes.Black, dpi);
+            return ft.WidthIncludingTrailingWhitespace;
         }
 
         private static string SafeSubstring(string text, int start, int end)

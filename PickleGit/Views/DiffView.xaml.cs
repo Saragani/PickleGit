@@ -25,11 +25,22 @@ namespace PickleGit.Views
         {
             InitializeComponent();
             _unifiedTextSelection = new DiffTextSelectionController(UnifiedListView, UnifiedTextSelectionOverlay,
-                GetUnifiedRowText, GetUnifiedSelectableStart);
+                GetUnifiedRowText, GetUnifiedSelectableStart, IsUnifiedRowSelectable);
             _sideBySideLeftTextSelection = new DiffTextSelectionController(SideBySideLeftListView, SideBySideLeftTextSelectionOverlay,
-                item => GetSideBySideRowText(item, isLeftPane: true), GetSideBySideSelectableStart);
+                item => GetSideBySideRowText(item, isLeftPane: true), GetSideBySideSelectableStart, IsSideBySideRowSelectable);
             _sideBySideRightTextSelection = new DiffTextSelectionController(SideBySideRightListView, SideBySideRightTextSelectionOverlay,
-                item => GetSideBySideRowText(item, isLeftPane: false), GetSideBySideSelectableStart);
+                item => GetSideBySideRowText(item, isLeftPane: false), GetSideBySideSelectableStart, IsSideBySideRowSelectable);
+
+            // Selector's own class handler for KeyDown marks Ctrl+A Handled before a plain XAML-attached
+            // instance handler (KeyDown="...") ever gets a turn — WPF skips ordinary handlers once
+            // Handled is set, even later handlers on the SAME element. Registering with
+            // handledEventsToo=true is the only way to still run our own logic afterward; the XAML
+            // attribute for Ctrl+C alone was fine since nothing upstream claims that key, but Ctrl+A
+            // needs this explicit registration to ever be reached at all.
+            var keyHandler = new KeyEventHandler(DiffTextSelection_KeyDown);
+            UnifiedListView.AddHandler(KeyDownEvent, keyHandler, true);
+            SideBySideLeftListView.AddHandler(KeyDownEvent, keyHandler, true);
+            SideBySideRightListView.AddHandler(KeyDownEvent, keyHandler, true);
         }
 
         private static string GetUnifiedRowText(object item)
@@ -57,6 +68,11 @@ namespace PickleGit.Views
 
         private static int GetSideBySideSelectableStart(object item) =>
             (item as SideBySideItem)?.Kind == DiffItemKind.HunkHeader ? 0 : 1;
+
+        // Hunk headers ("@@ -12,3 +12,4 @@ ...") are metadata about the diff, not file content — a
+        // user selecting/copying code doesn't want them anchoring a drag or showing up mid-paste.
+        private static bool IsUnifiedRowSelectable(object item) => (item as DiffItem)?.Kind != DiffItemKind.HunkHeader;
+        private static bool IsSideBySideRowSelectable(object item) => (item as SideBySideItem)?.Kind != DiffItemKind.HunkHeader;
 
         private RepositoryViewModel RepoVm => DataContext as RepositoryViewModel;
 
@@ -338,6 +354,12 @@ namespace PickleGit.Views
 
             if (TryGetRowTextForContentClick(lv, container, position, out var rowText))
             {
+                // The two panes are independent DiffTextSelectionController instances, so nothing
+                // stops both from holding a selection at once by default — but a single logical
+                // selection that's either on the left or the right (never both) is what a normal
+                // text editor's behavior would lead you to expect. Starting a new one on this side
+                // drops whatever was selected on the other.
+                SideBySideController(!isLeft).ClearSelection();
                 SideBySideController(isLeft).BeginSelection(e, container, rowText);
                 return;
             }
@@ -465,14 +487,34 @@ namespace PickleGit.Views
         }
 
         // ── Cross-line text-selection copy (Ctrl+C / context-menu "Copy") ───────────────────────
-        private void DiffTextSelection_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key != Key.C || Keyboard.Modifiers != ModifierKeys.Control) return;
-            var lv = (ListView)sender;
-            var controller = ReferenceEquals(lv, UnifiedListView) ? _unifiedTextSelection
+        private DiffTextSelectionController ResolveTextSelectionController(ListView lv) =>
+            ReferenceEquals(lv, UnifiedListView) ? _unifiedTextSelection
                 : ReferenceEquals(lv, SideBySideLeftListView) ? _sideBySideLeftTextSelection
                 : _sideBySideRightTextSelection;
-            if (controller.TryCopySelection()) e.Handled = true;
+
+        private void DiffTextSelection_KeyDown(object sender, KeyEventArgs e)
+        {
+            var lv = (ListView)sender;
+            if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (ResolveTextSelectionController(lv).TryCopySelection()) e.Handled = true;
+            }
+            else if (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                // Selector.OnKeyDown (a plain virtual-method override, not routed through
+                // ApplicationCommands.SelectAll — an earlier attempt to override via an instance
+                // CommandBinding for that command was a no-op, confirming this) has already run its
+                // own native "select all rows via SelectedItems" by the time this instance handler
+                // gets a turn — class handlers for a bubble event always run before instance handlers
+                // on the same element, and marking Handled here wouldn't have stopped it from running
+                // in the first place either way. Rather than fight that ordering, undo its visible
+                // result (SelectedItems back to empty, dropping the gutter/stage-selection highlight
+                // it drives) and apply our own text SelectAll() instead — synchronous, so there's no
+                // visible flicker between the two.
+                lv.SelectedItems.Clear();
+                ResolveTextSelectionController(lv).SelectAll();
+                e.Handled = true;
+            }
         }
 
         private void UnifiedCopySelection_Click(object sender, RoutedEventArgs e) => _unifiedTextSelection.TryCopySelection();
