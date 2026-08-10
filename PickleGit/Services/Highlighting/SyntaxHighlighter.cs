@@ -69,19 +69,31 @@ namespace PickleGit.Services.Highlighting
         public static void Apply(List<DiffHunk> hunks, string filePath)
         {
             if (hunks == null || hunks.Count == 0) return;
+            ApplyCore(hunks.SelectMany(h => h.Lines), filePath, stripLeadingMarker: true);
+        }
+
+        /// <summary>Same as <see cref="Apply(List{DiffHunk}, string)"/> but for a flat, already-ordered
+        /// sequence of lines whose <c>Content</c> carries no leading '+'/'-'/' ' diff-marker character to
+        /// strip — the merge conflict editor's Ours/Theirs/Base/Context lines, which have no such marker
+        /// (see MergeConflictEditorViewModel). <paramref name="lines"/> should be in the same file order
+        /// the caller wants block-comment state carried across, same as the hunk-list overload does
+        /// across hunks.</summary>
+        public static void Apply(IEnumerable<DiffLine> lines, string filePath) =>
+            ApplyCore(lines, filePath, stripLeadingMarker: false);
+
+        private static void ApplyCore(IEnumerable<DiffLine> lines, string filePath, bool stripLeadingMarker)
+        {
             if (!ExtensionMap.TryGetValue(Path.GetExtension(filePath ?? string.Empty), out var lang)) return;
 
             bool inBlockComment = false;
-            foreach (var hunk in hunks)
+            foreach (var line in lines)
             {
-                foreach (var line in hunk.Lines)
-                {
-                    if (string.IsNullOrEmpty(line.Content) || line.Content.Length <= 1) continue;
-                    var code = line.Content.Substring(1); // strip the leading +/-/space diff marker
-                    var spans = TokenizeLine(code, lang, ref inBlockComment);
-                    if (spans.Count > 0)
-                        line.SyntaxSpans = spans.Select(s => new SyntaxSpan(s.Start + 1, s.Length, s.Kind)).ToList();
-                }
+                int markerLength = stripLeadingMarker ? 1 : 0;
+                if (string.IsNullOrEmpty(line.Content) || line.Content.Length <= markerLength) continue;
+                var code = line.Content.Substring(markerLength);
+                var spans = TokenizeLine(code, lang, ref inBlockComment);
+                if (spans.Count > 0)
+                    line.SyntaxSpans = spans.Select(s => new SyntaxSpan(s.Start + markerLength, s.Length, s.Kind)).ToList();
             }
         }
 

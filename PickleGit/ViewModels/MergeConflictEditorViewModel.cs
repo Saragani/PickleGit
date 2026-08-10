@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using PickleGit.Models;
 using PickleGit.Services;
+using PickleGit.Services.Highlighting;
 
 namespace PickleGit.ViewModels
 {
@@ -61,14 +62,14 @@ namespace PickleGit.ViewModels
         public void SetIncludedSilently(bool value) => Set(ref _included, value);
     }
 
-    public enum ConflictPaneRowKind { Context, BlockToolbar, BlockBaseLine, BlockLine }
+    public enum ConflictPaneRowKind { Context, BlockToolbar, BlockLine }
 
     /// <summary>One row of the two synced Ours/Theirs pane ListViews (see
     /// MergeConflictEditorWindow.xaml) — mirrors the existing SideBySideItem pattern
     /// (Models/RepositoryAccount.cs): both panes bind to the same collection, each with its own
-    /// DataTemplateSelector projecting the Left or Right side. BlockToolbar/BlockBaseLine rows
-    /// render identical content in both panes (the same duplication convention already used for
-    /// hunk-header rows in the normal side-by-side diff view).</summary>
+    /// DataTemplateSelector projecting the Left or Right side. BlockToolbar rows render identical
+    /// content in both panes (the same duplication convention already used for hunk-header rows in
+    /// the normal side-by-side diff view).</summary>
     public class ConflictPaneItem
     {
         // Properties, not fields — WPF's Binding/PropertyPath only resolves properties; a plain
@@ -78,8 +79,8 @@ namespace PickleGit.ViewModels
         public string ContextText { get; set; }              // Context only — one line's text
         public int? ContextOldLineNumber { get; set; }        // Context only
         public int? ContextNewLineNumber { get; set; }        // Context only
+        public DiffLine Display { get; set; }                 // Context only — syntax-highlighted wrapper
         public ConflictBlockViewModel BlockVm { get; set; }
-        public ConflictLineOption BaseLine { get; set; }    // BlockBaseLine only
         public ConflictLineOption LeftLine { get; set; }    // BlockLine only — Ours side, null = filler
         public ConflictLineOption RightLine { get; set; }   // BlockLine only — Theirs side, null = filler
     }
@@ -90,8 +91,7 @@ namespace PickleGit.ViewModels
         ResolvedLine,       // numbered, individually removable (click unchecks it back in its source pane)
         ResolvedBaseLabel,  // unnumbered small label — UseBaseVerbatim or nothing-picked-but-touched
         ResolvedBaseLine,   // numbered content line under a ResolvedBaseLabel
-        DefaultBaseLabel,   // unnumbered small label — untouched block defaulting to base
-        DefaultBaseLine,    // numbered content line under a DefaultBaseLabel
+        DefaultBaseLine,    // numbered content line — untouched block defaulting to base, no label row
         Unresolved          // unnumbered placeholder — no default exists, still blocking
     }
 
@@ -109,7 +109,8 @@ namespace PickleGit.ViewModels
         public int? LineNumber { get; set; }                 // all kinds except the *Label/Unresolved rows
         public string LineText { get; set; }                 // Context/ResolvedBaseLine/DefaultBaseLine
         public ConflictBlockViewModel BlockVm { get; set; }
-        public ConflictLineOption SourceLine { get; set; }    // ResolvedLine only
+        public ConflictLineOption SourceLine { get; set; }    // ResolvedLine/ResolvedBaseLine/DefaultBaseLine
+        public DiffLine Display { get; set; }                 // Context only — syntax-highlighted wrapper
     }
 
     /// <summary>
@@ -298,13 +299,14 @@ namespace PickleGit.ViewModels
         }
 
         /// <summary>Pairs Ours lines against Theirs lines via LcsAligner for display, then groups
-        /// consecutive unmatched runs on each side into 1:1 "changed" rows (word-highlighted) the
-        /// same way GitService.ComputeWordDiffsForHunk pairs adjacent deleted/added line runs —
-        /// any leftover longer side becomes filler rows. Every real line in the block — matched or
-        /// not — gets the block's flat Deleted/Added tint (GitKraken colors a whole conflict hunk
-        /// solidly per side rather than per-line; using Context for a matched/identical pair here
-        /// left it with no background at all, an invisible-looking gap inside an otherwise-colored
-        /// hunk).</summary>
+        /// consecutive unmatched runs on each side into 1:1 "changed" rows the same way
+        /// GitService.ComputeWordDiffsForHunk pairs adjacent deleted/added line runs — any leftover
+        /// longer side becomes filler rows. Deliberately does NOT word-diff-highlight a matched pair's
+        /// differing text (GitKraken tints a whole conflict hunk solidly per side rather than
+        /// highlighting individual changed words within it — see DiffLineBg/Fg below). Every real line
+        /// in the block — matched or not — gets the block's flat Deleted/Added tint (using Context for
+        /// a matched/identical pair here left it with no background at all, an invisible-looking gap
+        /// inside an otherwise-colored hunk).</summary>
         private List<ConflictPaneItem> BuildLineRows()
         {
             var oursTexts = OursOptions.Select(o => o.Text).ToList();
@@ -345,9 +347,6 @@ namespace PickleGit.ViewModels
                     var ro = TheirsOptions[rightRun[k]];
                     lo.Display.Kind = DiffLineKind.Deleted;
                     ro.Display.Kind = DiffLineKind.Added;
-                    var (lh, rh) = LcsAligner.DiffWords(lo.Text, ro.Text);
-                    lo.Display.HighlightSpans = lh;
-                    ro.Display.HighlightSpans = rh;
                     rows.Add(new ConflictPaneItem { Kind = ConflictPaneRowKind.BlockLine, BlockVm = this, LeftLine = lo, RightLine = ro });
                 }
                 for (int k = pairCount; k < leftRun.Count; k++)
@@ -382,6 +381,13 @@ namespace PickleGit.ViewModels
         private readonly Dictionary<MergeConflictBlock, ConflictBlockViewModel> _blockVmByBlock =
             new Dictionary<MergeConflictBlock, ConflictBlockViewModel>();
 
+        /// <summary>One syntax-highlighted DiffLine per Context line in the file, in document order
+        /// — built once at construction (see BuildContextLineDisplays) and consumed sequentially by
+        /// RebuildPaneAndResultItems every time it reruns (on every pick toggle), since Context text
+        /// itself never changes but that method otherwise rebuilds its row objects from scratch each
+        /// call. Re-highlighting the same unchanging text on every toggle would be wasted work.</summary>
+        private readonly List<DiffLine> _contextLineDisplays = new List<DiffLine>();
+
         public string RelativePath { get; }
         public bool IsExistenceConflict { get; }
         public bool OursMissing { get; }
@@ -393,14 +399,42 @@ namespace PickleGit.ViewModels
             : "This file does not exist on their side of the merge (deleted, or added only on yours).";
 
         private string _resultText;
-        /// <summary>The live merged buffer, rebuilt from scratch on every change (see
-        /// RebuildResultText) — not shown directly; ResultItems is what the Result pane binds to,
-        /// this is what Save() writes to disk.</summary>
-        public string ResultText { get => _resultText; private set => Set(ref _resultText, value); }
+        /// <summary>The live merged buffer — normally rebuilt from scratch on every pick-toggle
+        /// (see RebuildResultText) and shown read-only via ResultItems, but once IsManuallyEdited
+        /// is set the Result pane binds an editable TextBox straight to this property instead, and
+        /// this becomes the sole source of truth. Either way, this is what Save() writes to disk.</summary>
+        public string ResultText { get => _resultText; set => Set(ref _resultText, value); }
+
+        private bool _isManuallyEdited;
+        /// <summary>Once set, the Result pane switches from the checkbox-driven read-only preview
+        /// to a free-text editor bound directly to ResultText, and the Ours/Theirs panes (including
+        /// the whole-file "Select All Mine/Theirs" checkboxes) are disabled — RebuildResultText
+        /// would otherwise silently overwrite whatever the user just typed the next time any block's
+        /// selection state changes, since it always regenerates ResultText from scratch from the
+        /// block-level pick state. Turning this back off discards the manual edit and regenerates
+        /// ResultText from the (unchanged, since editing was disabled) block state.</summary>
+        public bool IsManuallyEdited
+        {
+            get => _isManuallyEdited;
+            set
+            {
+                if (!Set(ref _isManuallyEdited, value)) return;
+                RaisePropertyChanged(nameof(IsResolved));
+                RaisePropertyChanged(nameof(BlockStatusLabel));
+                RaisePropertyChanged(nameof(ManualEditButtonLabel));
+                if (!value) RebuildResultText();
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+
+        public string ManualEditButtonLabel => IsManuallyEdited ? "Revert to Automatic" : "Edit Manually";
+
+        public ICommand ToggleManualEditCommand { get; }
 
         public int UnresolvedCount => _blockVms.Count(b => !b.IsResolvedEffective);
 
         public string BlockStatusLabel => _doc == null ? null
+            : IsManuallyEdited ? "Manually edited"
             : $"{_blockVms.Count(b => b.IsResolvedEffective)} of {_blockVms.Count} conflict(s) resolved";
 
         private ObservableCollection<ConflictPaneItem> _paneItems = new ObservableCollection<ConflictPaneItem>();
@@ -427,7 +461,7 @@ namespace PickleGit.ViewModels
 
         public bool IsResolved => IsExistenceConflict
             ? ExistenceChoice != ExistenceChoice.Undecided
-            : UnresolvedCount == 0;
+            : IsManuallyEdited || UnresolvedCount == 0;
 
         public ICommand KeepFileCommand { get; }
         public ICommand DeleteFileCommand { get; }
@@ -496,6 +530,16 @@ namespace PickleGit.ViewModels
             DeleteFileCommand = new RelayCommand(() => ExistenceChoice = ExistenceChoice.DeleteFile);
             NextConflictCommand = new RelayCommand(() => GoToConflict(1), () => CurrentUnresolvedIndex < UnresolvedBlockVms.Count - 1);
             PrevConflictCommand = new RelayCommand(() => GoToConflict(-1), () => CurrentUnresolvedIndex > 0);
+            ToggleManualEditCommand = new RelayCommand(() =>
+            {
+                if (IsManuallyEdited &&
+                    !DialogService.Confirm("Revert to Automatic",
+                        "Discard your manual edits and go back to the checkbox-driven resolution?",
+                        okText: "Discard Edits", danger: true))
+                    return;
+                if (!IsManuallyEdited) ResultText = BuildManualEditSeedText();
+                IsManuallyEdited = !IsManuallyEdited;
+            });
 
             if (IsExistenceConflict) return; // nothing to parse — resolved by keep/delete choice alone
 
@@ -527,7 +571,35 @@ namespace PickleGit.ViewModels
                 _blockVms.Add(bvm);
                 _blockVmByBlock[block] = bvm;
             }
+            ApplySyntaxHighlighting();
             RebuildResultText();
+        }
+
+        /// <summary>Colors Ours/Theirs/Base/Context text like a normal code editor (matching
+        /// DiffView), run once here rather than inside RebuildPaneAndResultItems since none of this
+        /// text ever changes after parsing — only which lines are Included does, which reruns that
+        /// method on every toggle. Each of the four calls below carries its own lexer state (e.g.
+        /// "inside a block comment") across its own sequence in file order, independently of the
+        /// other three — same limitation SyntaxHighlighter's own doc comment already notes for a
+        /// normal diff's hunk-to-hunk continuity, just split four ways here instead of one.</summary>
+        private void ApplySyntaxHighlighting()
+        {
+            BuildContextLineDisplays();
+            SyntaxHighlighter.Apply(_contextLineDisplays, RelativePath);
+            SyntaxHighlighter.Apply(_doc.Blocks.SelectMany(b => _blockVmByBlock[b].OursOptions.Select(o => o.Display)), RelativePath);
+            SyntaxHighlighter.Apply(_doc.Blocks.SelectMany(b => _blockVmByBlock[b].TheirsOptions.Select(o => o.Display)), RelativePath);
+            SyntaxHighlighter.Apply(_doc.Blocks.SelectMany(b => _blockVmByBlock[b].BaseOptions.Select(o => o.Display)), RelativePath);
+        }
+
+        private void BuildContextLineDisplays()
+        {
+            foreach (var item in _doc.Items)
+            {
+                if (item.Kind != ConflictDocItemKind.Context) continue;
+                var lines = item.ContextText.Split(new[] { _doc.Newline }, StringSplitOptions.None);
+                foreach (var lineText in lines)
+                    _contextLineDisplays.Add(new DiffLine { Content = lineText, Kind = DiffLineKind.Context });
+            }
         }
 
         /// <summary>Fills in Block.BaseLines/BaseText for any block that doesn't already carry base
@@ -567,10 +639,24 @@ namespace PickleGit.ViewModels
                 var item = items[i];
                 if (item.Kind == ConflictDocItemKind.Context)
                 {
+                    // Searches for contextNormalized + "\n" here, NOT the bare text — ContextText is
+                    // built via string.Join("\n", lines) (see MergeConflictParser.FlushContext),
+                    // which never carries a terminator for its OWN last line, so the text alone is
+                    // always one newline short of "up to and including this run's own line ending"
+                    // as it truly appears in the ancestor. Appending exactly one "\n" restores that
+                    // — uniformly correct whether or not this run's last source line happened to be
+                    // blank (a blank last line already ends in "\n" from the join itself; a
+                    // non-blank one doesn't), unlike an earlier version of this fix that added a
+                    // blind "+1" after the match and double-counted the blank-last-line case,
+                    // confirmed on a real file to overshoot into the very next block's own content.
+                    // Skipping this appended "\n" entirely (an even earlier version) left every
+                    // block's slice starting one character too early — right at the implicit
+                    // newline instead of just after it — which Split('\n') then turned into a
+                    // spurious leading blank line in the block's own base preview.
                     var contextNormalized = item.ContextText.Replace("\r\n", "\n");
                     if (contextNormalized.Length == 0) { i++; continue; }
-                    int idx = ancestor.IndexOf(contextNormalized, cursor, StringComparison.Ordinal);
-                    if (idx >= 0) { cursor = idx + contextNormalized.Length; i++; continue; }
+                    int matchStart = FindAnchorStart(ancestor, contextNormalized + "\n", cursor, out int matchedLen);
+                    if (matchStart >= 0) { cursor = matchStart + matchedLen; i++; continue; }
 
                     // Unfindable from here — look ahead for the next Context item (anywhere later
                     // in the file) whose text CAN be found from this same position, and jump there.
@@ -583,10 +669,10 @@ namespace PickleGit.ViewModels
                         if (items[j].Kind != ConflictDocItemKind.Context) continue;
                         var laterContext = items[j].ContextText.Replace("\r\n", "\n");
                         if (laterContext.Length == 0) continue;
-                        int laterIdx = ancestor.IndexOf(laterContext, cursor, StringComparison.Ordinal);
-                        if (laterIdx < 0) continue;
+                        int laterStart = FindAnchorStart(ancestor, laterContext + "\n", cursor, out int laterLen);
+                        if (laterStart < 0) continue;
                         resyncAtIndex = j;
-                        resyncCursor = laterIdx + laterContext.Length;
+                        resyncCursor = laterStart + laterLen;
                         break;
                     }
                     if (resyncAtIndex < 0) return; // nothing later is findable either — genuinely lost for the rest of the file
@@ -599,17 +685,42 @@ namespace PickleGit.ViewModels
                 // actually findable from here; anything else (adjacent blocks with nothing unchanged
                 // between them, this being the last item, or an unfindable next-context that the
                 // lookup above will resync past on its own next iteration) just leaves it unfilled.
+                // Deliberately the START of the next context's own match (not its end) — the block's
+                // slice runs up to where the next context BEGINS, so using the end here would swallow
+                // that entire context run into this block's own "base" content instead.
+                //
+                // boundaryIsExact guards the exact same ambiguity this method's own doc comment
+                // already covers for a Context item's self-match (two branches independently
+                // converging on identical *new* trailing text the ancestor never had) — but here it
+                // shows up through FindAnchorStart's OWN leading-line-drop fallback instead of the
+                // resync-lookahead above, and this call site used to throw the drop count away
+                // (`out _`). Confirmed on a real file (main vs. experimental both refactoring
+                // Multiply to a shared `return result;` tail): the next Context's first line
+                // ("return result;") could only be located in the ancestor by dropping it from the
+                // search text, meaning it isn't real ancestor content — it depends on the `result`
+                // local each side declares inside the conflict body. Filling this block's BaseText
+                // from a boundary found that way still slices out a valid line ("return a * b;"),
+                // but pairing it with the unconditionally-rendered next Context then produces
+                // `return a * b;` immediately followed by `return result;` — a dangling reference to
+                // a variable Base never declares. When the match required a drop, leave BaseText
+                // unset so RebuildResultText falls back to RawText (raw markers) instead of silently
+                // splicing in an invalid default — which also means the manual-edit seed (see
+                // MergeConflictFileViewModel.BuildManualEditSeedText) shows this block's real
+                // <<<<<<</=======/>>>>>>> markers instead of a dangling reference the user would have
+                // to notice and fix blind.
                 int end = -1;
+                bool boundaryIsExact = true;
                 if (i + 1 >= items.Count) end = ancestor.Length;
                 else if (items[i + 1].Kind == ConflictDocItemKind.Context)
                 {
                     var nextContext = items[i + 1].ContextText.Replace("\r\n", "\n");
-                    end = nextContext.Length == 0 ? cursor : ancestor.IndexOf(nextContext, cursor, StringComparison.Ordinal);
+                    end = FindAnchorStart(ancestor, nextContext, cursor, out int matchedLen);
+                    boundaryIsExact = end < 0 || matchedLen == nextContext.Length;
                 }
 
                 if (end >= cursor)
                 {
-                    if (string.IsNullOrEmpty(item.Block.BaseText) && end > cursor)
+                    if (boundaryIsExact && string.IsNullOrEmpty(item.Block.BaseText) && end > cursor)
                     {
                         var slice = ancestor.Substring(cursor, end - cursor);
                         if (slice.EndsWith("\n")) slice = slice.Substring(0, slice.Length - 1);
@@ -622,6 +733,52 @@ namespace PickleGit.ViewModels
                 }
                 i++;
             }
+        }
+
+        /// <summary>Up to this many of <c>text</c>'s own leading lines are tried-and-dropped in
+        /// <see cref="FindAnchorStart"/> before giving up — a small bound, since a genuinely ambiguous
+        /// region is expected to be a line or two, not most of a context run.</summary>
+        private const int MaxAnchorLeadingLinesDropped = 5;
+
+        /// <summary>Finds <paramref name="text"/> in <paramref name="ancestor"/> from
+        /// <paramref name="cursor"/> onward, first verbatim, then — if that fails — with
+        /// progressively more of its own leading lines dropped (up to
+        /// <see cref="MaxAnchorLeadingLinesDropped"/>), returning the START position of whichever
+        /// attempt matches first, plus (via <paramref name="matchedLength"/>) how much of the
+        /// (possibly-trimmed) text that match actually covers — callers that need the position right
+        /// AFTER the match (advancing past a Context run) add the two themselves; a block's own
+        /// "bound my slice at the next Context" caller wants the bare start instead, so returning
+        /// only the end here (as an earlier version of this method did) silently made a block's slice
+        /// swallow the entire next Context run into its own "base" content instead of stopping at its
+        /// start — confirmed on a real file, where Add's own base line incorporated the whole of
+        /// Subtract's signature+body+Multiply's signature too, and every position after it in the
+        /// file was then off by that same amount, duplicating content downstream.
+        ///
+        /// This directly covers the case both this method's own doc comment and
+        /// ApplyGitAncestorText's already describe: both branches independently converge on the same
+        /// *new* trailing text (e.g. both extracting a variable and both ending with "return
+        /// result;") that the real ancestor never had — so the run's own leading line(s) won't be
+        /// found verbatim, but the unchanged lines after them usually still are. Returns -1 only if
+        /// even the shortest attempt fails (dropping down to one line is the floor — text.Length == 0
+        /// is handled separately by the caller, matching over the empty string isn't meaningful
+        /// here).</summary>
+        private static int FindAnchorStart(string ancestor, string text, int cursor, out int matchedLength)
+        {
+            matchedLength = text.Length;
+            if (text.Length == 0) return cursor;
+            int idx = ancestor.IndexOf(text, cursor, StringComparison.Ordinal);
+            if (idx >= 0) return idx;
+
+            var lines = text.Split('\n');
+            int maxDrop = Math.Min(MaxAnchorLeadingLinesDropped, lines.Length - 1);
+            for (int drop = 1; drop <= maxDrop; drop++)
+            {
+                var shorter = string.Join("\n", lines, drop, lines.Length - drop);
+                if (shorter.Length == 0) continue;
+                int shorterIdx = ancestor.IndexOf(shorter, cursor, StringComparison.Ordinal);
+                if (shorterIdx >= 0) { matchedLength = shorter.Length; return shorterIdx; }
+            }
+            return -1;
         }
 
         private void GoToConflict(int delta)
@@ -680,11 +837,46 @@ namespace PickleGit.ViewModels
             CommandManager.InvalidateRequerySuggested();
         }
 
+        /// <summary>Seeds the manual-edit box when the user first clicks "Edit Manually" — unlike
+        /// RebuildResultText (which lets an untouched block with a diff3/ancestor base silently
+        /// preview as that base, matching GitKraken's "no explicit pick needed" default for the
+        /// checkbox-driven view), every untouched block here always renders its real raw markers,
+        /// base included. The whole point of switching to manual edit is deciding for yourself
+        /// instead of trusting an automatic default — silently keeping that default here would hide
+        /// exactly the blocks the user most needs to look at (and, for a block like Multiply whose
+        /// base was deliberately left unset by ApplyGitAncestorText's boundaryIsExact guard, would
+        /// have nothing else to show at all). A block the user already resolved via checkboxes
+        /// (Touched) still seeds from its current pick, not raw markers — manual edit refines what
+        /// you've already decided, it doesn't discard it.</summary>
+        private string BuildManualEditSeedText()
+        {
+            var sb = new StringBuilder();
+            bool first = true;
+            foreach (var item in _doc.Items)
+            {
+                string text;
+                if (item.Kind == ConflictDocItemKind.Context)
+                {
+                    text = item.ContextText;
+                }
+                else
+                {
+                    var bvm = _blockVmByBlock[item.Block];
+                    text = bvm.Touched ? bvm.CurrentText : item.Block.RawText;
+                    if (string.IsNullOrEmpty(text)) continue;
+                }
+                if (!first) sb.Append(_doc.Newline);
+                sb.Append(text);
+                first = false;
+            }
+            return sb.ToString();
+        }
+
         private void RebuildPaneAndResultItems()
         {
             var pane = new List<ConflictPaneItem>();
             var result = new List<ConflictResultItem>();
-            int oursLine = 1, theirsLine = 1, resultLine = 1;
+            int oursLine = 1, theirsLine = 1, resultLine = 1, contextDisplayIndex = 0;
 
             foreach (var item in _doc.Items)
             {
@@ -694,17 +886,20 @@ namespace PickleGit.ViewModels
                     // its own gutter number, matching GitKraken's numbered-every-line panes — the
                     // Result pane gets the exact same per-line/numbered treatment (its own running
                     // count, since the assembled output's line count generally differs from
-                    // either source's).
+                    // either source's). This method reruns on every pick toggle, but the split-out
+                    // lines' text never changes, so their syntax-highlighted Display is pulled from
+                    // _contextLineDisplays (built once, same order) instead of re-highlighting here.
                     var lines = item.ContextText.Split(new[] { _doc.Newline }, StringSplitOptions.None);
                     foreach (var lineText in lines)
                     {
+                        var display = _contextLineDisplays[contextDisplayIndex++];
                         pane.Add(new ConflictPaneItem
                         {
-                            Kind = ConflictPaneRowKind.Context, ContextText = lineText,
+                            Kind = ConflictPaneRowKind.Context, ContextText = lineText, Display = display,
                             ContextOldLineNumber = oursLine, ContextNewLineNumber = theirsLine
                         });
                         oursLine++; theirsLine++;
-                        result.Add(new ConflictResultItem { Kind = ConflictResultRowKind.Context, LineText = lineText, LineNumber = resultLine++ });
+                        result.Add(new ConflictResultItem { Kind = ConflictResultRowKind.Context, LineText = lineText, Display = display, LineNumber = resultLine++ });
                     }
                     continue;
                 }
@@ -714,9 +909,13 @@ namespace PickleGit.ViewModels
                 oursLine += bvm.OursOptions.Count;
                 theirsLine += bvm.TheirsOptions.Count;
 
+                // No BlockBaseLine rows here — base content used to be previewed inline in both
+                // panes (the same "full-width, duplicated across both templates" convention hunk
+                // headers use), but that convention only works for short metadata labels: applied to
+                // multi-line code it read as the exact same code appearing twice, once per pane.
+                // GitKraken doesn't preview base content in the side panes at all — only in the
+                // Result pane (DefaultBaseLine/ResolvedBaseLine below), which already covers it.
                 pane.Add(new ConflictPaneItem { Kind = ConflictPaneRowKind.BlockToolbar, BlockVm = bvm });
-                foreach (var baseOpt in bvm.BaseOptions)
-                    pane.Add(new ConflictPaneItem { Kind = ConflictPaneRowKind.BlockBaseLine, BlockVm = bvm, BaseLine = baseOpt });
                 pane.AddRange(bvm.LineRows);
 
                 if (!bvm.Touched)
@@ -727,9 +926,14 @@ namespace PickleGit.ViewModels
                     // as blocking. Only a block with no base at all has nothing to default to.
                     if (bvm.HasBase)
                     {
-                        result.Add(new ConflictResultItem { Kind = ConflictResultRowKind.DefaultBaseLabel, BlockVm = bvm });
-                        foreach (var lineText in bvm.Block.BaseLines)
-                            result.Add(new ConflictResultItem { Kind = ConflictResultRowKind.DefaultBaseLine, BlockVm = bvm, LineText = lineText, LineNumber = resultLine++ });
+                        // No label row here — the base preview's own overlay tint (DiffBaseBgBrush)
+                        // is enough to mark it as "not yet resolved" without an explanatory line.
+                        // BaseOptions is index-aligned with Block.BaseLines (built from it directly in
+                        // ConflictBlockViewModel's constructor) — reusing it here (rather than Block.
+                        // BaseLines directly) gets each row its already syntax-highlighted Display for
+                        // free, via SourceLine, same as ResolvedLine rows below already do.
+                        foreach (var opt in bvm.BaseOptions)
+                            result.Add(new ConflictResultItem { Kind = ConflictResultRowKind.DefaultBaseLine, BlockVm = bvm, SourceLine = opt, LineText = opt.Text, LineNumber = resultLine++ });
                     }
                     else
                     {
@@ -741,10 +945,15 @@ namespace PickleGit.ViewModels
                     // Whole-base-text or nothing-picked: no single source line to hover-remove,
                     // so these are numbered but not individually removable (unlike ResolvedLine).
                     result.Add(new ConflictResultItem { Kind = ConflictResultRowKind.ResolvedBaseLabel, BlockVm = bvm });
-                    var contentLines = string.IsNullOrEmpty(bvm.CurrentText)
-                        ? Array.Empty<string>() : bvm.CurrentText.Split(new[] { _doc.Newline }, StringSplitOptions.None);
-                    foreach (var lineText in contentLines)
-                        result.Add(new ConflictResultItem { Kind = ConflictResultRowKind.ResolvedBaseLine, BlockVm = bvm, LineText = lineText, LineNumber = resultLine++ });
+                    // UseBaseVerbatim's CurrentText is Block.BaseText verbatim, so BaseOptions (same
+                    // source, same order) lines up with it exactly; the nothing-picked case always
+                    // has an empty CurrentText (see CurrentText's own definition), so there's nothing
+                    // to render either way and BaseOptions is simply not consulted.
+                    if (bvm.UseBaseVerbatim)
+                    {
+                        foreach (var opt in bvm.BaseOptions)
+                            result.Add(new ConflictResultItem { Kind = ConflictResultRowKind.ResolvedBaseLine, BlockVm = bvm, SourceLine = opt, LineText = opt.Text, LineNumber = resultLine++ });
+                    }
                 }
                 else
                 {
@@ -772,7 +981,7 @@ namespace PickleGit.ViewModels
                 // it's staged as-is by the caller's subsequent `git add`.
                 return true;
             }
-            if (UnresolvedCount > 0 && !force) return false;
+            if (!IsManuallyEdited && UnresolvedCount > 0 && !force) return false;
             File.WriteAllText(_absolutePath, ResultText, _encoding);
             return true;
         }

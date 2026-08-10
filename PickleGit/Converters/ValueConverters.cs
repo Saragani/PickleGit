@@ -542,14 +542,13 @@ namespace PickleGit.Converters
     /// <summary>Picks the row template for the merge editor's two-pane Ours/Theirs view
     /// (MergeConflictFileViewModel.PaneItems) by ConflictPaneRowKind. One instance of this
     /// selector is used per pane (Left/Right) — both share the same ContextTemplate/
-    /// BlockToolbarTemplate/BlockBaseLineTemplate (identical content is rendered in both panes,
-    /// the same duplication convention DiffItemTemplateSelector's HunkTemplate already uses), and
-    /// each is given its own BlockLineTemplate projecting LeftLine or RightLine respectively.</summary>
+    /// BlockToolbarTemplate (identical content is rendered in both panes, the same duplication
+    /// convention DiffItemTemplateSelector's HunkTemplate already uses), and each is given its own
+    /// BlockLineTemplate projecting LeftLine or RightLine respectively.</summary>
     public class ConflictPaneItemTemplateSelector : DataTemplateSelector
     {
         public DataTemplate ContextTemplate { get; set; }
         public DataTemplate BlockToolbarTemplate { get; set; }
-        public DataTemplate BlockBaseLineTemplate { get; set; }
         public DataTemplate BlockLineTemplate { get; set; }
 
         public override DataTemplate SelectTemplate(object item, DependencyObject container)
@@ -558,7 +557,6 @@ namespace PickleGit.Converters
             switch (row.Kind)
             {
                 case ConflictPaneRowKind.BlockToolbar: return BlockToolbarTemplate;
-                case ConflictPaneRowKind.BlockBaseLine: return BlockBaseLineTemplate;
                 case ConflictPaneRowKind.BlockLine: return BlockLineTemplate;
                 default: return ContextTemplate;
             }
@@ -573,7 +571,6 @@ namespace PickleGit.Converters
         public DataTemplate ResolvedLineTemplate { get; set; }
         public DataTemplate ResolvedBaseLabelTemplate { get; set; }
         public DataTemplate ResolvedBaseLineTemplate { get; set; }
-        public DataTemplate DefaultBaseLabelTemplate { get; set; }
         public DataTemplate DefaultBaseLineTemplate { get; set; }
         public DataTemplate UnresolvedTemplate { get; set; }
 
@@ -585,7 +582,6 @@ namespace PickleGit.Converters
                 case ConflictResultRowKind.ResolvedLine: return ResolvedLineTemplate;
                 case ConflictResultRowKind.ResolvedBaseLabel: return ResolvedBaseLabelTemplate;
                 case ConflictResultRowKind.ResolvedBaseLine: return ResolvedBaseLineTemplate;
-                case ConflictResultRowKind.DefaultBaseLabel: return DefaultBaseLabelTemplate;
                 case ConflictResultRowKind.DefaultBaseLine: return DefaultBaseLineTemplate;
                 case ConflictResultRowKind.Unresolved: return UnresolvedTemplate;
                 default: return ContextTemplate;

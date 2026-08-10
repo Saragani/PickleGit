@@ -75,6 +75,10 @@
          and doesn't fight with the (now syntax-colored, not diff-colored) text on top of it. -->
     <SolidColorBrush x:Key="DiffAddedBgBrush" Color="#462EA043"/>
     <SolidColorBrush x:Key="DiffDeletedBgBrush" Color="#46DC3C3C"/>
+    <!-- Same translucent treatment as Added/Deleted above, for the merge conflict editor's Result
+         pane base/ancestor preview rows — a distinct neutral slate-blue so base content doesn't
+         read as either side's own change. -->
+    <SolidColorBrush x:Key="DiffBaseBgBrush" Color="#465C7A99"/>
     <SolidColorBrush x:Key="DiffHeaderBgBrush" Color="#FF1B2A3A"/>
     <SolidColorBrush x:Key="DiffAddedFgBrush" Color="#FF67AD50"/>
     <SolidColorBrush x:Key="DiffDeletedFgBrush" Color="#FFBE4B48"/>

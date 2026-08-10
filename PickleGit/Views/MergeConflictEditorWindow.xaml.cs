@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -5,6 +8,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ICSharpCode.AvalonEdit.Highlighting;
 using PickleGit.Controls;
 using PickleGit.Models;
 using PickleGit.ViewModels;
@@ -35,9 +39,16 @@ namespace PickleGit.Views
             DataContextChanged += OnDataContextChanged;
             // None of these rows' model text carries a leading diff-marker character (unlike
             // DiffView's git-diff Content strings) — every character is selectable from offset 0.
-            _leftTextSelection = new DiffTextSelectionController(ConflictLeftListView, ConflictLeftTextSelectionOverlay, LeftPaneRowText, _ => 0);
-            _rightTextSelection = new DiffTextSelectionController(ConflictRightListView, ConflictRightTextSelectionOverlay, RightPaneRowText, _ => 0);
-            _resultTextSelection = new DiffTextSelectionController(ConflictResultListView, ConflictResultTextSelectionOverlay, ResultRowText, _ => 0);
+            // isRowSelectable excludes rows with no real text of their own (the "Select All
+            // Mine/Theirs" toolbar row, and the Result pane's unnumbered label/placeholder rows) —
+            // without it, a selection spanning past one of these included it as a blank line in both
+            // the highlight and any copied text, same class of issue DiffView's hunk headers had.
+            _leftTextSelection = new DiffTextSelectionController(ConflictLeftListView, ConflictLeftTextSelectionOverlay, LeftPaneRowText, _ => 0,
+                item => (item as ConflictPaneItem)?.Kind != ConflictPaneRowKind.BlockToolbar);
+            _rightTextSelection = new DiffTextSelectionController(ConflictRightListView, ConflictRightTextSelectionOverlay, RightPaneRowText, _ => 0,
+                item => (item as ConflictPaneItem)?.Kind != ConflictPaneRowKind.BlockToolbar);
+            _resultTextSelection = new DiffTextSelectionController(ConflictResultListView, ConflictResultTextSelectionOverlay, ResultRowText, _ => 0,
+                IsResultRowSelectable);
         }
 
         private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -67,6 +78,15 @@ namespace PickleGit.Views
             if (_currentFileVm != null) _currentFileVm.ScrollToBlockRequested -= OnScrollToBlockRequested;
             _currentFileVm = vm;
             if (_currentFileVm != null) _currentFileVm.ScrollToBlockRequested += OnScrollToBlockRequested;
+
+            // If the newly-current file is ALSO already in manual-edit mode, the edit box's
+            // Visibility binding never flips (stays Visible across the switch), so
+            // ConflictResultEditBox_IsVisibleChanged never fires to reseed it — do that here instead.
+            if (vm != null && vm.IsManuallyEdited && ConflictResultEditBox.Visibility == Visibility.Visible)
+            {
+                ConflictResultEditBox.SyntaxHighlighting = ResolveHighlighting(vm.RelativePath);
+                ConflictResultEditBox.Text = vm.ResultText ?? string.Empty;
+            }
 
             // Row indices are only meaningful within one file's PaneItems/ResultItems — switching
             // files must drop any selection from the previous file entirely.
@@ -138,6 +158,129 @@ namespace PickleGit.Views
             }), DispatcherPriority.Loaded);
         }
 
+        /// <summary>Seeds the manual-edit AvalonEdit box from the current ResultText, picks a
+        /// syntax-highlighting definition off the file's own extension, wires up the one-way
+        /// text-changed sync back into the ViewModel (AvalonEdit's Text isn't a DependencyProperty,
+        /// so there's no XAML binding to lean on the way the old plain TextBox had), and focuses it
+        /// — all as soon as it's swapped in (see IsManuallyEdited in MergeConflictEditorViewModel) so
+        /// the user can start typing immediately after clicking "Edit Manually" instead of having to
+        /// click into it first. Unhooks TextChanged when hidden so RebuildResultText's own later
+        /// writes to ResultText (once back in automatic mode) don't bounce off a stale handler.</summary>
+        private void ConflictResultEditBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            ConflictResultEditBox.TextChanged -= ConflictResultEditBox_TextChanged;
+            if (e.NewValue is bool visible && visible)
+            {
+                var vm = _currentFileVm;
+                if (vm != null)
+                {
+                    ConflictResultEditBox.SyntaxHighlighting = ResolveHighlighting(vm.RelativePath);
+                    ConflictResultEditBox.Text = vm.ResultText ?? string.Empty;
+                }
+                ConflictResultEditBox.TextChanged += ConflictResultEditBox_TextChanged;
+                Dispatcher.BeginInvoke(new System.Action(() => ConflictResultEditBox.Focus()), DispatcherPriority.Input);
+            }
+        }
+
+        private void ConflictResultEditBox_TextChanged(object sender, EventArgs e)
+        {
+            if (_currentFileVm != null) _currentFileVm.ResultText = ConflictResultEditBox.Text;
+        }
+
+        // AvalonEdit's built-in highlighting definitions ship colors tuned for a light background —
+        // readable enough on dark but visually inconsistent with the rest of the app's own hand-rolled
+        // lexer (Services/Highlighting/SyntaxHighlighter.cs) and its colors (WordDiffHighlighter.
+        // SyntaxBrushes). Re-tint each definition's named colors to match those exact values the
+        // first time it's used; HighlightingManager.Instance caches definitions process-wide, so this
+        // only needs to run once per definition, not once per keystroke or per file switch.
+        private static readonly HashSet<string> _tunedHighlightingNames = new HashSet<string>();
+
+        private static IHighlightingDefinition ResolveHighlighting(string relativePath)
+        {
+            if (string.IsNullOrEmpty(relativePath)) return null;
+            var ext = Path.GetExtension(relativePath);
+            if (string.IsNullOrEmpty(ext)) return null;
+            var def = HighlightingManager.Instance.GetDefinitionByExtension(ext);
+            if (def != null && _tunedHighlightingNames.Add(def.Name))
+                TuneForDarkTheme(def);
+            return def;
+        }
+
+        private static void TuneForDarkTheme(IHighlightingDefinition def)
+        {
+            foreach (var color in def.NamedHighlightingColors)
+            {
+                var tint = ClassifyHighlightColorName(color.Name);
+                if (tint.HasValue)
+                {
+                    color.Foreground = new SimpleHighlightingBrush(tint.Value);
+                    continue;
+                }
+
+                // Verified by dumping every built-in definition this app can pick (.cs/.py/.xml/
+                // .json/.css/.ps1/.md/.js): ClassifyHighlightColorName's patterns cover most common
+                // categories, but each language also ships a handful of one-off names that don't
+                // match anything recognizable and are dark enough to be nearly invisible against
+                // this app's dark background — e.g. C#'s "MethodCall" (navy #191970, colors every
+                // method call), XML's "XmlTag" (#8B008B, colors every <tag>), JSON/CSS's
+                // "Punctuation"/"CurlyBraces"/"Colon" (literally black), JS's "Digits". Rather than
+                // hand-naming every one of them (and whatever a language not checked here has),
+                // lighten any leftover default color whose luminance is too low for dark-background
+                // contrast — a general safety net instead of a name whitelist.
+                var hex = color.Foreground?.ToString();
+                if (string.IsNullOrEmpty(hex) || hex[0] != '#') continue;
+                Color existing;
+                try { existing = (Color)ColorConverter.ConvertFromString(hex); }
+                catch (FormatException) { continue; }
+                if (RelativeLuminance(existing) < 0.35)
+                    color.Foreground = new SimpleHighlightingBrush(Lighten(existing));
+            }
+        }
+
+        private static double RelativeLuminance(Color c) =>
+            (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) / 255.0;
+
+        /// <summary>Blends toward white until the color clears the dark-background contrast
+        /// threshold, preserving hue instead of collapsing every dark leftover color to one flat
+        /// gray. Terminates in a handful of iterations for any input — each step strictly raises
+        /// luminance toward white's 1.0, well above the 0.55 target.</summary>
+        private static Color Lighten(Color c)
+        {
+            double r = c.R, g = c.G, b = c.B;
+            while ((0.299 * r + 0.587 * g + 0.114 * b) / 255.0 < 0.55)
+            {
+                r += (255 - r) * 0.3;
+                g += (255 - g) * 0.3;
+                b += (255 - b) * 0.3;
+            }
+            return Color.FromRgb((byte)r, (byte)g, (byte)b);
+        }
+
+        // Mirrors WordDiffHighlighter.SyntaxBrushes' colors exactly, matched by AvalonEdit's own
+        // highlighting-definition color names (e.g. the built-in C# XSHD's "Comment", "String",
+        // "ReferenceTypeKeywords", "NumberLiteral", "Preprocessor" …) rather than TokenKind, since
+        // AvalonEdit definitions don't share that enum. Names not matched here (Punctuation, etc.)
+        // are left at AvalonEdit's own default.
+        private static Color? ClassifyHighlightColorName(string name)
+        {
+            if (name.IndexOf("Comment", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Color.FromRgb(0x6A, 0x99, 0x55);
+            if (name.IndexOf("String", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("Char", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Color.FromRgb(0xCE, 0x91, 0x78);
+            if (name.IndexOf("Number", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Color.FromRgb(0xB5, 0xCE, 0xA8);
+            if (name.IndexOf("Preprocessor", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Color.FromRgb(0xC5, 0x86, 0xC0);
+            if (name.IndexOf("Keyword", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("Modifier", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("Visibility", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Color.FromRgb(0x56, 0x9C, 0xD6);
+            if (name.IndexOf("Type", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Color.FromRgb(0x4E, 0xC9, 0xC0);
+            return null;
+        }
+
         // ScrollViewer.ScrollChanged does not fire synchronously inside ScrollToVerticalOffset —
         // it's delivered on a later dispatcher pass. Resetting _syncingScroll immediately after
         // issuing the target1/target2 offset changes therefore does NOT guard against them: by the
@@ -167,7 +310,6 @@ namespace PickleGit.Views
             switch (row.Kind)
             {
                 case ConflictPaneRowKind.Context: return row.ContextText ?? string.Empty;
-                case ConflictPaneRowKind.BlockBaseLine: return row.BaseLine?.Text ?? string.Empty;
                 case ConflictPaneRowKind.BlockLine: return row.LeftLine?.Text ?? string.Empty;
                 default: return string.Empty;
             }
@@ -180,7 +322,6 @@ namespace PickleGit.Views
             switch (row.Kind)
             {
                 case ConflictPaneRowKind.Context: return row.ContextText ?? string.Empty;
-                case ConflictPaneRowKind.BlockBaseLine: return row.BaseLine?.Text ?? string.Empty;
                 case ConflictPaneRowKind.BlockLine: return row.RightLine?.Text ?? string.Empty;
                 default: return string.Empty;
             }
@@ -199,6 +340,14 @@ namespace PickleGit.Views
                 case ConflictResultRowKind.ResolvedLine: return row.SourceLine?.Text ?? string.Empty;
                 default: return string.Empty;
             }
+        }
+
+        // ResolvedBaseLabel ("Resolved — used base") and Unresolved ("Unresolved conflict") have no
+        // RowText of their own — same reasoning as excluding BlockToolbar above.
+        private static bool IsResultRowSelectable(object item)
+        {
+            var kind = (item as ConflictResultItem)?.Kind;
+            return kind != ConflictResultRowKind.ResolvedBaseLabel && kind != ConflictResultRowKind.Unresolved;
         }
 
         private DiffTextSelectionController ResolvePane(ListView lv)
@@ -288,6 +437,14 @@ namespace PickleGit.Views
             }
             else
             {
+                // Left/Right/Result are three independent DiffTextSelectionController instances, so
+                // nothing stops all three from holding a selection at once by default — a single
+                // logical selection that's on exactly one of them (never more) is what a normal text
+                // editor's behavior would lead you to expect, and matches the same fix already
+                // applied to DiffView's side-by-side panes. Starting a new one here drops whatever
+                // was selected on the other two.
+                foreach (var other in new[] { _leftTextSelection, _rightTextSelection, _resultTextSelection })
+                    if (!ReferenceEquals(other, controller)) other.ClearSelection();
                 controller.BeginSelection(e, container, rowText); // sets e.Handled itself
             }
         }

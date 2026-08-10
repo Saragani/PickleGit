@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:PickleGit.ViewModels"
         xmlns:conv="clr-namespace:PickleGit.Converters"
         xmlns:behaviors="clr-namespace:PickleGit.Behaviors"
+        xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
         Title="Resolve Conflicts"
         Width="1360" Height="860" MinWidth="960" MinHeight="560"
         WindowStartupLocation="CenterOwner"
@@ -17,40 +18,51 @@
             </ResourceDictionary.MergedDictionaries>
 
             <!-- ── Two-pane (Ours/Theirs) row templates ──────────────────────────────────────
-                 Context/BlockToolbar/BlockBaseLine render identical content in both panes (the
-                 same duplication convention DiffView.xaml's SideBySideHunkTemplate already uses
-                 for hunk headers) — only BlockLineTemplate differs per side, projecting LeftLine
-                 or RightLine. Hosted in a plain StackPanel (see the ListViews below), not a
-                 virtualized panel: rows vary hugely in height (a one-line code row vs a full
-                 toolbar) and a single file's conflict count is always small enough that this
-                 costs nothing — same reasoning already documented for this window's old
-                 flattened single-column view. -->
+                 Context/BlockToolbar render identical content in both panes (the same duplication
+                 convention DiffView.xaml's SideBySideHunkTemplate already uses for hunk headers) —
+                 only BlockLineTemplate differs per side, projecting LeftLine or RightLine. Hosted
+                 in a plain StackPanel (see the ListViews below), not a virtualized panel: rows vary
+                 hugely in height (a one-line code row vs a full toolbar) and a single file's
+                 conflict count is always small enough that this costs nothing — same reasoning
+                 already documented for this window's old flattened single-column view.
+
+                 The second (blank) gutter column is 24px, matching BlockLineTemplate's own glyph
+                 column below — not the 36px of the first column. Using 36 here (matching the first
+                 column just for symmetry) put Context rows' own text 12px to the right of
+                 BlockLine rows' text in the same pane, a visible stairstep between the two row
+                 kinds that this width match eliminates. -->
             <DataTemplate x:Key="ConflictPaneLeftContextTemplate" DataType="{x:Type vm:ConflictPaneItem}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="36"/>
-                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="24"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{Binding ContextOldLineNumber}" FontFamily="Consolas" FontSize="11"
                                TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <TextBlock x:Name="RowText" Grid.Column="2" Text="{Binding ContextText}" FontFamily="Consolas" FontSize="11"
-                               Margin="2,2" TextWrapping="NoWrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding Display}"
+                               FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
+                               Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
+                               TextWrapping="NoWrap"
+                               Foreground="{Binding Display.Kind, Converter={StaticResource DiffLineFg}}"/>
                 </Grid>
             </DataTemplate>
             <DataTemplate x:Key="ConflictPaneRightContextTemplate" DataType="{x:Type vm:ConflictPaneItem}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="36"/>
-                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="24"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{Binding ContextNewLineNumber}" FontFamily="Consolas" FontSize="11"
                                TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <TextBlock x:Name="RowText" Grid.Column="2" Text="{Binding ContextText}" FontFamily="Consolas" FontSize="11"
-                               Margin="2,2" TextWrapping="NoWrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding Display}"
+                               FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
+                               Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
+                               TextWrapping="NoWrap"
+                               Foreground="{Binding Display.Kind, Converter={StaticResource DiffLineFg}}"/>
                 </Grid>
             </DataTemplate>
 
@@ -62,8 +74,14 @@
             <DataTemplate x:Key="ConflictBlockToolbarTemplate" DataType="{x:Type vm:ConflictPaneItem}">
                 <Border Background="{DynamicResource HunkHeaderBrush}" Padding="8,6">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- The extra 2px top margin is a deliberate nudge: WPF's default CheckBox
+                             template's own box-glyph sits slightly above this row's text baseline
+                             even with VerticalAlignment/VerticalContentAlignment=Center (confirmed
+                             via a zoomed screenshot crop against GitKraken's own, correctly-centered
+                             checkbox) — the two Center settings center the check's own content
+                             box against the row, not the glyph against the text specifically. -->
                         <CheckBox Content="Select All Mine" IsChecked="{Binding BlockVm.AllOursChecked}"
-                                  VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0,0,10,0"/>
+                                  VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0,2,10,0"/>
                         <TextBlock Text="{Binding BlockVm.ResolvedSummary}" FontSize="10" FontStyle="Italic"
                                    VerticalAlignment="Center" Margin="0,0,10,0"
                                    Foreground="{DynamicResource SuccessBrush}"/>
@@ -82,17 +100,10 @@
                 <Border Background="{DynamicResource HunkHeaderBrush}" Padding="8,6">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <CheckBox Content="Select All Theirs" IsChecked="{Binding BlockVm.AllTheirsChecked}"
-                                  VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0,0,10,0"/>
+                                  VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0,2,10,0"/>
                         <TextBlock Text="{Binding BlockVm.ResolvedSummary}" FontSize="10" FontStyle="Italic"
                                    VerticalAlignment="Center" Foreground="{DynamicResource SuccessBrush}"/>
                     </StackPanel>
-                </Border>
-            </DataTemplate>
-
-            <DataTemplate x:Key="ConflictBaseLineTemplate" DataType="{x:Type vm:ConflictPaneItem}">
-                <Border Padding="6,1">
-                    <TextBlock x:Name="RowText" Text="{Binding BaseLine.Text}" FontFamily="Consolas" FontSize="11"
-                               TextWrapping="NoWrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
                 </Border>
             </DataTemplate>
 
@@ -230,12 +241,10 @@
             <conv:ConflictPaneItemTemplateSelector x:Key="ConflictPaneLeftSelector"
                 ContextTemplate="{StaticResource ConflictPaneLeftContextTemplate}"
                 BlockToolbarTemplate="{StaticResource ConflictBlockToolbarTemplate}"
-                BlockBaseLineTemplate="{StaticResource ConflictBaseLineTemplate}"
                 BlockLineTemplate="{StaticResource ConflictPaneLeftLineTemplate}"/>
             <conv:ConflictPaneItemTemplateSelector x:Key="ConflictPaneRightSelector"
                 ContextTemplate="{StaticResource ConflictPaneRightContextTemplate}"
                 BlockToolbarTemplate="{StaticResource ConflictBlockToolbarRightTemplate}"
-                BlockBaseLineTemplate="{StaticResource ConflictBaseLineTemplate}"
                 BlockLineTemplate="{StaticResource ConflictPaneRightLineTemplate}"/>
 
             <!-- ── Result pane row templates ───────────────────────────────────────────────────
@@ -243,64 +252,82 @@
                  since the assembled output's length generally differs from either source's) — same
                  selection/copy/scroll behavior follows for free from sharing that shape and the
                  "RowText" naming convention the DiffTextSelectionController relies on. -->
+            <!-- 36|24|* — the blank 24px column matches ConflictResultLineTemplate's own glyph
+                 column below, so Context and ResolvedLine rows' text starts at the same X (see the
+                 identical rationale on ConflictPaneLeftContextTemplate above). -->
             <DataTemplate x:Key="ConflictResultContextTemplate" DataType="{x:Type vm:ConflictResultItem}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="24"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{Binding LineNumber}" FontFamily="Consolas" FontSize="11"
                                TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <TextBlock x:Name="RowText" Grid.Column="1" Text="{Binding LineText}" FontFamily="Consolas" FontSize="11"
-                               Margin="2,1" TextWrapping="NoWrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding Display}"
+                               FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
+                               Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
+                               TextWrapping="NoWrap"
+                               Foreground="{Binding Display.Kind, Converter={StaticResource DiffLineFg}}"/>
                 </Grid>
             </DataTemplate>
 
-            <!-- Small unnumbered label preceding a block's ResolvedBaseLine/DefaultBaseLine rows —
-                 states why those lines have no per-line "−" (UseBaseVerbatim/nothing-picked, or an
-                 untouched block defaulting to base, have no single source ConflictLineOption). -->
+            <!-- Small unnumbered label preceding a block's ResolvedBaseLine rows — states why those
+                 lines have no per-line "−" (UseBaseVerbatim/nothing-picked has no single source
+                 ConflictLineOption). An untouched block defaulting to base (DefaultBaseLine, below)
+                 gets no such label — its own overlay tint is enough to mark it unresolved. -->
             <DataTemplate x:Key="ConflictResultBaseLabelTemplate" DataType="{x:Type vm:ConflictResultItem}">
                 <TextBlock Text="{Binding BlockVm.ResolvedSummary}" FontSize="10" FontStyle="Italic" Margin="36,2,0,0"
                            Foreground="{DynamicResource SuccessBrush}"/>
             </DataTemplate>
-            <DataTemplate x:Key="ConflictResultDefaultBaseLabelTemplate" DataType="{x:Type vm:ConflictResultItem}">
-                <TextBlock Text="Using base — no line picked yet, click a line above to override"
-                           FontSize="10" FontStyle="Italic" Margin="36,2,0,0"
-                           Foreground="{DynamicResource AccentBrush}"/>
-            </DataTemplate>
 
+            <!-- Base/ancestor preview rows — GitKraken tints these with a solid overlay while
+                 keeping the text itself syntax-colored (not a single flat foreground), same
+                 treatment as the Added/Deleted rows elsewhere; DiffBaseBgBrush is the base-specific
+                 equivalent of DiffAddedBgBrush/DiffDeletedBgBrush (see PaletteDark.xaml). SourceLine
+                 is the matching bvm.BaseOptions[i] (see RebuildPaneAndResultItems) — reusing its
+                 already syntax-highlighted Display rather than re-highlighting the same text. -->
             <DataTemplate x:Key="ConflictResultBaseLineTemplate" DataType="{x:Type vm:ConflictResultItem}">
-                <Grid>
+                <Grid Background="{DynamicResource DiffBaseBgBrush}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="24"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{Binding LineNumber}" FontFamily="Consolas" FontSize="11"
                                TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <TextBlock x:Name="RowText" Grid.Column="1" Text="{Binding LineText}" FontFamily="Consolas" FontSize="11"
-                               Margin="2,1" TextWrapping="NoWrap" Foreground="{DynamicResource SuccessBrush}"/>
+                    <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding SourceLine.Display}"
+                               FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
+                               Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
+                               TextWrapping="NoWrap"
+                               Foreground="{Binding SourceLine.Display.Kind, Converter={StaticResource DiffLineFg}}"/>
                 </Grid>
             </DataTemplate>
             <DataTemplate x:Key="ConflictResultDefaultBaseLineTemplate" DataType="{x:Type vm:ConflictResultItem}">
-                <Grid>
+                <Grid Background="{DynamicResource DiffBaseBgBrush}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="24"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{Binding LineNumber}" FontFamily="Consolas" FontSize="11"
                                TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <TextBlock x:Name="RowText" Grid.Column="1" Text="{Binding LineText}" FontFamily="Consolas" FontSize="11"
-                               Margin="2,1" TextWrapping="NoWrap" Foreground="{DynamicResource AccentBrush}"/>
+                    <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding SourceLine.Display}"
+                               FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
+                               Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
+                               TextWrapping="NoWrap"
+                               Foreground="{Binding SourceLine.Display.Kind, Converter={StaticResource DiffLineFg}}"/>
                 </Grid>
             </DataTemplate>
 
             <!-- One individually-removable output line — hovering reveals a red "−" (its own click
                  target, not the whole row) that unchecks SourceLine back in its source pane. -->
             <DataTemplate x:Key="ConflictResultLineTemplate" DataType="{x:Type vm:ConflictResultItem}">
-                <Border x:Name="RowRoot" Height="22">
+                <Border x:Name="RowRoot" Height="22"
+                        Background="{Binding SourceLine.Display.Kind, Converter={StaticResource DiffLineBg}}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="36"/>
@@ -319,8 +346,11 @@
                             <Rectangle Width="7" Height="1.6" RadiusX="0.8" RadiusY="0.8" Fill="White"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <TextBlock x:Name="RowText" Grid.Column="2" Text="{Binding SourceLine.Text}"
-                                   FontFamily="Cascadia Code, Consolas" FontSize="12" Margin="2,1" TextWrapping="NoWrap"/>
+                        <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding SourceLine.Display}"
+                                   FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
+                                   Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
+                                   TextWrapping="NoWrap"
+                                   Foreground="{Binding SourceLine.Display.Kind, Converter={StaticResource DiffLineFg}}"/>
                     </Grid>
                 </Border>
                 <DataTemplate.Triggers>
@@ -343,7 +373,6 @@
                 ResolvedLineTemplate="{StaticResource ConflictResultLineTemplate}"
                 ResolvedBaseLabelTemplate="{StaticResource ConflictResultBaseLabelTemplate}"
                 ResolvedBaseLineTemplate="{StaticResource ConflictResultBaseLineTemplate}"
-                DefaultBaseLabelTemplate="{StaticResource ConflictResultDefaultBaseLabelTemplate}"
                 DefaultBaseLineTemplate="{StaticResource ConflictResultDefaultBaseLineTemplate}"
                 UnresolvedTemplate="{StaticResource ConflictResultUnresolvedTemplate}"/>
 
@@ -500,7 +529,17 @@
                              tooltip = full author/date/message) + whole-file "select all" per
                              pane, above the per-hunk checkboxes. Same commit header for every
                              file in the session — see MergeConflictSessionViewModel. -->
-                        <Grid Grid.Row="0" Margin="0,0,0,4">
+                        <Grid Grid.Row="0" Margin="0,0,0,4"
+                              IsEnabled="{Binding IsManuallyEdited, Converter={StaticResource InverseBool}}">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsManuallyEdited}" Value="True">
+                                            <Setter Property="Opacity" Value="0.5"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="6"/>
@@ -524,7 +563,17 @@
                             </StackPanel>
                         </Grid>
 
-                        <Grid Grid.Row="1">
+                        <Grid Grid.Row="1"
+                              IsEnabled="{Binding IsManuallyEdited, Converter={StaticResource InverseBool}}">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsManuallyEdited}" Value="True">
+                                            <Setter Property="Opacity" Value="0.5"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="6"/>
@@ -580,14 +629,20 @@
                                       Background="{DynamicResource BorderBrush}"/>
 
                         <DockPanel Grid.Row="3">
-                            <TextBlock DockPanel.Dock="Top" Text="Result" FontWeight="SemiBold" FontSize="11"
-                                       Margin="2,0,0,4" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="2,0,0,4">
+                                <TextBlock DockPanel.Dock="Left" Text="Result" FontWeight="SemiBold" FontSize="11"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <Button DockPanel.Dock="Right" Content="{Binding ManualEditButtonLabel}"
+                                        Command="{Binding ToggleManualEditCommand}"
+                                        Style="{StaticResource ToolbarButton}" Padding="8,2" FontSize="10"/>
+                            </DockPanel>
                             <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                                 <Grid>
                                     <ListView x:Name="ConflictResultListView" ItemsSource="{Binding ResultItems}"
                                               Style="{StaticResource NoVirtualizeListView}"
                                               ItemContainerStyle="{StaticResource NoFocusListViewItem}"
                                               ItemTemplateSelector="{StaticResource ConflictResultSelector}"
+                                              Visibility="{Binding IsManuallyEdited, Converter={StaticResource InvertBoolToVis}}"
                                               BorderThickness="0" Loaded="ConflictResultListView_Loaded"
                                               PreviewMouseLeftButtonDown="ConflictPaneListView_PreviewMouseLeftButtonDown"
                                               PreviewMouseMove="ConflictPaneListView_PreviewMouseMove"
@@ -600,6 +655,19 @@
                                         </ListView.ContextMenu>
                                     </ListView>
                                     <Canvas x:Name="ConflictResultTextSelectionOverlay" IsHitTestVisible="False" Panel.ZIndex="10" ClipToBounds="True"/>
+                                    <avalonEdit:TextEditor x:Name="ConflictResultEditBox"
+                                             Visibility="{Binding IsManuallyEdited, Converter={StaticResource BoolToVis}}"
+                                             Background="{DynamicResource BackgroundBrush}"
+                                             Foreground="{DynamicResource TextPrimaryBrush}"
+                                             LineNumbersForeground="{DynamicResource TextSecondaryBrush}"
+                                             FontFamily="Cascadia Code, Consolas" FontSize="12"
+                                             ShowLineNumbers="True" WordWrap="False"
+                                             HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                             IsVisibleChanged="ConflictResultEditBox_IsVisibleChanged">
+                                        <avalonEdit:TextEditor.Options>
+                                            <avalonEdit:TextEditorOptions ConvertTabsToSpaces="False" HighlightCurrentLine="True"/>
+                                        </avalonEdit:TextEditor.Options>
+                                    </avalonEdit:TextEditor>
                                 </Grid>
                             </Border>
                         </DockPanel>

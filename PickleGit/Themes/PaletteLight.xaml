@@ -67,6 +67,7 @@
          rationale as the dark theme — see PaletteDark.xaml. -->
     <SolidColorBrush x:Key="DiffAddedBgBrush" Color="#592EA043"/>
     <SolidColorBrush x:Key="DiffDeletedBgBrush" Color="#59DC3C3C"/>
+    <SolidColorBrush x:Key="DiffBaseBgBrush" Color="#595C7A99"/>
     <SolidColorBrush x:Key="DiffHeaderBgBrush" Color="#FFD8E4F0"/>
     <SolidColorBrush x:Key="DiffAddedFgBrush" Color="#FF1E6B23"/>
     <SolidColorBrush x:Key="DiffDeletedFgBrush" Color="#FFA02C2A"/>
