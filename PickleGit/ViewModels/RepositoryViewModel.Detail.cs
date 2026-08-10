@@ -209,7 +209,8 @@ namespace PickleGit.ViewModels
             {
                 Title = "Save commit as patch",
                 FileName = commit.Sha.Substring(0, 7) + ".patch",
-                Filter = "Patch files (*.patch)|*.patch|All files (*.*)|*.*"
+                Filter = "Patch files (*.patch)|*.patch|All files (*.*)|*.*",
+                InitialDirectory = RepoPath
             };
             if (dlg.ShowDialog() != true) return;
             var target = dlg.FileName;
@@ -244,7 +245,8 @@ namespace PickleGit.ViewModels
             {
                 Title = "Save commits as patch",
                 FileName = $"{ordered.Count}-commits.patch",
-                Filter = "Patch files (*.patch)|*.patch|All files (*.*)|*.*"
+                Filter = "Patch files (*.patch)|*.patch|All files (*.*)|*.*",
+                InitialDirectory = RepoPath
             };
             if (dlg.ShowDialog() != true) return;
             var target = dlg.FileName;

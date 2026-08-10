@@ -1478,12 +1478,29 @@ namespace PickleGit.ViewModels
             SearchMatchCount = filtered.Count;
             RaisePropertyChanged(nameof(ShowSearchMatchCount));
             var displayList = BuildDisplayList(filtered, _hasUncommittedChanges && !searching);
+            var savedSha = _selectedNode?.Commit?.Sha;
             Task.Run(() =>
             {
                 // Search results are a discontiguous subset — use the cheap single-lane layout
                 var nodes = searching ? GraphLayout.ComputeFlat(displayList) : GraphLayout.Compute(displayList);
                 Application.Current.Dispatcher.Invoke(() =>
-                    GraphNodes = new ObservableCollection<GraphNode>(nodes));
+                {
+                    GraphNodes = new ObservableCollection<GraphNode>(nodes);
+
+                    // Rebuilding GraphNodes replaces every GraphNode instance, so the previously
+                    // selected node (a now-stale reference) drops out of the ListView's selection —
+                    // re-resolve it by commit SHA and bring it back into view, same pattern used
+                    // when RefreshAsync rebuilds the graph.
+                    if (savedSha != null)
+                    {
+                        var restored = nodes.FirstOrDefault(n => n.Commit?.Sha == savedSha);
+                        if (restored != null)
+                        {
+                            SelectedNode = restored;
+                            ScrollToNodeRequested?.Invoke(this, restored);
+                        }
+                    }
+                });
             });
         }
 
