@@ -202,6 +202,9 @@ namespace PickleGit.Controls
         {
             if (_focus == null || _listView.Items.Count == 0) return false;
             var (row, ch) = _focus.Value;
+            // Same stale-index defense as Recompute() — _focus's row can outlive a shrunk Items
+            // collection if it changed size before ClearSelection() ran.
+            if (row >= _listView.Items.Count) { _anchor = null; _focus = null; return false; }
             string rowText = _getRowText(_listView.Items[row]) ?? string.Empty;
 
             switch (key)
@@ -327,6 +330,20 @@ namespace PickleGit.Controls
             _overlay.Children.Clear();
             if (_anchor == null || _focus == null) return;
             GetOrderedRange(out int lo, out int loCh, out int hi, out int hiCh);
+            // _anchor/_focus are (row, char) indices captured at some earlier point — the
+            // underlying Items collection can be replaced wholesale with a shorter list (file
+            // switch, reload) without ClearSelection() reaching this controller first (confirmed via
+            // a user-reported IndexOutOfRangeException: a tab-switch layout pass invoked this
+            // through a ScrollChanged handler with a now-out-of-range row index). Treat an
+            // out-of-range anchor/focus as stale and drop it rather than indexing past the list.
+            if (lo < 0 || hi >= _listView.Items.Count)
+            {
+                _anchor = null;
+                _focus = null;
+                _matchQuery = null;
+                _matchExcludeSpan = null;
+                return;
+            }
             var brush = _overlay.TryFindResource("TextSelectionBrush") as Brush;
             if (brush == null) return;
 

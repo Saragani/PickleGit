@@ -57,30 +57,25 @@ namespace PickleGit.Views
             {
                 oldVm.RequestClose -= OnRequestClose;
                 oldVm.PropertyChanged -= OnSessionVmPropertyChanged;
-                oldVm.ScrollToFindMatchRequested -= OnScrollToFindMatchRequested;
+                oldVm.LeftFind.ScrollToMatchRequested -= OnLeftFindScrollRequested;
+                oldVm.RightFind.ScrollToMatchRequested -= OnRightFindScrollRequested;
+                oldVm.ResultFind.ScrollToMatchRequested -= OnResultFindScrollRequested;
             }
             _sessionVm = e.NewValue as MergeConflictSessionViewModel;
             if (_sessionVm != null)
             {
                 _sessionVm.RequestClose += OnRequestClose;
                 _sessionVm.PropertyChanged += OnSessionVmPropertyChanged;
-                _sessionVm.ScrollToFindMatchRequested += OnScrollToFindMatchRequested;
+                _sessionVm.LeftFind.ScrollToMatchRequested += OnLeftFindScrollRequested;
+                _sessionVm.RightFind.ScrollToMatchRequested += OnRightFindScrollRequested;
+                _sessionVm.ResultFind.ScrollToMatchRequested += OnResultFindScrollRequested;
             }
             RewireFileVm(_sessionVm?.CurrentFile);
         }
 
-        private void OnScrollToFindMatchRequested(object item, MergeConflictSessionViewModel.FindPane pane)
-        {
-            if (item == null) return;
-            ListView lv;
-            switch (pane)
-            {
-                case MergeConflictSessionViewModel.FindPane.Left: lv = ConflictLeftListView; break;
-                case MergeConflictSessionViewModel.FindPane.Right: lv = ConflictRightListView; break;
-                default: lv = ConflictResultListView; break;
-            }
-            lv.ScrollIntoView(item);
-        }
+        private void OnLeftFindScrollRequested(object item) => ConflictLeftListView.ScrollIntoView(item);
+        private void OnRightFindScrollRequested(object item) => ConflictRightListView.ScrollIntoView(item);
+        private void OnResultFindScrollRequested(object item) => ConflictResultListView.ScrollIntoView(item);
 
         private void OnSessionVmPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
@@ -529,60 +524,72 @@ namespace PickleGit.Views
                 if (controller.MoveCaret(e.Key, extendSelection: Keyboard.Modifiers == ModifierKeys.Shift))
                     e.Handled = true;
             }
-        }
-
-        private void MergeConflictEditorWindow_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control && _sessionVm != null)
+            else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
             {
-                OpenFind();
+                OpenFind((ListView)sender);
                 e.Handled = true;
             }
         }
 
-        private void OpenFind()
+        // ── Find — one independent PaneFindState per pane (Left/Right/Result — see
+        // MergeConflictSessionViewModel), each with its own floating find bar opened by Ctrl+F
+        // while that pane has focus (via ConflictTextSelection_KeyDown above) and closed by Esc/✕.
+
+        private PaneFindState ResolvePaneFind(ListView lv)
         {
-            if (_sessionVm == null) return;
-            _sessionVm.IsFindOpen = true;
+            if (_sessionVm == null) return null;
+            if (ReferenceEquals(lv, ConflictLeftListView)) return _sessionVm.LeftFind;
+            if (ReferenceEquals(lv, ConflictRightListView)) return _sessionVm.RightFind;
+            return _sessionVm.ResultFind;
+        }
+
+        private TextBox ResolveFindBox(ListView lv)
+        {
+            if (ReferenceEquals(lv, ConflictLeftListView)) return LeftFindBox;
+            if (ReferenceEquals(lv, ConflictRightListView)) return RightFindBox;
+            return ResultFindBox;
+        }
+
+        private void OpenFind(ListView lv)
+        {
+            var find = ResolvePaneFind(lv);
+            if (find == null) return;
+            find.IsOpen = true;
+            var box = ResolveFindBox(lv);
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                FindBox.Focus();
-                FindBox.SelectAll();
+                box.Focus();
+                box.SelectAll();
             }), DispatcherPriority.Render);
         }
 
-        private void FindToggle_Click(object sender, RoutedEventArgs e)
+        /// <summary>Shared Enter/Escape handling for every pane's find box. Enter forces the box's
+        /// own Delay=150 Text binding to flush before navigating — otherwise pressing Enter right
+        /// after typing (well within 150ms) would navigate against the previous SearchText.</summary>
+        private static void HandleFindBoxKeyDown(KeyEventArgs e, PaneFindState find, TextBox box)
         {
-            if (_sessionVm == null) return;
-            if (_sessionVm.IsFindOpen) { _sessionVm.IsFindOpen = false; return; }
-            OpenFind();
-        }
-
-        private void FindClose_Click(object sender, RoutedEventArgs e)
-        {
-            if (_sessionVm != null) _sessionVm.IsFindOpen = false;
-        }
-
-        private void FindBox_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (_sessionVm == null) return;
+            if (find == null) return;
             if (e.Key == Key.Escape)
             {
-                _sessionVm.IsFindOpen = false;
+                find.IsOpen = false;
                 e.Handled = true;
             }
             else if (e.Key == Key.Enter)
             {
-                // FindBox's Text binding has Delay=150 (debounces recomputing matches on every
-                // keystroke) — without forcing it to commit here, pressing Enter right after typing
-                // (well within 150ms, easy when typing fast) would navigate against whatever FindText
-                // still held from before this keystroke instead of what's actually in the box.
-                FindBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
-                if (Keyboard.Modifiers == ModifierKeys.Shift) _sessionVm.PrevFindMatchCommand.Execute(null);
-                else _sessionVm.NextFindMatchCommand.Execute(null);
+                box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+                if (Keyboard.Modifiers == ModifierKeys.Shift) find.PrevCommand.Execute(null);
+                else find.NextCommand.Execute(null);
                 e.Handled = true;
             }
         }
+
+        private void LeftFindBox_KeyDown(object sender, KeyEventArgs e) => HandleFindBoxKeyDown(e, _sessionVm?.LeftFind, LeftFindBox);
+        private void RightFindBox_KeyDown(object sender, KeyEventArgs e) => HandleFindBoxKeyDown(e, _sessionVm?.RightFind, RightFindBox);
+        private void ResultFindBox_KeyDown(object sender, KeyEventArgs e) => HandleFindBoxKeyDown(e, _sessionVm?.ResultFind, ResultFindBox);
+
+        private void LeftFindClose_Click(object sender, RoutedEventArgs e) { if (_sessionVm != null) _sessionVm.LeftFind.IsOpen = false; }
+        private void RightFindClose_Click(object sender, RoutedEventArgs e) { if (_sessionVm != null) _sessionVm.RightFind.IsOpen = false; }
+        private void ResultFindClose_Click(object sender, RoutedEventArgs e) { if (_sessionVm != null) _sessionVm.ResultFind.IsOpen = false; }
 
         private void ConflictResultChangeMap_JumpRequested(object sender, double fraction)
         {

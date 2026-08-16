@@ -10,8 +10,7 @@
         Width="1360" Height="860" MinWidth="960" MinHeight="560"
         WindowStartupLocation="CenterOwner"
         Icon="pack://application:,,,/Resources/pickle.ico"
-        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
-        PreviewKeyDown="MergeConflictEditorWindow_PreviewKeyDown">
+        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextPrimaryBrush}">
 
     <Window.Resources>
         <ResourceDictionary>
@@ -44,11 +43,18 @@
                                TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                     <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding Display}"
-                               behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.FindText, RelativeSource={RelativeSource AncestorType=Window}}"
                                FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
                                Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
                                TextWrapping="NoWrap"
-                               Foreground="{Binding Display.Kind, Converter={StaticResource DiffLineFg}}"/>
+                               Foreground="{Binding Display.Kind, Converter={StaticResource DiffLineFg}}">
+                        <behaviors:WordDiffHighlighter.HighlightRange>
+                            <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                <Binding/>
+                                <Binding Path="DataContext.LeftFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                <Binding Path="DataContext.LeftFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                            </MultiBinding>
+                        </behaviors:WordDiffHighlighter.HighlightRange>
+                    </TextBlock>
                 </Grid>
             </DataTemplate>
             <DataTemplate x:Key="ConflictPaneRightContextTemplate" DataType="{x:Type vm:ConflictPaneItem}">
@@ -62,11 +68,18 @@
                                TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                     <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding Display}"
-                               behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.FindText, RelativeSource={RelativeSource AncestorType=Window}}"
                                FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
                                Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
                                TextWrapping="NoWrap"
-                               Foreground="{Binding Display.Kind, Converter={StaticResource DiffLineFg}}"/>
+                               Foreground="{Binding Display.Kind, Converter={StaticResource DiffLineFg}}">
+                        <behaviors:WordDiffHighlighter.HighlightRange>
+                            <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                <Binding/>
+                                <Binding Path="DataContext.RightFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                <Binding Path="DataContext.RightFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                            </MultiBinding>
+                        </behaviors:WordDiffHighlighter.HighlightRange>
+                    </TextBlock>
                 </Grid>
             </DataTemplate>
 
@@ -151,11 +164,18 @@
                             </Grid>
                         </Border>
                         <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding LeftLine.Display}"
-                                   behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.FindText, RelativeSource={RelativeSource AncestorType=Window}}"
                                    FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
                                    Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
                                    TextWrapping="NoWrap"
-                                   Foreground="{Binding LeftLine.Display.Kind, Converter={StaticResource DiffLineFg}}"/>
+                                   Foreground="{Binding LeftLine.Display.Kind, Converter={StaticResource DiffLineFg}}">
+                            <behaviors:WordDiffHighlighter.HighlightRange>
+                                <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                    <Binding/>
+                                    <Binding Path="DataContext.LeftFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                    <Binding Path="DataContext.LeftFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                </MultiBinding>
+                            </behaviors:WordDiffHighlighter.HighlightRange>
+                        </TextBlock>
                     </Grid>
                 </Border>
                 <DataTemplate.Triggers>
@@ -212,11 +232,18 @@
                             </Grid>
                         </Border>
                         <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding RightLine.Display}"
-                                   behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.FindText, RelativeSource={RelativeSource AncestorType=Window}}"
                                    FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
                                    Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
                                    TextWrapping="NoWrap"
-                                   Foreground="{Binding RightLine.Display.Kind, Converter={StaticResource DiffLineFg}}"/>
+                                   Foreground="{Binding RightLine.Display.Kind, Converter={StaticResource DiffLineFg}}">
+                            <behaviors:WordDiffHighlighter.HighlightRange>
+                                <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                    <Binding/>
+                                    <Binding Path="DataContext.RightFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                    <Binding Path="DataContext.RightFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                </MultiBinding>
+                            </behaviors:WordDiffHighlighter.HighlightRange>
+                        </TextBlock>
                     </Grid>
                 </Border>
                 <DataTemplate.Triggers>
@@ -272,11 +299,18 @@
                                TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                     <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding Display}"
-                               behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.FindText, RelativeSource={RelativeSource AncestorType=Window}}"
                                FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
                                Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
                                TextWrapping="NoWrap"
-                               Foreground="{Binding Display.Kind, Converter={StaticResource DiffLineFg}}"/>
+                               Foreground="{Binding Display.Kind, Converter={StaticResource DiffLineFg}}">
+                        <behaviors:WordDiffHighlighter.HighlightRange>
+                            <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                <Binding/>
+                                <Binding Path="DataContext.ResultFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                <Binding Path="DataContext.ResultFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                            </MultiBinding>
+                        </behaviors:WordDiffHighlighter.HighlightRange>
+                    </TextBlock>
                 </Grid>
             </DataTemplate>
 
@@ -306,11 +340,18 @@
                                TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                     <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding SourceLine.Display}"
-                               behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.FindText, RelativeSource={RelativeSource AncestorType=Window}}"
                                FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
                                Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
                                TextWrapping="NoWrap"
-                               Foreground="{Binding SourceLine.Display.Kind, Converter={StaticResource DiffLineFg}}"/>
+                               Foreground="{Binding SourceLine.Display.Kind, Converter={StaticResource DiffLineFg}}">
+                        <behaviors:WordDiffHighlighter.HighlightRange>
+                            <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                <Binding/>
+                                <Binding Path="DataContext.ResultFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                <Binding Path="DataContext.ResultFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                            </MultiBinding>
+                        </behaviors:WordDiffHighlighter.HighlightRange>
+                    </TextBlock>
                 </Grid>
             </DataTemplate>
             <DataTemplate x:Key="ConflictResultDefaultBaseLineTemplate" DataType="{x:Type vm:ConflictResultItem}">
@@ -324,11 +365,18 @@
                                TextAlignment="Right" Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                     <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding SourceLine.Display}"
-                               behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.FindText, RelativeSource={RelativeSource AncestorType=Window}}"
                                FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
                                Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
                                TextWrapping="NoWrap"
-                               Foreground="{Binding SourceLine.Display.Kind, Converter={StaticResource DiffLineFg}}"/>
+                               Foreground="{Binding SourceLine.Display.Kind, Converter={StaticResource DiffLineFg}}">
+                        <behaviors:WordDiffHighlighter.HighlightRange>
+                            <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                <Binding/>
+                                <Binding Path="DataContext.ResultFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                <Binding Path="DataContext.ResultFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                            </MultiBinding>
+                        </behaviors:WordDiffHighlighter.HighlightRange>
+                    </TextBlock>
                 </Grid>
             </DataTemplate>
 
@@ -356,11 +404,18 @@
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding SourceLine.Display}"
-                               behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.FindText, RelativeSource={RelativeSource AncestorType=Window}}"
                                    FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False"
                                    Typography.ContextualAlternates="False" FontSize="12" Margin="2,1"
                                    TextWrapping="NoWrap"
-                                   Foreground="{Binding SourceLine.Display.Kind, Converter={StaticResource DiffLineFg}}"/>
+                                   Foreground="{Binding SourceLine.Display.Kind, Converter={StaticResource DiffLineFg}}">
+                            <behaviors:WordDiffHighlighter.HighlightRange>
+                                <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                    <Binding/>
+                                    <Binding Path="DataContext.ResultFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                    <Binding Path="DataContext.ResultFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                </MultiBinding>
+                            </behaviors:WordDiffHighlighter.HighlightRange>
+                        </TextBlock>
                     </Grid>
                 </Border>
                 <DataTemplate.Triggers>
@@ -428,7 +483,6 @@
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -444,51 +498,9 @@
                 <Run Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Normal" FontSize="12"
                      Text="{Binding ResolvedCountLabel, Mode=OneWay}"/>
             </TextBlock>
-            <Button Grid.Column="1" Content="🔍" FontSize="12" Width="26" Padding="0"
-                    AutomationProperties.Name="Find"
-                    Style="{StaticResource ToolbarButton}" ToolTip="Find in Ours/Theirs/Result (Ctrl+F)"
-                    Click="FindToggle_Click"/>
         </Grid>
 
-        <!-- Find — mirrors DiffView.xaml's "Find in diff" bar; searches the current file's Ours,
-             Theirs, and Result panes at once (see MergeConflictSessionViewModel's Find* members). -->
-        <Border Grid.Row="1" Background="{DynamicResource SurfaceBrush}" Padding="6,4" Margin="0,0,0,8"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
-                Visibility="{Binding IsFindOpen, Converter={StaticResource BoolToVis}}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
-                           Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                <TextBox Grid.Column="1" x:Name="FindBox"
-                         Style="{StaticResource DarkTextBox}"
-                         Text="{Binding FindText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
-                         ToolTip="Find text in Ours/Theirs/Result (Enter = next, Esc = close)"
-                         KeyDown="FindBox_KeyDown"/>
-                <TextBlock Grid.Column="2" Text="{Binding FindStatus}" VerticalAlignment="Center"
-                           Margin="8,0" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                <Button Grid.Column="3" Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
-                        AutomationProperties.Name="Previous match"
-                        Style="{StaticResource ToolbarButton}" ToolTip="Previous match"
-                        Command="{Binding PrevFindMatchCommand}"/>
-                <Button Grid.Column="4" Content="&#x25BC;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
-                        AutomationProperties.Name="Next match"
-                        Style="{StaticResource ToolbarButton}" ToolTip="Next match"
-                        Command="{Binding NextFindMatchCommand}"/>
-                <Button Grid.Column="5" Content="✕" FontSize="10" Width="22" Padding="0"
-                        AutomationProperties.Name="Close find"
-                        Style="{StaticResource ToolbarButton}" ToolTip="Close (Esc)"
-                        Click="FindClose_Click"/>
-            </Grid>
-        </Border>
-
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="260"/>
                 <ColumnDefinition Width="8"/>
@@ -662,6 +674,45 @@
                                         </ListView.ContextMenu>
                                     </ListView>
                                     <Canvas x:Name="ConflictLeftTextSelectionOverlay" IsHitTestVisible="False" Panel.ZIndex="10" ClipToBounds="True"/>
+
+                                    <!-- Per-pane Find — opens on Ctrl+F while this pane has focus (see
+                                         ConflictTextSelection_KeyDown), closes on Esc/✕. Only the current
+                                         match gets the search highlight, not every occurrence in the pane. -->
+                                    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,6,0"
+                                            Panel.ZIndex="20" Background="{DynamicResource SurfaceBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="6,4"
+                                            Visibility="{Binding DataContext.LeftFind.IsOpen, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
+                                                       Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <TextBox Grid.Column="1" x:Name="LeftFindBox" Style="{StaticResource DarkTextBox}"
+                                                     Text="{Binding DataContext.LeftFind.SearchText, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                                                     ToolTip="Find text in this pane (Enter = next, Esc = close)"
+                                                     KeyDown="LeftFindBox_KeyDown"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding DataContext.LeftFind.Status, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                       VerticalAlignment="Center" Margin="8,0" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <Button Grid.Column="3" Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                                    AutomationProperties.Name="Previous match"
+                                                    Style="{StaticResource ToolbarButton}" ToolTip="Previous match"
+                                                    Command="{Binding DataContext.LeftFind.PrevCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                            <Button Grid.Column="4" Content="&#x25BC;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                                    AutomationProperties.Name="Next match"
+                                                    Style="{StaticResource ToolbarButton}" ToolTip="Next match"
+                                                    Command="{Binding DataContext.LeftFind.NextCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                            <Button Grid.Column="5" Content="✕" FontSize="10" Width="22" Padding="0"
+                                                    AutomationProperties.Name="Close find"
+                                                    Style="{StaticResource ToolbarButton}" ToolTip="Close (Esc)"
+                                                    Click="LeftFindClose_Click"/>
+                                        </Grid>
+                                    </Border>
                                 </Grid>
                             </Border>
 
@@ -685,6 +736,43 @@
                                         </ListView.ContextMenu>
                                     </ListView>
                                     <Canvas x:Name="ConflictRightTextSelectionOverlay" IsHitTestVisible="False" Panel.ZIndex="10" ClipToBounds="True"/>
+
+                                    <!-- Per-pane Find — see the Left pane's identical bar for the full comment. -->
+                                    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,6,0"
+                                            Panel.ZIndex="20" Background="{DynamicResource SurfaceBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="6,4"
+                                            Visibility="{Binding DataContext.RightFind.IsOpen, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
+                                                       Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <TextBox Grid.Column="1" x:Name="RightFindBox" Style="{StaticResource DarkTextBox}"
+                                                     Text="{Binding DataContext.RightFind.SearchText, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                                                     ToolTip="Find text in this pane (Enter = next, Esc = close)"
+                                                     KeyDown="RightFindBox_KeyDown"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding DataContext.RightFind.Status, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                       VerticalAlignment="Center" Margin="8,0" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <Button Grid.Column="3" Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                                    AutomationProperties.Name="Previous match"
+                                                    Style="{StaticResource ToolbarButton}" ToolTip="Previous match"
+                                                    Command="{Binding DataContext.RightFind.PrevCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                            <Button Grid.Column="4" Content="&#x25BC;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                                    AutomationProperties.Name="Next match"
+                                                    Style="{StaticResource ToolbarButton}" ToolTip="Next match"
+                                                    Command="{Binding DataContext.RightFind.NextCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                            <Button Grid.Column="5" Content="✕" FontSize="10" Width="22" Padding="0"
+                                                    AutomationProperties.Name="Close find"
+                                                    Style="{StaticResource ToolbarButton}" ToolTip="Close (Esc)"
+                                                    Click="RightFindClose_Click"/>
+                                        </Grid>
+                                    </Border>
                                 </Grid>
                             </Border>
                         </Grid>
@@ -730,6 +818,43 @@
                                         </ListView.ContextMenu>
                                     </ListView>
                                     <Canvas x:Name="ConflictResultTextSelectionOverlay" IsHitTestVisible="False" Panel.ZIndex="10" ClipToBounds="True"/>
+
+                                    <!-- Per-pane Find — see the Left pane's identical bar for the full comment. -->
+                                    <Border Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,6,0"
+                                            Panel.ZIndex="20" Background="{DynamicResource SurfaceBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="6,4"
+                                            Visibility="{Binding DataContext.ResultFind.IsOpen, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
+                                                       Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <TextBox Grid.Column="1" x:Name="ResultFindBox" Style="{StaticResource DarkTextBox}"
+                                                     Text="{Binding DataContext.ResultFind.SearchText, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                                                     ToolTip="Find text in this pane (Enter = next, Esc = close)"
+                                                     KeyDown="ResultFindBox_KeyDown"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding DataContext.ResultFind.Status, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                       VerticalAlignment="Center" Margin="8,0" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <Button Grid.Column="3" Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                                    AutomationProperties.Name="Previous match"
+                                                    Style="{StaticResource ToolbarButton}" ToolTip="Previous match"
+                                                    Command="{Binding DataContext.ResultFind.PrevCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                            <Button Grid.Column="4" Content="&#x25BC;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                                    AutomationProperties.Name="Next match"
+                                                    Style="{StaticResource ToolbarButton}" ToolTip="Next match"
+                                                    Command="{Binding DataContext.ResultFind.NextCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                            <Button Grid.Column="5" Content="✕" FontSize="10" Width="22" Padding="0"
+                                                    AutomationProperties.Name="Close find"
+                                                    Style="{StaticResource ToolbarButton}" ToolTip="Close (Esc)"
+                                                    Click="ResultFindClose_Click"/>
+                                        </Grid>
+                                    </Border>
                                     <avalonEdit:TextEditor x:Name="ConflictResultEditBox"
                                              Visibility="{Binding IsManuallyEdited, Converter={StaticResource BoolToVis}}"
                                              Background="{DynamicResource BackgroundBrush}"
@@ -751,7 +876,7 @@
             </Grid>
         </Grid>
 
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="Close" Style="{StaticResource ToolbarButton}" MinWidth="90" Margin="0,0,8,0"
                     Command="{Binding CloseCommand}" IsCancel="True"/>
             <Button Content="Save &amp; Stage This File" Style="{StaticResource AccentButton}" MinWidth="170"

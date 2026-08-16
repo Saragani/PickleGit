@@ -50,24 +50,6 @@ namespace PickleGit.Models
         public static Color GetLaneColor(int lane) =>
             LaneColors[lane % LaneColors.Length];
 
-        /// <summary>Cheap single-lane layout used while a search filter is active — the filtered
-        /// set is not topologically contiguous, so lanes/edges would be misleading anyway, and
-        /// skipping the full layout keeps filtering O(n) per keystroke.</summary>
-        public static List<GraphNode> ComputeFlat(IList<CommitInfo> commits)
-        {
-            var result = new List<GraphNode>(commits.Count);
-            foreach (var c in commits)
-                result.Add(new GraphNode
-                {
-                    Commit = c,
-                    Lane = 0,
-                    TotalLanes = 1,
-                    LaneColor = GetLaneColor(0),
-                    HasIncomingLine = false
-                });
-            return result;
-        }
-
         public static List<GraphNode> Compute(IList<CommitInfo> commits)
         {
             var result = new List<GraphNode>(commits.Count);

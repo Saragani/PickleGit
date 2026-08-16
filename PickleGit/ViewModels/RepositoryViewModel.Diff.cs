@@ -206,10 +206,10 @@ namespace PickleGit.ViewModels
         {
             RaisePropertyChanged(nameof(ShowUnifiedDiff));
             RaisePropertyChanged(nameof(ShowSideBySideDiff));
-            // Matches are content-type-specific (DiffItem vs BlameLine, see _diffMatches) — a mode
-            // switch (e.g. toggling Blame on/off) while Find is open must recompute against
-            // whichever content is now showing, not silently keep stale matches for the other one.
-            RecomputeDiffSearch();
+            // Each pane (Unified/SideBySideLeft/SideBySideRight/Blame) now owns its own independent
+            // PaneFindState, so a mode switch alone (not a content reload) no longer needs to
+            // recompute anything here — the pane that becomes visible already has its own valid
+            // matches, and an invisible pane's Find simply isn't shown until you switch to it.
         }
 
         /// <summary>True when the unified (single-column) diff list should be shown — also used by
@@ -318,7 +318,9 @@ namespace PickleGit.ViewModels
             SideBySideItems = BuildSideBySideItems(hunks);
             IsLfsPointerDiff = DetectLfsPointer(diff.Hunks);
             IsBinaryDiff = diff.IsBinary;
-            if (IsDiffSearchOpen) RecomputeDiffSearch(); // matches referenced the old items
+            // FlatDiffItems/SideBySideItems' setters just raised PropertyChanged — DiffView.xaml.cs's
+            // OnRepoVmPropertyChangedForScrollReset already invalidates UnifiedFind/SideBySideLeftFind/
+            // SideBySideRightFind from that, so no explicit recompute is needed here anymore.
         }
 
         private void LoadLargeDiff()
@@ -641,66 +643,61 @@ namespace PickleGit.ViewModels
         /// scrolls whichever diff ListView holds items of that type.</summary>
         public event EventHandler<object> ScrollToDiffItemRequested;
 
-        // ── Find in diff ─────────────────────────────────────────────────────
+        // ── Find in diff — one independent PaneFindState per pane, not one shared search spanning
+        // (and highlighting every occurrence across) all of them at once. DiffView.xaml.cs opens
+        // whichever pane's Find has keyboard focus on Ctrl+F, and scrolls that pane's own ListView
+        // directly from each state's ScrollToMatchRequested event — no shared event/dispatch needed
+        // the way hunk navigation (ScrollToDiffItemRequested, unchanged, below) still does.
 
-        private bool _isDiffSearchOpen;
-        public bool IsDiffSearchOpen
+        public PaneFindState UnifiedFind { get; private set; }
+        public PaneFindState SideBySideLeftFind { get; private set; }
+        public PaneFindState SideBySideRightFind { get; private set; }
+        public PaneFindState BlameFind { get; private set; }
+
+        /// <summary>Called from the main constructor (RepositoryViewModel.cs) — a plain field/
+        /// auto-property initializer here can't reference these instance methods (CS0236) even
+        /// though the reference is only inside a deferred lambda, so construction happens here
+        /// instead, matching this class's existing InitializeXxxCommands() partial-init pattern.</summary>
+        private void InitializeFind()
         {
-            get => _isDiffSearchOpen;
-            set { if (Set(ref _isDiffSearchOpen, value) && !value) DiffSearchText = string.Empty; }
+            UnifiedFind = new PaneFindState(term => FindMatchesByContent(FlatDiffItemsForFind(), term));
+            SideBySideLeftFind = new PaneFindState(term => FindMatchesByContent(SideBySideLeftItemsForFind(), term));
+            SideBySideRightFind = new PaneFindState(term => FindMatchesByContent(SideBySideRightItemsForFind(), term));
+            BlameFind = new PaneFindState(term => FindMatchesByContent(BlameItemsForFind(), term));
         }
 
-        private string _diffSearchText;
-        public string DiffSearchText
+        // Deferred field access via instance methods (not captured directly in the initializers
+        // above) — FlatDiffItems/SideBySideItems/BlameLines are read fresh on every Recompute()
+        // call, not once at construction, since PaneFindState only invokes the delegate when the
+        // user actually opens/types into that pane's Find.
+        private IEnumerable<(object Item, string Content)> FlatDiffItemsForFind() =>
+            FlatDiffItems.Where(i => i.Kind == DiffItemKind.Line).Select(i => ((object)i, i.Line?.Content));
+        private IEnumerable<(object Item, string Content)> SideBySideLeftItemsForFind() =>
+            SideBySideItems.Where(i => i.Kind == DiffItemKind.Line).Select(i => ((object)i, i.Left?.Content));
+        private IEnumerable<(object Item, string Content)> SideBySideRightItemsForFind() =>
+            SideBySideItems.Where(i => i.Kind == DiffItemKind.Line).Select(i => ((object)i, i.Right?.Content));
+        private IEnumerable<(object Item, string Content)> BlameItemsForFind() =>
+            BlameLines.Select(l => ((object)l, l.Content));
+
+        /// <summary>One entry per occurrence of <paramref name="term"/>, not one per row — a row
+        /// where the term appears twice contributes two distinct matches (see PaneFindState's own
+        /// doc comment for why: each occurrence must be independently navigable/highlightable).</summary>
+        private static List<(object Item, int Start, int Length)> FindMatchesByContent(
+            IEnumerable<(object Item, string Content)> rows, string term)
         {
-            get => _diffSearchText;
-            set { if (Set(ref _diffSearchText, value)) RecomputeDiffSearch(); }
-        }
-
-        // Holds DiffItem instances in the normal diff modes, or BlameLine instances while ShowBlame
-        // is true — MainWindow's ScrollToDiffItemRequested handler already dispatches on whichever
-        // type it actually receives (matches a ListView by its items' runtime type), so navigation
-        // needs no further changes for the blame case, just matches that are really BlameLines.
-        private List<object> _diffMatches = new List<object>();
-        private int _diffMatchPos = -1;
-
-        private string _diffSearchStatus;
-        public string DiffSearchStatus { get => _diffSearchStatus; private set => Set(ref _diffSearchStatus, value); }
-
-        public ICommand NextDiffMatchCommand { get; private set; }
-        public ICommand PrevDiffMatchCommand { get; private set; }
-
-        private void RecomputeDiffSearch()
-        {
-            _diffMatches.Clear();
-            _diffMatchPos = -1;
-            var term = _diffSearchText?.Trim();
-            if (!string.IsNullOrEmpty(term))
+            var result = new List<(object, int, int)>();
+            foreach (var (item, content) in rows)
             {
-                if (ShowBlame)
+                if (content == null) continue;
+                int from = 0;
+                int found;
+                while ((found = content.IndexOf(term, from, StringComparison.OrdinalIgnoreCase)) >= 0)
                 {
-                    foreach (var line in BlameLines)
-                        if (line.Content != null && line.Content.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
-                            _diffMatches.Add(line);
-                }
-                else
-                {
-                    foreach (var item in FlatDiffItems)
-                        if (item.Kind == DiffItemKind.Line && item.Line?.Content != null &&
-                            item.Line.Content.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0)
-                            _diffMatches.Add(item);
+                    result.Add((item, found, term.Length));
+                    from = found + 1; // +1, not +term.Length: catches overlapping occurrences too
                 }
             }
-            DiffSearchStatus = FindNavigationHelper.MatchCountStatus(term, _diffMatches.Count);
-            if (_diffMatches.Count > 0) NavigateDiffMatch(+1);
-        }
-
-        private void NavigateDiffMatch(int direction)
-        {
-            if (_diffMatches.Count == 0) return;
-            _diffMatchPos = FindNavigationHelper.Advance(_diffMatchPos, direction, _diffMatches.Count);
-            DiffSearchStatus = FindNavigationHelper.PositionStatus(_diffMatchPos, _diffMatches.Count);
-            ScrollToDiffItemRequested?.Invoke(this, _diffMatches[_diffMatchPos]);
+            return result;
         }
         private int _currentHunkIndex = -1;
 

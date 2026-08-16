@@ -26,14 +26,20 @@ namespace PickleGit.Behaviors
         public static void SetLine(TextBlock element, DiffLine value) => element.SetValue(LineProperty, value);
         public static DiffLine GetLine(TextBlock element) => (DiffLine)element.GetValue(LineProperty);
 
-        /// <summary>The current "Find in diff" search term (RepositoryViewModel.DiffSearchText) —
-        /// occurrences within this line get a search-match highlight, independent of word-diff/syntax.</summary>
-        public static readonly DependencyProperty SearchTermProperty = DependencyProperty.RegisterAttached(
-            "SearchTerm", typeof(string), typeof(WordDiffHighlighter),
+        /// <summary>The exact (start, length) span to highlight in this line's plain-text content —
+        /// an already-resolved character range, not a term to re-search for. Callers resolve this to
+        /// a non-null value only for the one row that is the current find match AND only the one
+        /// specific occurrence within it (see PickleGit.ViewModels.PaneFindState /
+        /// Converters.CurrentFindMatchConverter): a row with the search term appearing twice must
+        /// highlight only whichever single occurrence is currently selected, not both — highlighting
+        /// by re-searching the term within the row can't distinguish between them, only an exact
+        /// position can.</summary>
+        public static readonly DependencyProperty HighlightRangeProperty = DependencyProperty.RegisterAttached(
+            "HighlightRange", typeof(DiffHighlightSpan?), typeof(WordDiffHighlighter),
             new PropertyMetadata(null, OnAnyChanged));
 
-        public static void SetSearchTerm(TextBlock element, string value) => element.SetValue(SearchTermProperty, value);
-        public static string GetSearchTerm(TextBlock element) => (string)element.GetValue(SearchTermProperty);
+        public static void SetHighlightRange(TextBlock element, DiffHighlightSpan? value) => element.SetValue(HighlightRangeProperty, value);
+        public static DiffHighlightSpan? GetHighlightRange(TextBlock element) => (DiffHighlightSpan?)element.GetValue(HighlightRangeProperty);
 
         private static readonly SolidColorBrush AddedHighlightBrush = MakeFrozen(Color.FromArgb(110, 46, 160, 67));
         private static readonly SolidColorBrush DeletedHighlightBrush = MakeFrozen(Color.FromArgb(110, 220, 60, 60));
@@ -77,9 +83,9 @@ namespace PickleGit.Behaviors
 
             var hasHighlights = line.HighlightSpans != null && line.HighlightSpans.Count > 0;
             var hasSyntax = line.SyntaxSpans != null && line.SyntaxSpans.Count > 0;
-            var searchTerm = GetSearchTerm(tb);
-            var searchSpans = string.IsNullOrEmpty(searchTerm) ? null : FindOccurrences(content, searchTerm);
-            var hasSearch = searchSpans != null && searchSpans.Count > 0;
+            var highlightRange = GetHighlightRange(tb);
+            var hasSearch = highlightRange.HasValue;
+            var searchSpans = hasSearch ? new List<DiffHighlightSpan> { highlightRange.Value } : null;
 
             if (!hasHighlights && !hasSyntax && !hasSearch)
             {
@@ -140,20 +146,6 @@ namespace PickleGit.Behaviors
                 }
                 tb.Inlines.Add(run);
             }
-        }
-
-        private static List<DiffHighlightSpan> FindOccurrences(string content, string term)
-        {
-            var spans = new List<DiffHighlightSpan>();
-            int idx = 0;
-            while (idx <= content.Length - term.Length)
-            {
-                int found = content.IndexOf(term, idx, StringComparison.OrdinalIgnoreCase);
-                if (found < 0) break;
-                spans.Add(new DiffHighlightSpan(found, term.Length));
-                idx = found + term.Length;
-            }
-            return spans;
         }
 
         private static int Clamp(int value, int max) => Math.Max(0, Math.Min(value, max));

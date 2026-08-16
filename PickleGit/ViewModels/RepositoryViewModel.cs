@@ -732,11 +732,10 @@ namespace PickleGit.ViewModels
             DeleteBranchCommand = new RelayCommand(DeleteBranch, _ => HasRepo);
             CancelOperationCommand = new RelayCommand(CancelOperation, () => CanCancel);
             LoadLargeDiffCommand = new RelayCommand(LoadLargeDiff, () => IsLargeDiffPending);
-            NextDiffMatchCommand = new RelayCommand(() => NavigateDiffMatch(+1));
-            PrevDiffMatchCommand = new RelayCommand(() => NavigateDiffMatch(-1));
             CloseDiffPaneCommand = new RelayCommand(() => { SelectedFile = null; ExitComparisonMode(); });
             InitializeCompareCommands();
             InitializeBisectCommands();
+            InitializeFind();
             InitializeBlameCommands();
             MergeBranchCommand = new RelayCommand(MergeBranch, _ => HasRepo);
             MergeBranchNoFfCommand = new RelayCommand(MergeBranchNoFf, _ => HasRepo);
@@ -1329,14 +1328,15 @@ namespace PickleGit.ViewModels
                 // Compute graph on background thread — not on the UI thread
                 // (uncommitted node is hidden while a search filter is active)
                 var displayList = BuildDisplayList(filtered, hasChanges && !searching);
-                // A search filter's result set is a topologically discontiguous subset of the full
-                // history — feeding it to the full multi-lane Compute() (which assumes each row's
-                // parent is the very next row) produces bogus lanes/edges. ApplyFilter() already
-                // switches to the cheap single-lane ComputeFlat() while searching; this refresh path
-                // (fetch, auto-refresh tick, file-watcher tick) must match it, or the graph flips
-                // between correct (flat, from the user's last keystroke) and wrong (full layout on a
-                // discontiguous list) the moment any of those fire while a filter is still active.
-                var nodes = searching ? GraphLayout.ComputeFlat(displayList) : GraphLayout.Compute(displayList);
+                // Always the real multi-lane Compute(), search or not — a filtered result set is a
+                // topologically discontiguous subset of the full history, but running it through the
+                // same lane-assignment algorithm still colors each result by its actual branch/lane
+                // and still draws a connector between two results that genuinely are adjacent in
+                // history, rather than collapsing every result into one lane with one shared color
+                // (ComputeFlat's old behavior) regardless of which branch it came from. Must match
+                // ApplyFilter() below, or the graph would flip between the two looks the moment a
+                // refresh (fetch, auto-refresh tick, file-watcher tick) fires while a filter is active.
+                var nodes = GraphLayout.Compute(displayList);
 
                 Application.Current.Dispatcher.Invoke(() =>
                 {
@@ -1512,8 +1512,11 @@ namespace PickleGit.ViewModels
             var savedSha = _selectedNode?.Commit?.Sha;
             Task.Run(() =>
             {
-                // Search results are a discontiguous subset — use the cheap single-lane layout
-                var nodes = searching ? GraphLayout.ComputeFlat(displayList) : GraphLayout.Compute(displayList);
+                // Always the real multi-lane Compute(), search or not — see RefreshAsync's identical
+                // call for why (keeps each result colored by its actual branch/lane and still shows a
+                // connector between two results that are genuinely adjacent in history, instead of
+                // collapsing everything into one lane/color the way ComputeFlat used to).
+                var nodes = GraphLayout.Compute(displayList);
                 Application.Current.Dispatcher.Invoke(() =>
                 {
                     if (generation != _applyFilterGeneration) return; // superseded by a later keystroke

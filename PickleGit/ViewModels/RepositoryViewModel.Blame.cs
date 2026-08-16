@@ -168,7 +168,7 @@ namespace PickleGit.ViewModels
             // content without a DiffPaneMode/IsBlameContent change, so RaiseDiffModeChanged (which
             // would otherwise catch this) never fires here — recompute Find matches directly
             // against the freshly-loaded content instead of leaving stale ones from the prior commit.
-            RecomputeDiffSearch();
+            BlameFind.Invalidate();
         }
 
         private async Task EnterHistoryModeAsync(string path, bool blameContent = false)

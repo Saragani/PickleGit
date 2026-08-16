@@ -137,11 +137,17 @@
                                        Padding="0,1,6,0" Opacity="0.6"
                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
                             <TextBlock x:Name="RowText" Grid.Column="2" behaviors:WordDiffHighlighter.Line="{Binding Line}"
-                                       behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.DiffSearchText,
-                                           RelativeSource={RelativeSource AncestorType=ListView}}"
                                        FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
                                        FontSize="12" Margin="4,1"
-                                       Foreground="{Binding Line.Kind, Converter={StaticResource DiffLineFg}}"/>
+                                       Foreground="{Binding Line.Kind, Converter={StaticResource DiffLineFg}}">
+                                <behaviors:WordDiffHighlighter.HighlightRange>
+                                    <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                        <Binding/>
+                                        <Binding Path="DataContext.UnifiedFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                        <Binding Path="DataContext.UnifiedFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                    </MultiBinding>
+                                </behaviors:WordDiffHighlighter.HighlightRange>
+                            </TextBlock>
                         </Grid>
                     </Border>
                 </DataTemplate>
@@ -270,11 +276,17 @@
                                Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                     <TextBlock x:Name="RowText" Grid.Column="1" behaviors:WordDiffHighlighter.Line="{Binding Left}"
-                               behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.DiffSearchText,
-                                   RelativeSource={RelativeSource AncestorType=ListView}}"
                                FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
                                FontSize="12" Margin="4,1" TextWrapping="NoWrap"
-                               Foreground="{Binding Left.Kind, Converter={StaticResource DiffLineFg}}"/>
+                               Foreground="{Binding Left.Kind, Converter={StaticResource DiffLineFg}}">
+                        <behaviors:WordDiffHighlighter.HighlightRange>
+                            <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                <Binding/>
+                                <Binding Path="DataContext.SideBySideLeftFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                <Binding Path="DataContext.SideBySideLeftFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                            </MultiBinding>
+                        </behaviors:WordDiffHighlighter.HighlightRange>
+                    </TextBlock>
                 </Grid>
             </Border>
         </DataTemplate>
@@ -315,11 +327,17 @@
                                Padding="0,1,6,0" Opacity="0.6"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                     <TextBlock x:Name="RowText" Grid.Column="1" behaviors:WordDiffHighlighter.Line="{Binding Right}"
-                               behaviors:WordDiffHighlighter.SearchTerm="{Binding DataContext.DiffSearchText,
-                                   RelativeSource={RelativeSource AncestorType=ListView}}"
                                FontFamily="Cascadia Code, Consolas" Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
                                FontSize="12" Margin="4,1" TextWrapping="NoWrap"
-                               Foreground="{Binding Right.Kind, Converter={StaticResource DiffLineFg}}"/>
+                               Foreground="{Binding Right.Kind, Converter={StaticResource DiffLineFg}}">
+                        <behaviors:WordDiffHighlighter.HighlightRange>
+                            <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                <Binding/>
+                                <Binding Path="DataContext.SideBySideRightFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                <Binding Path="DataContext.SideBySideRightFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                            </MultiBinding>
+                        </behaviors:WordDiffHighlighter.HighlightRange>
+                    </TextBlock>
                 </Grid>
             </Border>
         </DataTemplate>
@@ -335,7 +353,6 @@
     <Border Background="{DynamicResource BackgroundBrush}">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -495,10 +512,6 @@
                                 </Button.Style>
                             </Button>
                         </StackPanel>
-                        <Button Content="🔍" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
-                                AutomationProperties.Name="Find in diff"
-                                Style="{StaticResource ToolbarButton}" ToolTip="Find in diff"
-                                Click="DiffSearchToggle_Click"/>
                         <Button Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
                                 Style="{StaticResource ToolbarButton}" ToolTip="Previous hunk (Shift+F7)"
                                 AutomationProperties.Name="Previous hunk"
@@ -511,44 +524,7 @@
                 </Grid>
             </Border>
 
-            <!-- Find in diff -->
-            <Border Grid.Row="1" Background="{DynamicResource SurfaceBrush}" Padding="6,4"
-                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
-                    Visibility="{Binding IsDiffSearchOpen, Converter={StaticResource BoolToVis}}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
-                               Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <TextBox Grid.Column="1" x:Name="DiffSearchBox"
-                             Style="{StaticResource DarkTextBox}"
-                             Text="{Binding DiffSearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
-                             ToolTip="Find text in this diff (Enter = next, Esc = close)"
-                             KeyDown="DiffSearchBox_KeyDown"/>
-                    <TextBlock Grid.Column="2" Text="{Binding DiffSearchStatus}" VerticalAlignment="Center"
-                               Margin="8,0" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <Button Grid.Column="3" Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
-                                AutomationProperties.Name="Previous match"
-                            Style="{StaticResource ToolbarButton}" ToolTip="Previous match"
-                            Command="{Binding PrevDiffMatchCommand}"/>
-                    <Button Grid.Column="4" Content="&#x25BC;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
-                                AutomationProperties.Name="Next match"
-                            Style="{StaticResource ToolbarButton}" ToolTip="Next match"
-                            Command="{Binding NextDiffMatchCommand}"/>
-                    <Button Grid.Column="5" Content="✕" FontSize="10" Width="22" Padding="0"
-                                AutomationProperties.Name="Close find"
-                            Style="{StaticResource ToolbarButton}" ToolTip="Close (Esc)"
-                            Click="DiffSearchClose_Click"/>
-                </Grid>
-            </Border>
-
-            <Border Grid.Row="2" Background="{DynamicResource BannerWarningBrush}" Padding="8,6"
+            <Border Grid.Row="1" Background="{DynamicResource BannerWarningBrush}" Padding="8,6"
                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
                     Visibility="{Binding IsLfsPointerDiff, Converter={StaticResource BoolToVis}}">
                 <StackPanel Orientation="Horizontal">
@@ -562,14 +538,14 @@
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" Padding="8,6"
+            <Border Grid.Row="1" Background="{DynamicResource SurfaceBrush}" Padding="8,6"
                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
                     Visibility="{Binding IsBinaryDiff, Converter={StaticResource BoolToVis}}">
                 <TextBlock Text="⬛ Binary file — contents are not shown."
                            FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimaryBrush}"/>
             </Border>
 
-            <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" Padding="8,6"
+            <Border Grid.Row="1" Background="{DynamicResource SurfaceBrush}" Padding="8,6"
                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
                     Visibility="{Binding IsLargeDiffPending, Converter={StaticResource BoolToVis}}">
                 <StackPanel Orientation="Horizontal">
@@ -581,7 +557,7 @@
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="2" Background="{DynamicResource BannerWarningBrush}" Padding="8,6"
+            <Border Grid.Row="1" Background="{DynamicResource BannerWarningBrush}" Padding="8,6"
                     BorderBrush="{DynamicResource WarningBrush}" BorderThickness="0,0,0,1"
                     Visibility="{Binding IsConflictedFileDiff, Converter={StaticResource BoolToVis}}">
                 <StackPanel Orientation="Horizontal">
@@ -595,7 +571,7 @@
                 </StackPanel>
             </Border>
 
-            <Grid Grid.Row="3">
+            <Grid Grid.Row="2">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="{Binding ShowHistoryCommitList, Converter={StaticResource BoolToGridLength}, ConverterParameter=280}"/>
                     <ColumnDefinition Width="*"/>
@@ -632,6 +608,7 @@
                 <ListView x:Name="BlameListView" Grid.Column="1" Style="{StaticResource DarkListView}"
                           ItemsSource="{Binding BlameLines}"
                           Visibility="{Binding ShowBlame, Converter={StaticResource BoolToVis}}"
+                          PreviewKeyDown="BlameListView_PreviewKeyDown"
                           VirtualizingStackPanel.IsVirtualizing="True"
                           VirtualizingStackPanel.VirtualizationMode="Recycling"
                           VirtualizingPanel.ScrollUnit="Pixel"
@@ -671,15 +648,61 @@
                                            HorizontalAlignment="Right" Margin="0,0,8,0"
                                            Foreground="{DynamicResource TextSecondaryBrush}"/>
                                 <TextBlock Grid.Column="2" behaviors:BlameSearchHighlighter.Content="{Binding Content}"
-                                           behaviors:BlameSearchHighlighter.SearchTerm="{Binding DataContext.DiffSearchText,
-                                               RelativeSource={RelativeSource AncestorType=ListView}}"
                                            FontFamily="Cascadia Code, Consolas"
                                            Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
-                                           FontSize="12" TextWrapping="NoWrap"/>
+                                           FontSize="12" TextWrapping="NoWrap">
+                                    <behaviors:BlameSearchHighlighter.HighlightRange>
+                                        <MultiBinding Converter="{StaticResource CurrentFindMatch}">
+                                            <Binding/>
+                                            <Binding Path="DataContext.BlameFind.CurrentMatch" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                            <Binding Path="DataContext.BlameFind.CurrentMatchRange" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                        </MultiBinding>
+                                    </behaviors:BlameSearchHighlighter.HighlightRange>
+                                </TextBlock>
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
+
+                <!-- Per-pane Find — see the Unified pane's identical bar for the full comment.
+                     BlameListView has no DiffTextSelectionController (no copy/selection support at
+                     all today), so this uses BlameSearchHighlighter.HighlightRange instead of
+                     WordDiffHighlighter.HighlightRange — same MultiBinding pattern either way. -->
+                <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,6,0"
+                        Panel.ZIndex="20" Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="6,4"
+                        Visibility="{Binding BlameFind.IsOpen, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="160"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
+                                   Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <TextBox Grid.Column="1" x:Name="BlameFindBox" Style="{StaticResource DarkTextBox}"
+                                 Text="{Binding BlameFind.SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                                 ToolTip="Find text in this pane (Enter = next, Esc = close)"
+                                 KeyDown="BlameFindBox_KeyDown"/>
+                        <TextBlock Grid.Column="2" Text="{Binding BlameFind.Status}" VerticalAlignment="Center"
+                                   Margin="8,0" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <Button Grid.Column="3" Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                AutomationProperties.Name="Previous match"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Previous match"
+                                Command="{Binding BlameFind.PrevCommand}"/>
+                        <Button Grid.Column="4" Content="&#x25BC;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                AutomationProperties.Name="Next match"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Next match"
+                                Command="{Binding BlameFind.NextCommand}"/>
+                        <Button Grid.Column="5" Content="✕" FontSize="10" Width="22" Padding="0"
+                                AutomationProperties.Name="Close find"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Close (Esc)"
+                                Click="BlameFindClose_Click"/>
+                    </Grid>
+                </Border>
 
             <Grid Grid.Column="1" Visibility="{Binding ShowUnifiedDiff, Converter={StaticResource BoolToVis}}">
                 <Grid.ColumnDefinitions>
@@ -746,6 +769,47 @@
                  through into whatever sits visually next to this pane instead of stopping at its edge. -->
             <Canvas x:Name="UnifiedTextSelectionOverlay" Grid.Column="0" ClipToBounds="True"
                     IsHitTestVisible="False" Panel.ZIndex="10"/>
+
+            <!-- Per-pane Find — opens on Ctrl+F while this pane has focus (see
+                 DiffTextSelection_KeyDown), closes on Esc/✕. Only the current match gets the
+                 search highlight (WordDiffHighlighter.HighlightRange's MultiBinding below resolves
+                 to a value for only the one row+occurrence that is UnifiedFind.CurrentMatch/
+                 CurrentMatchRange), not every occurrence in the pane. -->
+            <Border Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,6,0"
+                    Panel.ZIndex="20" Background="{DynamicResource SurfaceBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="6,4"
+                    Visibility="{Binding UnifiedFind.IsOpen, Converter={StaticResource BoolToVis}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
+                               Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBox Grid.Column="1" x:Name="UnifiedFindBox" Style="{StaticResource DarkTextBox}"
+                             Text="{Binding UnifiedFind.SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                             ToolTip="Find text in this pane (Enter = next, Esc = close)"
+                             KeyDown="UnifiedFindBox_KeyDown"/>
+                    <TextBlock Grid.Column="2" Text="{Binding UnifiedFind.Status}" VerticalAlignment="Center"
+                               Margin="8,0" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <Button Grid.Column="3" Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                            AutomationProperties.Name="Previous match"
+                            Style="{StaticResource ToolbarButton}" ToolTip="Previous match"
+                            Command="{Binding UnifiedFind.PrevCommand}"/>
+                    <Button Grid.Column="4" Content="&#x25BC;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                            AutomationProperties.Name="Next match"
+                            Style="{StaticResource ToolbarButton}" ToolTip="Next match"
+                            Command="{Binding UnifiedFind.NextCommand}"/>
+                    <Button Grid.Column="5" Content="✕" FontSize="10" Width="22" Padding="0"
+                            AutomationProperties.Name="Close find"
+                            Style="{StaticResource ToolbarButton}" ToolTip="Close (Esc)"
+                            Click="UnifiedFindClose_Click"/>
+                </Grid>
+            </Border>
             </Grid>
 
             <Grid x:Name="SideBySideContainer" Grid.Column="1"
@@ -803,6 +867,43 @@
                 <Canvas x:Name="SideBySideLeftTextSelectionOverlay" Grid.Column="0" ClipToBounds="True"
                         IsHitTestVisible="False" Panel.ZIndex="10"/>
 
+                <!-- Per-pane Find — see the Unified pane's identical bar for the full comment. -->
+                <Border Grid.Column="0" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,6,0"
+                        Panel.ZIndex="20" Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="6,4"
+                        Visibility="{Binding SideBySideLeftFind.IsOpen, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
+                                   Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <TextBox Grid.Column="1" x:Name="SideBySideLeftFindBox" Style="{StaticResource DarkTextBox}"
+                                 Text="{Binding SideBySideLeftFind.SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                                 ToolTip="Find text in this pane (Enter = next, Esc = close)"
+                                 KeyDown="SideBySideLeftFindBox_KeyDown"/>
+                        <TextBlock Grid.Column="2" Text="{Binding SideBySideLeftFind.Status}" VerticalAlignment="Center"
+                                   Margin="8,0" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <Button Grid.Column="3" Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                AutomationProperties.Name="Previous match"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Previous match"
+                                Command="{Binding SideBySideLeftFind.PrevCommand}"/>
+                        <Button Grid.Column="4" Content="&#x25BC;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                AutomationProperties.Name="Next match"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Next match"
+                                Command="{Binding SideBySideLeftFind.NextCommand}"/>
+                        <Button Grid.Column="5" Content="✕" FontSize="10" Width="22" Padding="0"
+                                AutomationProperties.Name="Close find"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Close (Esc)"
+                                Click="SideBySideLeftFindClose_Click"/>
+                    </Grid>
+                </Border>
+
                 <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                               Background="{DynamicResource BorderBrush}" ResizeBehavior="PreviousAndNext"/>
 
@@ -849,6 +950,43 @@
                      leftward into the left pane instead. -->
                 <Canvas x:Name="SideBySideRightTextSelectionOverlay" Grid.Column="2" ClipToBounds="True"
                         IsHitTestVisible="False" Panel.ZIndex="10"/>
+
+                <!-- Per-pane Find — see the Unified pane's identical bar for the full comment. -->
+                <Border Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,6,0"
+                        Panel.ZIndex="20" Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="6,4"
+                        Visibility="{Binding SideBySideRightFind.IsOpen, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="🔍" FontSize="11" VerticalAlignment="Center"
+                                   Margin="2,0,6,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <TextBox Grid.Column="1" x:Name="SideBySideRightFindBox" Style="{StaticResource DarkTextBox}"
+                                 Text="{Binding SideBySideRightFind.SearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}"
+                                 ToolTip="Find text in this pane (Enter = next, Esc = close)"
+                                 KeyDown="SideBySideRightFindBox_KeyDown"/>
+                        <TextBlock Grid.Column="2" Text="{Binding SideBySideRightFind.Status}" VerticalAlignment="Center"
+                                   Margin="8,0" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <Button Grid.Column="3" Content="&#x25B2;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                AutomationProperties.Name="Previous match"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Previous match"
+                                Command="{Binding SideBySideRightFind.PrevCommand}"/>
+                        <Button Grid.Column="4" Content="&#x25BC;" FontSize="10" Width="22" Padding="0" Margin="0,0,2,0"
+                                AutomationProperties.Name="Next match"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Next match"
+                                Command="{Binding SideBySideRightFind.NextCommand}"/>
+                        <Button Grid.Column="5" Content="✕" FontSize="10" Width="22" Padding="0"
+                                AutomationProperties.Name="Close find"
+                                Style="{StaticResource ToolbarButton}" ToolTip="Close (Esc)"
+                                Click="SideBySideRightFindClose_Click"/>
+                    </Grid>
+                </Border>
             </Grid>
 
             <Grid Grid.Column="1" Background="{DynamicResource BackgroundBrush}"
@@ -891,7 +1029,7 @@
             </Grid>
             </Grid>
 
-            <TextBlock Grid.Row="2" Text="Select a file to see its diff."
+            <TextBlock Grid.Row="1" Text="Select a file to see its diff."
                        HorizontalAlignment="Center" VerticalAlignment="Center"
                        Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13"
                        Visibility="{Binding SelectedFile, Converter={StaticResource InvertNullToVis}}"/>

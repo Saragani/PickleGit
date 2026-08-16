@@ -1096,94 +1096,62 @@ namespace PickleGit.ViewModels
 
         private readonly Dictionary<string, string> _gitAncestorTextByPath;
 
-        // ── Find ──────────────────────────────────────────────────────────────
-        // Mirrors RepositoryViewModel.Diff.cs's "Find in diff" (DiffSearchText/DiffSearchStatus/
-        // NextDiffMatchCommand — see Behaviors/WordDiffHighlighter's SearchTerm attached property,
-        // which does the actual inline highlighting) but scoped to the current file's THREE panes
-        // (Left/Right/Result) instead of one flat list, since matches on the same text can appear
-        // independently on the Ours and Theirs sides of the same row.
+        // ── Find — one independent PaneFindState per pane (Left/Right/Result), not one shared
+        // search spanning (and highlighting every occurrence across) all three at once. Matches on
+        // the same text can appear independently on the Ours and Theirs sides of the same row, so
+        // Left/Right need genuinely separate match lists, not just separate highlighting.
 
-        public enum FindPane { Left, Right, Result }
+        public PaneFindState LeftFind { get; private set; }
+        public PaneFindState RightFind { get; private set; }
+        public PaneFindState ResultFind { get; private set; }
 
-        private sealed class FindMatch
+        /// <summary>One entry per occurrence of <paramref name="term"/> within <paramref name="content"/>,
+        /// not one per row — a row where the term appears twice must contribute two distinct,
+        /// independently navigable/highlightable matches (see PaneFindState's own doc comment).</summary>
+        private static void AddOccurrences(List<(object Item, int Start, int Length)> result, object item, string content, string term)
         {
-            public object Item;
-            public FindPane Pane;
-        }
-
-        private bool _isFindOpen;
-        public bool IsFindOpen
-        {
-            get => _isFindOpen;
-            set { if (Set(ref _isFindOpen, value) && !value) FindText = string.Empty; }
-        }
-
-        private string _findText;
-        public string FindText
-        {
-            get => _findText;
-            set { if (Set(ref _findText, value)) RecomputeFindMatches(); }
-        }
-
-        private string _findStatus;
-        public string FindStatus { get => _findStatus; private set => Set(ref _findStatus, value); }
-
-        public ICommand NextFindMatchCommand { get; private set; }
-        public ICommand PrevFindMatchCommand { get; private set; }
-
-        /// <summary>Fired to ask the view to scroll a specific pane's ListView to a specific row —
-        /// the view knows which physical ListView each <see cref="FindPane"/> maps to.</summary>
-        public event Action<object, FindPane> ScrollToFindMatchRequested;
-
-        private readonly List<FindMatch> _findMatches = new List<FindMatch>();
-        private int _findMatchPos = -1;
-
-        private static bool ContainsTerm(string text, string term) =>
-            text != null && text.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
-
-        private void RecomputeFindMatches()
-        {
-            _findMatches.Clear();
-            _findMatchPos = -1;
-            var term = _findText?.Trim();
-            var file = CurrentFile;
-            if (!string.IsNullOrEmpty(term) && file != null)
+            if (content == null) return;
+            int from = 0;
+            int found;
+            while ((found = content.IndexOf(term, from, StringComparison.OrdinalIgnoreCase)) >= 0)
             {
-                foreach (var item in file.PaneItems)
-                {
-                    if (item.Kind == ConflictPaneRowKind.Context)
-                    {
-                        // Same context text is shown in both panes (shared, unchanged content) —
-                        // one match entry, arbitrarily targeting the Left ListView, is enough.
-                        if (ContainsTerm(item.Display?.Content, term))
-                            _findMatches.Add(new FindMatch { Item = item, Pane = FindPane.Left });
-                    }
-                    else if (item.Kind == ConflictPaneRowKind.BlockLine)
-                    {
-                        if (ContainsTerm(item.LeftLine?.Display?.Content, term))
-                            _findMatches.Add(new FindMatch { Item = item, Pane = FindPane.Left });
-                        if (ContainsTerm(item.RightLine?.Display?.Content, term))
-                            _findMatches.Add(new FindMatch { Item = item, Pane = FindPane.Right });
-                    }
-                }
-                foreach (var item in file.ResultItems)
-                {
-                    var content = item.SourceLine?.Display?.Content ?? item.Display?.Content;
-                    if (ContainsTerm(content, term))
-                        _findMatches.Add(new FindMatch { Item = item, Pane = FindPane.Result });
-                }
+                result.Add((item, found, term.Length));
+                from = found + 1; // +1, not +term.Length: catches overlapping occurrences too
             }
-            FindStatus = FindNavigationHelper.MatchCountStatus(term, _findMatches.Count);
-            if (_findMatches.Count > 0) NavigateFindMatch(+1);
         }
 
-        private void NavigateFindMatch(int direction)
+        private List<(object Item, int Start, int Length)> FindMatchesInPane(string term, bool isLeft)
         {
-            if (_findMatches.Count == 0) return;
-            _findMatchPos = FindNavigationHelper.Advance(_findMatchPos, direction, _findMatches.Count);
-            FindStatus = FindNavigationHelper.PositionStatus(_findMatchPos, _findMatches.Count);
-            var m = _findMatches[_findMatchPos];
-            ScrollToFindMatchRequested?.Invoke(m.Item, m.Pane);
+            var result = new List<(object, int, int)>();
+            var file = CurrentFile;
+            if (file == null) return result;
+            foreach (var item in file.PaneItems)
+            {
+                if (item.Kind == ConflictPaneRowKind.Context)
+                    AddOccurrences(result, item, item.Display?.Content, term);
+                else if (item.Kind == ConflictPaneRowKind.BlockLine)
+                    AddOccurrences(result, item, isLeft ? item.LeftLine?.Display?.Content : item.RightLine?.Display?.Content, term);
+            }
+            return result;
+        }
+
+        private List<(object Item, int Start, int Length)> FindMatchesInResult(string term)
+        {
+            var result = new List<(object, int, int)>();
+            var file = CurrentFile;
+            if (file == null) return result;
+            foreach (var item in file.ResultItems)
+                AddOccurrences(result, item, item.SourceLine?.Display?.Content ?? item.Display?.Content, term);
+            return result;
+        }
+
+        /// <summary>Called from the constructor — a plain field/auto-property initializer can't
+        /// reference these instance methods (CS0236) even inside a deferred lambda.</summary>
+        private void InitializeFind()
+        {
+            LeftFind = new PaneFindState(term => FindMatchesInPane(term, isLeft: true));
+            RightFind = new PaneFindState(term => FindMatchesInPane(term, isLeft: false));
+            ResultFind = new PaneFindState(term => FindMatchesInResult(term));
         }
 
         public MergeConflictSessionViewModel(IEnumerable<FileChange> conflictedFiles,
@@ -1208,8 +1176,7 @@ namespace PickleGit.ViewModels
 
             SaveCurrentCommand = new RelayCommand(async () => await SaveCurrentAsync(), () => CurrentFile != null);
             CloseCommand = new RelayCommand(() => RequestClose?.Invoke(Files.Any(f => f.IsResolved)));
-            NextFindMatchCommand = new RelayCommand(() => NavigateFindMatch(+1));
-            PrevFindMatchCommand = new RelayCommand(() => NavigateFindMatch(-1));
+            InitializeFind();
 
             SelectedEntry = Files.FirstOrDefault(f => !f.IsResolved) ?? Files.FirstOrDefault();
         }
@@ -1222,7 +1189,14 @@ namespace PickleGit.ViewModels
             if (_currentFile != null) _currentFile.PropertyChanged -= OnCurrentFilePropertyChanged;
 
             var entry = SelectedEntry;
-            if (entry == null) { CurrentFile = null; RecomputeFindMatches(); return; }
+            if (entry == null)
+            {
+                CurrentFile = null;
+                LeftFind.Invalidate();
+                RightFind.Invalidate();
+                ResultFind.Invalidate();
+                return;
+            }
             if (!_fileVmCache.TryGetValue(entry.Path, out var vm))
             {
                 var abs = _resolveAbsolutePath(entry.Path);
@@ -1236,14 +1210,22 @@ namespace PickleGit.ViewModels
             // Switching files (or re-toggling a line, which rebuilds PaneItems/ResultItems into
             // brand-new collection instances — see RebuildPaneAndResultItems) invalidates every
             // previously-found match's item reference, so recompute rather than leave them stale.
-            RecomputeFindMatches();
+            LeftFind.Invalidate();
+            RightFind.Invalidate();
+            ResultFind.Invalidate();
         }
 
         private void OnCurrentFilePropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(MergeConflictFileViewModel.PaneItems) ||
-                e.PropertyName == nameof(MergeConflictFileViewModel.ResultItems))
-                RecomputeFindMatches();
+            if (e.PropertyName == nameof(MergeConflictFileViewModel.PaneItems))
+            {
+                LeftFind.Invalidate();
+                RightFind.Invalidate();
+            }
+            else if (e.PropertyName == nameof(MergeConflictFileViewModel.ResultItems))
+            {
+                ResultFind.Invalidate();
+            }
         }
 
         private async Task SaveCurrentAsync()

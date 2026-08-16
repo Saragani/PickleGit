@@ -39,6 +39,7 @@
             <conv:BoolToGridLengthConverter x:Key="BoolToGridLength"/>
             <conv:ConditionalGraphWidthConverter x:Key="ConditionalGraphWidth"/>
             <conv:ShowHideWidthConverter x:Key="ShowHideWidth"/>
+            <conv:CurrentFindMatchConverter x:Key="CurrentFindMatch"/>
             <conv:DateFormatConverter x:Key="DateFmt"/>
             <conv:RefsTooltipConverter x:Key="RefsTooltip"/>
             <conv:PrependConverter x:Key="Prepend"/>

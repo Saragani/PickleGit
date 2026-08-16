@@ -113,14 +113,27 @@ namespace PickleGit.Views
                 oldVm.DiffFileSwitched -= OnDiffFileSwitched;
                 oldVm.PropertyChanged -= OnRepoVmPropertyChangedForScrollReset;
                 oldVm.BlameLines.CollectionChanged -= OnBlameLinesChangedForScrollReset;
+                oldVm.UnifiedFind.ScrollToMatchRequested -= OnUnifiedFindScrollRequested;
+                oldVm.SideBySideLeftFind.ScrollToMatchRequested -= OnSideBySideLeftFindScrollRequested;
+                oldVm.SideBySideRightFind.ScrollToMatchRequested -= OnSideBySideRightFindScrollRequested;
+                oldVm.BlameFind.ScrollToMatchRequested -= OnBlameFindScrollRequested;
             }
             if (e.NewValue is RepositoryViewModel newVm)
             {
                 newVm.DiffFileSwitched += OnDiffFileSwitched;
                 newVm.PropertyChanged += OnRepoVmPropertyChangedForScrollReset;
                 newVm.BlameLines.CollectionChanged += OnBlameLinesChangedForScrollReset;
+                newVm.UnifiedFind.ScrollToMatchRequested += OnUnifiedFindScrollRequested;
+                newVm.SideBySideLeftFind.ScrollToMatchRequested += OnSideBySideLeftFindScrollRequested;
+                newVm.SideBySideRightFind.ScrollToMatchRequested += OnSideBySideRightFindScrollRequested;
+                newVm.BlameFind.ScrollToMatchRequested += OnBlameFindScrollRequested;
             }
         }
+
+        private void OnUnifiedFindScrollRequested(object item) => UnifiedListView.ScrollIntoView(item);
+        private void OnSideBySideLeftFindScrollRequested(object item) => SideBySideLeftListView.ScrollIntoView(item);
+        private void OnSideBySideRightFindScrollRequested(object item) => SideBySideRightListView.ScrollIntoView(item);
+        private void OnBlameFindScrollRequested(object item) => BlameListView.ScrollIntoView(item);
 
         private void OnDiffFileSwitched(object sender, EventArgs e) => _pendingDiffScrollReset = true;
 
@@ -148,6 +161,11 @@ namespace PickleGit.Views
             _sideBySideRightTextSelection.ClearSelection();
 
             var vm = (RepositoryViewModel)sender;
+            // Same reasoning as the selection clears above — a pane's Find holds row-object
+            // references (matches, CurrentMatch) that are about to be replaced out from under it.
+            vm.UnifiedFind.Invalidate();
+            vm.SideBySideLeftFind.Invalidate();
+            vm.SideBySideRightFind.Invalidate();
             // FlatDiffItems and SideBySideItems are two separate properties that this same load
             // always reassigns back-to-back (never atomically) — so this handler runs TWICE for one
             // real content arrival: once right after FlatDiffItems is set (SideBySideItems still the
@@ -186,6 +204,9 @@ namespace PickleGit.Views
 
         private void OnBlameLinesChangedForScrollReset(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         {
+            // Unconditional, unlike the scroll-reset below — BlameFind's matches/CurrentMatch hold
+            // row-object references that go stale on ANY BlameLines change, not just a file switch.
+            RepoVm?.BlameFind.Invalidate();
             if (!_pendingDiffScrollReset || RepoVm == null || RepoVm.BlameLines.Count == 0) return;
             _pendingDiffScrollReset = false;
             ResetDiffScrollToTop();
@@ -573,6 +594,20 @@ namespace PickleGit.Views
                 ResolveTextSelectionController(lv).SelectAll();
                 e.Handled = true;
             }
+            else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                OpenFind(lv);
+                e.Handled = true;
+            }
+        }
+
+        private void BlameListView_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                OpenFind(BlameListView);
+                e.Handled = true;
+            }
         }
 
         private void UnifiedCopySelection_Click(object sender, RoutedEventArgs e) => _unifiedTextSelection.TryCopySelection();
@@ -611,44 +646,67 @@ namespace PickleGit.Views
             return null;
         }
 
-        private void DiffSearchToggle_Click(object sender, RoutedEventArgs e)
+        // ── Find — one independent PaneFindState per pane (RepositoryViewModel.Diff.cs), each with
+        // its own floating find bar opened by Ctrl+F while that pane has focus (see
+        // DiffTextSelection_KeyDown/BlameListView_PreviewKeyDown above) and closed by Esc/✕.
+
+        private PaneFindState ResolvePaneFind(ListView lv)
         {
             var vm = RepoVm;
-            if (vm == null) return;
-            if (vm.IsDiffSearchOpen) { vm.IsDiffSearchOpen = false; return; }
-            vm.IsDiffSearchOpen = true;
+            if (vm == null) return null;
+            return ReferenceEquals(lv, UnifiedListView) ? vm.UnifiedFind
+                : ReferenceEquals(lv, SideBySideLeftListView) ? vm.SideBySideLeftFind
+                : ReferenceEquals(lv, SideBySideRightListView) ? vm.SideBySideRightFind
+                : vm.BlameFind;
+        }
+
+        private TextBox ResolveFindBox(ListView lv) =>
+            ReferenceEquals(lv, UnifiedListView) ? UnifiedFindBox
+                : ReferenceEquals(lv, SideBySideLeftListView) ? SideBySideLeftFindBox
+                : ReferenceEquals(lv, SideBySideRightListView) ? SideBySideRightFindBox
+                : BlameFindBox;
+
+        private void OpenFind(ListView lv)
+        {
+            var find = ResolvePaneFind(lv);
+            if (find == null) return;
+            find.IsOpen = true;
+            var box = ResolveFindBox(lv);
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                DiffSearchBox.Focus();
-                DiffSearchBox.SelectAll();
+                box.Focus();
+                box.SelectAll();
             }), System.Windows.Threading.DispatcherPriority.Render);
         }
 
-        private void DiffSearchClose_Click(object sender, RoutedEventArgs e)
+        /// <summary>Shared Enter/Escape handling for every pane's find box. Enter forces the box's
+        /// own Delay=150 Text binding to flush before navigating — otherwise pressing Enter right
+        /// after typing (well within 150ms) would navigate against the previous SearchText.</summary>
+        private static void HandleFindBoxKeyDown(KeyEventArgs e, PaneFindState find, TextBox box)
         {
-            var vm = RepoVm;
-            if (vm != null) vm.IsDiffSearchOpen = false;
-        }
-
-        private void DiffSearchBox_KeyDown(object sender, KeyEventArgs e)
-        {
-            var vm = RepoVm;
-            if (vm == null) return;
+            if (find == null) return;
             if (e.Key == Key.Escape)
             {
-                vm.IsDiffSearchOpen = false;
+                find.IsOpen = false;
                 e.Handled = true;
             }
             else if (e.Key == Key.Enter)
             {
-                // DiffSearchBox's Text binding has Delay=150 — force the pending value to commit
-                // before navigating, or pressing Enter right after typing (within 150ms) navigates
-                // against the previous DiffSearchText instead of what's actually in the box.
-                DiffSearchBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
-                if (Keyboard.Modifiers == ModifierKeys.Shift) vm.PrevDiffMatchCommand.Execute(null);
-                else vm.NextDiffMatchCommand.Execute(null);
+                box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+                if (Keyboard.Modifiers == ModifierKeys.Shift) find.PrevCommand.Execute(null);
+                else find.NextCommand.Execute(null);
                 e.Handled = true;
             }
         }
+
+        private void UnifiedFindBox_KeyDown(object sender, KeyEventArgs e) => HandleFindBoxKeyDown(e, RepoVm?.UnifiedFind, UnifiedFindBox);
+        private void SideBySideLeftFindBox_KeyDown(object sender, KeyEventArgs e) => HandleFindBoxKeyDown(e, RepoVm?.SideBySideLeftFind, SideBySideLeftFindBox);
+        private void SideBySideRightFindBox_KeyDown(object sender, KeyEventArgs e) => HandleFindBoxKeyDown(e, RepoVm?.SideBySideRightFind, SideBySideRightFindBox);
+        private void BlameFindBox_KeyDown(object sender, KeyEventArgs e) => HandleFindBoxKeyDown(e, RepoVm?.BlameFind, BlameFindBox);
+
+        private void UnifiedFindClose_Click(object sender, RoutedEventArgs e) { if (RepoVm != null) RepoVm.UnifiedFind.IsOpen = false; }
+        private void SideBySideLeftFindClose_Click(object sender, RoutedEventArgs e) { if (RepoVm != null) RepoVm.SideBySideLeftFind.IsOpen = false; }
+        private void SideBySideRightFindClose_Click(object sender, RoutedEventArgs e) { if (RepoVm != null) RepoVm.SideBySideRightFind.IsOpen = false; }
+        private void BlameFindClose_Click(object sender, RoutedEventArgs e) { if (RepoVm != null) RepoVm.BlameFind.IsOpen = false; }
     }
 }

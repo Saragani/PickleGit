@@ -416,6 +416,31 @@ namespace PickleGit.Converters
     /// MultiBinding: (bool showGraph, int totalLanes) → GridLength for the graph column.
     /// Returns 0 when hidden, otherwise LaneWidth * lanes + LaneWidth.
     /// </summary>
+    /// <summary>
+    /// MultiBinding: (this row's own DataContext, PaneFindState.CurrentMatch, PaneFindState.CurrentMatchRange)
+    /// → the exact (start, length) highlight range if this row IS the current match (by reference),
+    /// else null. Feeds Behaviors/WordDiffHighlighter.HighlightRange (or BlameSearchHighlighter's
+    /// twin) so only the one specific occurrence that's the current find result gets highlighted —
+    /// not every occurrence of the term in the row, which matters when the same row contains the
+    /// term more than once (each occurrence is its own distinct find result — see PaneFindState).
+    /// The first binding leg is a bare "{Binding}" (the row itself); ReferenceEquals is intentional —
+    /// the row objects backing a pane's ItemsSource are stable instances, not re-created per binding
+    /// pass. The third leg is passed through untyped (whatever CurrentMatchRange's exact CLR type
+    /// is) rather than cast here, since this same converter is reused for both highlighters'
+    /// differently-typed (but structurally identical) range properties.
+    /// </summary>
+    public class CurrentFindMatchConverter : IMultiValueConverter
+    {
+        public object Convert(object[] values, Type t, object p, CultureInfo c)
+        {
+            if (values == null || values.Length < 3) return null;
+            var row = values[0];
+            var currentMatch = values[1];
+            return row != null && ReferenceEquals(row, currentMatch) ? values[2] : null;
+        }
+        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo c) => null;
+    }
+
     public class ConditionalGraphWidthConverter : IMultiValueConverter
     {
         public object Convert(object[] values, Type t, object p, CultureInfo c)

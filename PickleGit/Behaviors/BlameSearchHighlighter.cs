@@ -1,9 +1,9 @@
-using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using PickleGit.Converters;
+using PickleGit.Models;
 
 namespace PickleGit.Behaviors
 {
@@ -19,12 +19,16 @@ namespace PickleGit.Behaviors
         public static void SetContent(TextBlock element, string value) => element.SetValue(ContentProperty, value);
         public static string GetContent(TextBlock element) => (string)element.GetValue(ContentProperty);
 
-        /// <summary>The current "Find" search term (RepositoryViewModel.DiffSearchText).</summary>
-        public static readonly DependencyProperty SearchTermProperty = DependencyProperty.RegisterAttached(
-            "SearchTerm", typeof(string), typeof(BlameSearchHighlighter),
+        /// <summary>The exact (start, length) span to highlight — an already-resolved character
+        /// range, not a term to re-search for. Resolved non-null only for the one row that is the
+        /// current find match AND only the one specific occurrence within it (RepositoryViewModel.
+        /// BlameFind) — a row with the search term appearing twice must highlight only whichever
+        /// single occurrence is currently selected, not both.</summary>
+        public static readonly DependencyProperty HighlightRangeProperty = DependencyProperty.RegisterAttached(
+            "HighlightRange", typeof(DiffHighlightSpan?), typeof(BlameSearchHighlighter),
             new PropertyMetadata(null, OnAnyChanged));
-        public static void SetSearchTerm(TextBlock element, string value) => element.SetValue(SearchTermProperty, value);
-        public static string GetSearchTerm(TextBlock element) => (string)element.GetValue(SearchTermProperty);
+        public static void SetHighlightRange(TextBlock element, DiffHighlightSpan? value) => element.SetValue(HighlightRangeProperty, value);
+        public static DiffHighlightSpan? GetHighlightRange(TextBlock element) => (DiffHighlightSpan?)element.GetValue(HighlightRangeProperty);
 
         private static readonly SolidColorBrush HighlightedForeground = MakeFrozen(Color.FromRgb(0xF2, 0xF2, 0xF0));
 
@@ -46,31 +50,26 @@ namespace PickleGit.Behaviors
             var content = GetContent(tb) ?? string.Empty;
             if (content.Length == 0) return;
 
-            var term = GetSearchTerm(tb);
-            if (string.IsNullOrEmpty(term))
+            var range = GetHighlightRange(tb);
+            if (!range.HasValue)
             {
                 tb.Inlines.Add(new Run(content));
                 return;
             }
 
             var matchBrush = ThemeBrushes.Get("DiffSearchMatchBrush", Color.FromArgb(0x66, 0xE0, 0xB0, 0x00));
-            int idx = 0;
-            while (idx < content.Length)
-            {
-                int found = content.IndexOf(term, idx, StringComparison.OrdinalIgnoreCase);
-                if (found < 0)
-                {
-                    tb.Inlines.Add(new Run(content.Substring(idx)));
-                    break;
-                }
-                if (found > idx) tb.Inlines.Add(new Run(content.Substring(idx, found - idx)));
-                tb.Inlines.Add(new Run(content.Substring(found, term.Length))
+            int start = Clamp(range.Value.Start, content.Length);
+            int end = Clamp(range.Value.Start + range.Value.Length, content.Length);
+            if (start > 0) tb.Inlines.Add(new Run(content.Substring(0, start)));
+            if (end > start)
+                tb.Inlines.Add(new Run(content.Substring(start, end - start))
                 {
                     Background = matchBrush,
                     Foreground = HighlightedForeground
                 });
-                idx = found + term.Length;
-            }
+            if (end < content.Length) tb.Inlines.Add(new Run(content.Substring(end)));
         }
+
+        private static int Clamp(int value, int max) => value < 0 ? 0 : value > max ? max : value;
     }
 }
