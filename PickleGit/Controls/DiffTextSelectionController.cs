@@ -35,6 +35,7 @@ namespace PickleGit.Controls
         private (int Row, int Ch)? _anchor;
         private (int Row, int Ch)? _focus;
         private string _matchQuery;
+        private (int Row, int Start, int End)? _matchExcludeSpan;
         private Point _lastMousePosition;
         private int _autoScrollDirection;
         private ScrollViewer _scrollViewer;
@@ -122,7 +123,15 @@ namespace PickleGit.Controls
             int start = ch, end = ch;
             while (start > selectableStart && IsWordChar(text[start - 1])) start--;
             while (end < textLength && IsWordChar(text[end])) end++;
-            if (start == end && end < textLength) end++;
+            // Clicked on a lone punctuation/space character — select it alone rather than leaving a
+            // zero-width no-op. A click resolving to exactly textLength (past the last character,
+            // e.g. double-clicking beyond a line's trailing punctuation) can't extend forward, so
+            // fall back to extending backward instead of silently producing no selection at all.
+            if (start == end)
+            {
+                if (end < textLength) end++;
+                else if (start > selectableStart) start--;
+            }
 
             _anchor = (rowIndex, start);
             _focus = (rowIndex, end);
@@ -137,20 +146,36 @@ namespace PickleGit.Controls
         /// surrounding whitespace, but only when the selection sits entirely on one row (a multi-row
         /// selection is prose/code being copied, not a single token being inspected) and the trimmed
         /// text is more than one character (skips a bare single-character selection, which would
-        /// otherwise light up nearly the whole pane on any common letter). Called once a selection
-        /// gesture actually finishes — mouse-up, Ctrl+click-extend, or double-click word-select — not
-        /// on every drag tick, since scanning every realized row's text is proportional to pane size.</summary>
+        /// otherwise light up nearly the whole pane on any common letter). Also records the trimmed
+        /// span's own (row, start, end) in <see cref="_matchExcludeSpan"/> — <em>not</em> the raw,
+        /// untrimmed selection bounds — so <see cref="DrawOccurrenceHighlights"/> can recognize the
+        /// primary selection as one of its own matches and skip redrawing over it; comparing against
+        /// the untrimmed bounds instead let a selection with leading/trailing whitespace (e.g.
+        /// " foo ") never match its own trimmed "foo" span, double-drawing the wrong brush color on
+        /// top of the user's own selection. Called on every selection-changing action, including
+        /// every drag tick (not just once a gesture finishes) per the live "highlight while
+        /// selecting" behavior — scanning every realized row's text on each tick is the accepted
+        /// cost of that, bounded by pane size the same way Recompute's own primary-highlight loop
+        /// already is.</summary>
         private void UpdateOccurrenceHighlight()
         {
             _matchQuery = null;
+            _matchExcludeSpan = null;
             if (_anchor != null && _focus != null)
             {
                 GetOrderedRange(out int lo, out int loCh, out int hi, out int hiCh);
                 if (lo == hi && IsRowSelectable(lo))
                 {
                     string text = _getRowText(_listView.Items[lo]) ?? string.Empty;
-                    string trimmed = SafeSubstring(text, loCh, hiCh).Trim();
-                    if (trimmed.Length > 1) _matchQuery = trimmed;
+                    string rawSelected = SafeSubstring(text, loCh, hiCh);
+                    string trimmed = rawSelected.Trim();
+                    if (trimmed.Length > 1)
+                    {
+                        _matchQuery = trimmed;
+                        int leadingTrimmed = rawSelected.Length - rawSelected.TrimStart().Length;
+                        int start = loCh + leadingTrimmed;
+                        _matchExcludeSpan = (lo, start, start + trimmed.Length);
+                    }
                 }
             }
             Recompute();
@@ -207,7 +232,9 @@ namespace PickleGit.Controls
 
             _focus = (row, ch);
             if (!extendSelection) _anchor = _focus;
-            _matchQuery = null; // caret moved — any occurrence highlight from the prior selection no longer applies
+            // caret moved — any occurrence highlight from the prior selection no longer applies
+            _matchQuery = null;
+            _matchExcludeSpan = null;
             Recompute();
             if (_listView.Items.Count > row) _listView.ScrollIntoView(_listView.Items[row]);
             return true;
@@ -240,6 +267,7 @@ namespace PickleGit.Controls
             // selection immediately, rather than leaving it visible (and increasingly stale) until
             // this new gesture finishes — EndSelection recomputes it for the new selection.
             _matchQuery = null;
+            _matchExcludeSpan = null;
             IsSelecting = true;
             _listView.Focus();
             // UIElement.CaptureMouse()/Mouse.Capture() silently fails (returns false, capture stays
@@ -286,6 +314,7 @@ namespace PickleGit.Controls
             _anchor = null;
             _focus = null;
             _matchQuery = null;
+            _matchExcludeSpan = null;
             _overlay.Children.Clear();
         }
 
@@ -386,17 +415,17 @@ namespace PickleGit.Controls
                 _overlay.Children.Add(rect);
             }
 
-            DrawOccurrenceHighlights(lo, loCh, hi, hiCh);
+            DrawOccurrenceHighlights();
         }
 
         /// <summary>Draws a lighter overlay rectangle over every occurrence of <see cref="_matchQuery"/>
         /// across every currently-realized row — the "highlight other occurrences of the selected
         /// text" behavior. Skips the exact span the primary selection itself already covers (passed in
-        /// as <paramref name="lo"/>/<paramref name="loCh"/>/<paramref name="hi"/>/<paramref name="hiCh"/>,
-        /// the same ordered range <see cref="Recompute"/> just used) so that span isn't double-drawn
-        /// under two different brushes. Runs over every row in the pane, not just the selection's own
-        /// range — unlike the primary-selection loop above, occurrences can appear anywhere.</summary>
-        private void DrawOccurrenceHighlights(int lo, int loCh, int hi, int hiCh)
+        /// as <see cref="_matchExcludeSpan"/>, set alongside <see cref="_matchQuery"/> in
+        /// <see cref="UpdateOccurrenceHighlight"/>) so that span isn't double-drawn under two
+        /// different brushes. Runs over every row in the pane, not just the selection's own range —
+        /// unlike the primary-selection loop above, occurrences can appear anywhere.</summary>
+        private void DrawOccurrenceHighlights()
         {
             if (string.IsNullOrEmpty(_matchQuery)) return;
             var matchBrush = _overlay.TryFindResource("TextMatchHighlightBrush") as Brush;
@@ -417,7 +446,8 @@ namespace PickleGit.Controls
                 {
                     int matchEnd = idx + _matchQuery.Length;
                     searchFrom = idx + 1;
-                    bool isPrimarySpan = i == lo && i == hi && idx == loCh && matchEnd == hiCh;
+                    bool isPrimarySpan = _matchExcludeSpan.HasValue && _matchExcludeSpan.Value.Row == i &&
+                        _matchExcludeSpan.Value.Start == idx && _matchExcludeSpan.Value.End == matchEnd;
                     if (isPrimarySpan) continue;
 
                     var topLeft = container.TransformToVisual(_overlay).Transform(new Point(0, 0));

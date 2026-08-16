@@ -150,21 +150,33 @@ namespace PickleGit.ViewModels
                     throw new InvalidOperationException("Could not find a common ancestor commit: " + baseResult.ErrorText);
                 var baseRef = baseResult.StdOut.Trim();
 
-                string ReadTreeEntry(string treeish)
+                // The three ls-tree reads are independent of each other (once baseRef is known) —
+                // kick all three git.exe processes off together instead of waiting for one to exit
+                // before starting the next. Safe to run concurrently: each is a read-only subprocess,
+                // not a LibGit2Sharp call, so this doesn't violate the "one thread touches _repo"
+                // rule — only the results are consumed back on this (executor) thread below.
+                var baseTreeTask = _git.Cli.RunAsync($"ls-tree {baseRef} -- {quotedPath}");
+                var oursTreeTask = _git.Cli.RunAsync("ls-tree HEAD -- " + quotedPath);
+                var theirsTreeTask = _git.Cli.RunAsync($"ls-tree {theirsRef} -- {quotedPath}");
+                Task.WaitAll(baseTreeTask, oursTreeTask, theirsTreeTask);
+
+                string ParseTreeEntry(Task<GitCliResult> resultTask, string treeish)
                 {
-                    var r = _git.Cli.RunAsync($"ls-tree {treeish} -- {quotedPath}").GetAwaiter().GetResult();
+                    var r = resultTask.Result;
                     if (!r.Success || string.IsNullOrWhiteSpace(r.StdOut))
                         throw new InvalidOperationException($"'{path}' does not exist at {treeish} — can't reconstruct a three-way conflict for it.");
                     // ls-tree line shape: "<mode> blob <sha>\t<path>"
                     var line = r.StdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)[0];
                     var tabIdx = line.IndexOf('\t');
                     var parts = (tabIdx >= 0 ? line.Substring(0, tabIdx) : line).Split(' ');
+                    if (parts.Length < 3)
+                        throw new InvalidOperationException($"Unexpected 'git ls-tree' output for '{path}' at {treeish}: \"{line}\"");
                     return parts[0] + " " + parts[2]; // "<mode> <sha>"
                 }
 
-                var baseEntry = ReadTreeEntry(baseRef);
-                var oursEntry = ReadTreeEntry("HEAD");
-                var theirsEntry = ReadTreeEntry(theirsRef);
+                var baseEntry = ParseTreeEntry(baseTreeTask, baseRef);
+                var oursEntry = ParseTreeEntry(oursTreeTask, "HEAD");
+                var theirsEntry = ParseTreeEntry(theirsTreeTask, theirsRef);
 
                 var indexInfo =
                     $"{baseEntry} 1\t{path}\n" +

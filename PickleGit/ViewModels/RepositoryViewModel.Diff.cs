@@ -691,16 +691,15 @@ namespace PickleGit.ViewModels
                             _diffMatches.Add(item);
                 }
             }
-            DiffSearchStatus = string.IsNullOrEmpty(term) ? null
-                : _diffMatches.Count == 0 ? "0 matches" : $"{_diffMatches.Count} matches";
+            DiffSearchStatus = FindNavigationHelper.MatchCountStatus(term, _diffMatches.Count);
             if (_diffMatches.Count > 0) NavigateDiffMatch(+1);
         }
 
         private void NavigateDiffMatch(int direction)
         {
             if (_diffMatches.Count == 0) return;
-            _diffMatchPos = ((_diffMatchPos + direction) % _diffMatches.Count + _diffMatches.Count) % _diffMatches.Count;
-            DiffSearchStatus = $"{_diffMatchPos + 1} of {_diffMatches.Count}";
+            _diffMatchPos = FindNavigationHelper.Advance(_diffMatchPos, direction, _diffMatches.Count);
+            DiffSearchStatus = FindNavigationHelper.PositionStatus(_diffMatchPos, _diffMatches.Count);
             ScrollToDiffItemRequested?.Invoke(this, _diffMatches[_diffMatchPos]);
         }
         private int _currentHunkIndex = -1;

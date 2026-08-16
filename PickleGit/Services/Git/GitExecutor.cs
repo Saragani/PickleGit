@@ -20,6 +20,7 @@ namespace PickleGit.Services.Git
         private readonly BlockingCollection<Action> _queue = new BlockingCollection<Action>();
         private readonly Thread _thread;
         private volatile int _threadId;
+        private bool _disposed;
 
         public GitExecutor()
         {
@@ -64,18 +65,44 @@ namespace PickleGit.Services.Git
                     catch (Exception ex) { tcs.SetException(ex); }
                 });
             }
-            catch (InvalidOperationException)
+            catch (Exception ex) when (ex is InvalidOperationException || ex is ObjectDisposedException)
             {
-                // Disposed — adding completed
+                // InvalidOperationException: CompleteAdding() already called. ObjectDisposedException:
+                // Dispose() has since fully released the queue too. Either way this executor is
+                // shutting down and will never run the work.
                 tcs.SetCanceled();
             }
             return tcs.Task;
         }
 
+        /// <summary>Idempotent, and blocks (briefly) until the background thread has actually
+        /// drained and exited — not just been asked to stop. <see cref="GitService.Dispose"/> calls
+        /// this immediately before disposing the LibGit2Sharp Repository the executor thread reads;
+        /// without waiting for the thread to actually finish, a work item still executing at the
+        /// moment of Dispose() could race a concurrent Repository.Dispose() on the calling thread —
+        /// undefined behavior, since LibGit2Sharp's Repository is not thread-safe. Confirmed as a
+        /// real gap via code review: closing a repo tab calls this synchronously on the UI thread
+        /// (RepositoryViewModel.Dispose -> GitService.Dispose), and while CloseTab already skips
+        /// busy tabs, that guard doesn't cover every executor call in this codebase (e.g. the
+        /// Reopen() the external-change watcher issues before IsBusy is set — see
+        /// RepositoryViewModel.OnRepoChangedExternally) — this makes the wait unconditional instead
+        /// of relying on every caller getting that timing right.
+        ///
+        /// The Join is timed, not indefinite, for two reasons: a work item disposing its own
+        /// GitService from inside itself would otherwise deadlock joining its own thread — not a
+        /// real call path today (Dispose only ever runs from the UI thread on tab close), but this
+        /// skips the join entirely rather than hang if it ever is; and a wedged git.exe call already
+        /// has its own cancellation path elsewhere, so this is a last-resort bound, not an expected
+        /// wait. The thread is IsBackground=true regardless, so the process can still exit cleanly
+        /// even on the rare path where the timeout is actually hit.</summary>
         public void Dispose()
         {
-            try { _queue.CompleteAdding(); }
-            catch { }
+            if (_disposed) return;
+            _disposed = true;
+            try { _queue.CompleteAdding(); } catch { }
+            if (Thread.CurrentThread.ManagedThreadId != _threadId)
+                _thread.Join(TimeSpan.FromSeconds(5));
+            _queue.Dispose();
         }
     }
 }

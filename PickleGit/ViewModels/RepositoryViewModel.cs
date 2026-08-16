@@ -1623,6 +1623,11 @@ namespace PickleGit.ViewModels
             Application.Current?.Dispatcher.BeginInvoke(new Action(async () =>
             {
                 if (!_git.IsOpen || IsBusy) return;
+                // Set before the first await, not just inside RefreshAsync/RefreshWorkingDirStatusAsync's
+                // own try/finally — otherwise CloseTab's "if (tab.IsBusy) return" guard doesn't cover
+                // the Reopen() call below, leaving a real (if narrow) window where closing the tab
+                // mid-refresh could race GitService.Dispose() against this still-running executor work.
+                IsBusy = true;
                 try
                 {
                     // Every app-initiated git mutation calls GitService.Reopen() afterward (see
@@ -1646,6 +1651,7 @@ namespace PickleGit.ViewModels
                         await RefreshWorkingDirStatusAsync();
                 }
                 catch { }
+                finally { IsBusy = false; }
             }));
         }
 

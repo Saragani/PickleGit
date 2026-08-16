@@ -573,6 +573,11 @@ namespace PickleGit.Views
             }
             else if (e.Key == Key.Enter)
             {
+                // FindBox's Text binding has Delay=150 (debounces recomputing matches on every
+                // keystroke) — without forcing it to commit here, pressing Enter right after typing
+                // (well within 150ms, easy when typing fast) would navigate against whatever FindText
+                // still held from before this keystroke instead of what's actually in the box.
+                FindBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
                 if (Keyboard.Modifiers == ModifierKeys.Shift) _sessionVm.PrevFindMatchCommand.Execute(null);
                 else _sessionVm.NextFindMatchCommand.Execute(null);
                 e.Handled = true;

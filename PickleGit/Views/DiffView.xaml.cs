@@ -641,6 +641,10 @@ namespace PickleGit.Views
             }
             else if (e.Key == Key.Enter)
             {
+                // DiffSearchBox's Text binding has Delay=150 — force the pending value to commit
+                // before navigating, or pressing Enter right after typing (within 150ms) navigates
+                // against the previous DiffSearchText instead of what's actually in the box.
+                DiffSearchBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
                 if (Keyboard.Modifiers == ModifierKeys.Shift) vm.PrevDiffMatchCommand.Execute(null);
                 else vm.NextDiffMatchCommand.Execute(null);
                 e.Handled = true;

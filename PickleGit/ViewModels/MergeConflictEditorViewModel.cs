@@ -1173,16 +1173,15 @@ namespace PickleGit.ViewModels
                         _findMatches.Add(new FindMatch { Item = item, Pane = FindPane.Result });
                 }
             }
-            FindStatus = string.IsNullOrEmpty(term) ? null
-                : _findMatches.Count == 0 ? "0 matches" : $"{_findMatches.Count} matches";
+            FindStatus = FindNavigationHelper.MatchCountStatus(term, _findMatches.Count);
             if (_findMatches.Count > 0) NavigateFindMatch(+1);
         }
 
         private void NavigateFindMatch(int direction)
         {
             if (_findMatches.Count == 0) return;
-            _findMatchPos = ((_findMatchPos + direction) % _findMatches.Count + _findMatches.Count) % _findMatches.Count;
-            FindStatus = $"{_findMatchPos + 1} of {_findMatches.Count}";
+            _findMatchPos = FindNavigationHelper.Advance(_findMatchPos, direction, _findMatches.Count);
+            FindStatus = FindNavigationHelper.PositionStatus(_findMatchPos, _findMatches.Count);
             var m = _findMatches[_findMatchPos];
             ScrollToFindMatchRequested?.Invoke(m.Item, m.Pane);
         }

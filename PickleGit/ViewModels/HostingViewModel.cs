@@ -31,7 +31,8 @@ namespace PickleGit.ViewModels
                 if (p is PullRequestInfo pr && !string.IsNullOrEmpty(pr.WebUrl))
                     OpenUrl(pr.WebUrl);
             });
-            CreatePullRequestCommand = new RelayCommand(CreatePullRequest, _ => HasHostingProvider && !string.IsNullOrEmpty(_repo.CurrentBranch));
+            CreatePullRequestCommand = new RelayCommand(CreatePullRequest,
+                _ => HasHostingProvider && !string.IsNullOrEmpty(_repo.CurrentBranch) && !_isCreatingPullRequest);
             OpenRepoWebPageCommand = new RelayCommand(() =>
             {
                 var url = HostingProvider?.GetRepoWebUrl();
@@ -75,14 +76,31 @@ namespace PickleGit.ViewModels
             catch { }
         }
 
+        // Guards CreatePullRequestCommand against double-invocation: CreatePullRequest is async
+        // void with an await (ResolveDefaultTargetBranchAsync, an Executor round-trip) before the
+        // dialog opens, and CanExecute otherwise never changes between the two clicks of a fast
+        // double-click — without this, both invocations proceed to ShowCreatePullRequestDialog,
+        // stacking two duplicate dialogs.
+        private bool _isCreatingPullRequest;
+
         private async void CreatePullRequest(object parameter)
         {
-            if (HostingProvider == null) return;
+            if (HostingProvider == null || _isCreatingPullRequest) return;
             var source = (parameter as BranchInfo)?.DisplayName ?? _repo.CurrentBranch;
             if (string.IsNullOrEmpty(source) || source.StartsWith("detached", StringComparison.Ordinal)) return;
 
-            var target = await ResolveDefaultTargetBranchAsync(source);
-            ShowCreatePullRequestDialog(source, target);
+            _isCreatingPullRequest = true;
+            CommandManager.InvalidateRequerySuggested();
+            try
+            {
+                var target = await ResolveDefaultTargetBranchAsync(source);
+                ShowCreatePullRequestDialog(source, target);
+            }
+            finally
+            {
+                _isCreatingPullRequest = false;
+                CommandManager.InvalidateRequerySuggested();
+            }
         }
 
         /// <summary>Picks the PR target branch: the remote's real default branch (resolved from its
@@ -101,12 +119,10 @@ namespace PickleGit.ViewModels
                     return resolved;
             }
 
-            return _repo.RemoteBranches
-                .Select(b => b.DisplayName)
-                .FirstOrDefault(n => string.Equals(n, "main", StringComparison.OrdinalIgnoreCase) && n != source)
-                ?? _repo.RemoteBranches.Select(b => b.DisplayName)
-                .FirstOrDefault(n => string.Equals(n, "master", StringComparison.OrdinalIgnoreCase) && n != source)
-                ?? _repo.RemoteBranches.Select(b => b.DisplayName).FirstOrDefault(n => n != source);
+            var remoteBranchNames = _repo.RemoteBranches.Select(b => b.DisplayName).ToList();
+            return remoteBranchNames.FirstOrDefault(n => string.Equals(n, "main", StringComparison.OrdinalIgnoreCase) && n != source)
+                ?? remoteBranchNames.FirstOrDefault(n => string.Equals(n, "master", StringComparison.OrdinalIgnoreCase) && n != source)
+                ?? remoteBranchNames.FirstOrDefault(n => n != source);
         }
 
         /// <summary>Invoked when a branch is dropped onto another branch — both endpoints are already known.</summary>
