@@ -24,6 +24,17 @@ namespace PickleGit.Models
 
         public bool HasConflicts => Operation != ConflictOperation.None;
 
+        /// <summary>Status line under the banner header. Resolving every conflicted file (`git add`)
+        /// does NOT clear <see cref="Operation"/> — only actually completing the operation
+        /// (`--continue` / commit) does, since MERGE_HEAD etc. stay on disk until then — so
+        /// ConflictedFiles.Count reaching 0 is a real, valid, and fairly common state (not a bug):
+        /// the operation is genuinely still "in progress" until the user clicks Continue. Saying
+        /// "0 conflicted file(s)" in that state reads as if something's wrong; this instead tells the
+        /// user what to do next.</summary>
+        public string RemainingFilesLabel => ConflictedFiles.Count == 0
+            ? "All conflicts resolved — click Continue to complete the operation"
+            : $"{ConflictedFiles.Count} conflicted file(s)";
+
         public string OperationLabel
         {
             get

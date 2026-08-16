@@ -112,6 +112,82 @@ namespace PickleGit.ViewModels
             await LoadWorkingDirAsync();
         }
 
+        /// <summary>Undoes a resolution: puts a file back into a raw, unmerged conflict state
+        /// (conflict markers back in the working tree, stage 1/2/3 back in the index), whether it's
+        /// currently staged (already resolved+`git add`-ed) or unstaged. `git add` collapses a
+        /// conflicted path's stage 1/2/3 index entries into one stage-0 entry irreversibly — plain
+        /// git has no "undo" for that — so this re-derives the same three-way conflict from scratch:
+        /// finds the merge-base of HEAD and the operation's "theirs" ref (<see cref="TheirsRefFor"/>),
+        /// reads each side's blob for this path via `ls-tree`, restages them at conflict stages 1/2/3
+        /// via `update-index --index-info`, then `checkout -m` to write fresh conflict markers into
+        /// the working tree from those stages — the same plumbing git's own merge machinery uses
+        /// when a conflict first occurs, so it reproduces the same markers rather than an
+        /// independently-diffed approximation.</summary>
+        private async Task MarkUnresolvedAsync(object param)
+        {
+            if (!(param is FileChange fc)) return;
+            var theirsRef = TheirsRefFor(ConflictInfo?.Operation ?? ConflictOperation.None);
+            if (theirsRef == null)
+            {
+                DialogService.ShowError("Mark Unresolved",
+                    "Restoring conflict markers isn't supported for a plain rebase — there's no single tracked \"theirs\" commit to recompute the conflict from.");
+                return;
+            }
+            if (fc.OursMissing || fc.TheirsMissing)
+            {
+                DialogService.ShowError("Mark Unresolved",
+                    "This was an add/delete conflict, not a three-way content conflict, so its original state can't be reconstructed automatically.");
+                return;
+            }
+
+            var path = fc.Path;
+            var ok = await RunAsync($"Restoring conflict markers in {path}…", () =>
+            {
+                var quotedPath = Services.Git.CliGitService.Quote(path);
+
+                var baseResult = _git.Cli.RunAsync($"merge-base HEAD {theirsRef}").GetAwaiter().GetResult();
+                if (!baseResult.Success)
+                    throw new InvalidOperationException("Could not find a common ancestor commit: " + baseResult.ErrorText);
+                var baseRef = baseResult.StdOut.Trim();
+
+                string ReadTreeEntry(string treeish)
+                {
+                    var r = _git.Cli.RunAsync($"ls-tree {treeish} -- {quotedPath}").GetAwaiter().GetResult();
+                    if (!r.Success || string.IsNullOrWhiteSpace(r.StdOut))
+                        throw new InvalidOperationException($"'{path}' does not exist at {treeish} — can't reconstruct a three-way conflict for it.");
+                    // ls-tree line shape: "<mode> blob <sha>\t<path>"
+                    var line = r.StdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)[0];
+                    var tabIdx = line.IndexOf('\t');
+                    var parts = (tabIdx >= 0 ? line.Substring(0, tabIdx) : line).Split(' ');
+                    return parts[0] + " " + parts[2]; // "<mode> <sha>"
+                }
+
+                var baseEntry = ReadTreeEntry(baseRef);
+                var oursEntry = ReadTreeEntry("HEAD");
+                var theirsEntry = ReadTreeEntry(theirsRef);
+
+                var indexInfo =
+                    $"{baseEntry} 1\t{path}\n" +
+                    $"{oursEntry} 2\t{path}\n" +
+                    $"{theirsEntry} 3\t{path}\n";
+
+                var updateResult = _git.Cli.RunAsync("update-index --index-info",
+                    new Services.Git.GitCliOptions { StdIn = indexInfo }).GetAwaiter().GetResult();
+                if (!updateResult.Success)
+                    throw new InvalidOperationException("Failed to restore conflict stages: " + updateResult.ErrorText);
+
+                var checkoutResult = _git.Cli.RunAsync($"checkout -m -- {quotedPath}").GetAwaiter().GetResult();
+                if (!checkoutResult.Success)
+                    throw new InvalidOperationException("Failed to write conflict markers: " + checkoutResult.ErrorText);
+
+                _git.Reopen();
+            });
+            if (!ok) return;
+
+            await LoadWorkingDirAsync();
+            await RefreshAsync();
+        }
+
         /// <summary>Theirs-side ref for each conflict-producing operation, mirroring the raw
         /// state-file reads GetConflictState() already does — not read via LibGit2Sharp anywhere
         /// else in this codebase, but the same ref names resolve the same way through it. Plain
@@ -169,9 +245,22 @@ namespace PickleGit.ViewModels
                 if (match != null) vm.SelectedEntry = match;
             }
 
-            var win = new Views.MergeConflictEditorWindow { DataContext = vm, Owner = Application.Current.MainWindow };
-            win.ShowDialog();
-            await LoadWorkingDirAsync();
+            // Suppress() must span the whole dialog (ShowDialog pumps the dispatcher for as long as
+            // it's open, giving RepositoryWatcher's 400ms-debounced refresh plenty of opportunity to
+            // fire and race this method's own post-close LoadWorkingDirAsync/selection sync — the
+            // same class of race Staging.cs's StageFileAsync/UnstageFileAsync already guards against
+            // for exactly this reason, previously missing here), not just the resolve-and-stage CLI
+            // calls the dialog triggers along the way. Left unsuppressed, a stray watcher refresh
+            // could rebuild WorkingDirFiles/StagedFiles concurrently with this method's own rebuild,
+            // leaving the just-resolved file's selection reconciled against two different snapshots
+            // and stranding a stale FileChange in one collection's selection.
+            using (_watcher?.Suppress())
+            {
+                var win = new Views.MergeConflictEditorWindow { DataContext = vm, Owner = Application.Current.MainWindow };
+                win.ShowDialog();
+                await LoadWorkingDirAsync();
+                await SyncDiffPaneAfterFileListChangeAsync();
+            }
         }
 
         private async Task ContinueOperationAsync()

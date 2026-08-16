@@ -352,7 +352,7 @@
                         <!-- This pane now replaces the commit list entirely while a single file is
                              selected (see ShowDiffInsteadOfCommits in MainWindow.xaml) — the commit
                              graph isn't reachable to click away from, so give an explicit way back. -->
-                        <Button Content="&#x2190;" FontSize="12" Width="22" Padding="0" Margin="0,0,8,0"
+                        <Button Content="&#x2190;" FontSize="18" FontWeight="Bold" Width="30" Height="26" Padding="0" Margin="0,0,8,0"
                                 AutomationProperties.Name="Back to commits"
                                 Style="{StaticResource ToolbarButton}" ToolTip="Back to commits"
                                 Command="{Binding CloseDiffPaneCommand}"/>

@@ -57,14 +57,29 @@ namespace PickleGit.Views
             {
                 oldVm.RequestClose -= OnRequestClose;
                 oldVm.PropertyChanged -= OnSessionVmPropertyChanged;
+                oldVm.ScrollToFindMatchRequested -= OnScrollToFindMatchRequested;
             }
             _sessionVm = e.NewValue as MergeConflictSessionViewModel;
             if (_sessionVm != null)
             {
                 _sessionVm.RequestClose += OnRequestClose;
                 _sessionVm.PropertyChanged += OnSessionVmPropertyChanged;
+                _sessionVm.ScrollToFindMatchRequested += OnScrollToFindMatchRequested;
             }
             RewireFileVm(_sessionVm?.CurrentFile);
+        }
+
+        private void OnScrollToFindMatchRequested(object item, MergeConflictSessionViewModel.FindPane pane)
+        {
+            if (item == null) return;
+            ListView lv;
+            switch (pane)
+            {
+                case MergeConflictSessionViewModel.FindPane.Left: lv = ConflictLeftListView; break;
+                case MergeConflictSessionViewModel.FindPane.Right: lv = ConflictRightListView; break;
+                default: lv = ConflictResultListView; break;
+            }
+            lv.ScrollIntoView(item);
         }
 
         private void OnSessionVmPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -360,6 +375,18 @@ namespace PickleGit.Views
             return _resultTextSelection;
         }
 
+        /// <summary>The pane's own ScrollViewer, keyed the same way as <see cref="ResolvePane"/> —
+        /// used so Page Up/Down scrolls exactly the pane that has focus. Scrolling it is enough to
+        /// keep all three panes in sync: each one's ScrollChanged handler (wired in the *_Loaded
+        /// methods above) already calls SyncScroll to move the other two to match, the same
+        /// mechanism a mouse-driven scrollbar drag already goes through.</summary>
+        private ScrollViewer ResolvePaneScrollViewer(ListView lv)
+        {
+            if (ReferenceEquals(lv, ConflictLeftListView)) return _leftScroll;
+            if (ReferenceEquals(lv, ConflictRightListView)) return _rightScroll;
+            return _resultScroll;
+        }
+
         /// <summary>True when the hit-test result is the glyph circle (or something inside it) —
         /// its own MouseBinding handles the click; the row's text-selection logic below must not
         /// also treat that click as the start of a selection.</summary>
@@ -438,6 +465,14 @@ namespace PickleGit.Views
                 controller.ExtendTo(container, rowText, pointInText);
                 e.Handled = true;
             }
+            else if (e.ClickCount == 2)
+            {
+                foreach (var other in new[] { _leftTextSelection, _rightTextSelection, _resultTextSelection })
+                    if (!ReferenceEquals(other, controller)) other.ClearSelection();
+                var pointInText = lv.TranslatePoint(position, rowText);
+                controller.SelectWordAt(container, rowText, pointInText);
+                e.Handled = true;
+            }
             else
             {
                 // Left/Right/Result are three independent DiffTextSelectionController instances, so
@@ -477,6 +512,15 @@ namespace PickleGit.Views
                 controller.SelectAll();
                 e.Handled = true;
             }
+            else if ((e.Key == Key.PageUp || e.Key == Key.PageDown) && Keyboard.Modifiers == ModifierKeys.None)
+            {
+                var scrollViewer = ResolvePaneScrollViewer((ListView)sender);
+                if (scrollViewer != null)
+                {
+                    if (e.Key == Key.PageUp) scrollViewer.PageUp(); else scrollViewer.PageDown();
+                    e.Handled = true;
+                }
+            }
             else if ((e.Key == Key.Left || e.Key == Key.Right || e.Key == Key.Up || e.Key == Key.Down)
                      && (Keyboard.Modifiers == ModifierKeys.None || Keyboard.Modifiers == ModifierKeys.Shift))
             {
@@ -485,6 +529,64 @@ namespace PickleGit.Views
                 if (controller.MoveCaret(e.Key, extendSelection: Keyboard.Modifiers == ModifierKeys.Shift))
                     e.Handled = true;
             }
+        }
+
+        private void MergeConflictEditorWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control && _sessionVm != null)
+            {
+                OpenFind();
+                e.Handled = true;
+            }
+        }
+
+        private void OpenFind()
+        {
+            if (_sessionVm == null) return;
+            _sessionVm.IsFindOpen = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                FindBox.Focus();
+                FindBox.SelectAll();
+            }), DispatcherPriority.Render);
+        }
+
+        private void FindToggle_Click(object sender, RoutedEventArgs e)
+        {
+            if (_sessionVm == null) return;
+            if (_sessionVm.IsFindOpen) { _sessionVm.IsFindOpen = false; return; }
+            OpenFind();
+        }
+
+        private void FindClose_Click(object sender, RoutedEventArgs e)
+        {
+            if (_sessionVm != null) _sessionVm.IsFindOpen = false;
+        }
+
+        private void FindBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (_sessionVm == null) return;
+            if (e.Key == Key.Escape)
+            {
+                _sessionVm.IsFindOpen = false;
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter)
+            {
+                if (Keyboard.Modifiers == ModifierKeys.Shift) _sessionVm.PrevFindMatchCommand.Execute(null);
+                else _sessionVm.NextFindMatchCommand.Execute(null);
+                e.Handled = true;
+            }
+        }
+
+        private void ConflictResultChangeMap_JumpRequested(object sender, double fraction)
+        {
+            var lv = ConflictResultListView;
+            if (lv.Items.Count == 0) return;
+            int idx = (int)(fraction * lv.Items.Count);
+            if (idx < 0) idx = 0;
+            if (idx >= lv.Items.Count) idx = lv.Items.Count - 1;
+            lv.ScrollIntoView(lv.Items[idx]);
         }
 
         private void ConflictLeftCopySelection_Click(object sender, RoutedEventArgs e) => _leftTextSelection.TryCopySelection();

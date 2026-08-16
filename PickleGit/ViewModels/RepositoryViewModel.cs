@@ -388,9 +388,15 @@ namespace PickleGit.ViewModels
         public ConflictState ConflictInfo
         {
             get => _conflictInfo;
-            private set { if (Set(ref _conflictInfo, value)) RaisePropertyChanged(nameof(HasConflict)); }
+            private set { if (Set(ref _conflictInfo, value)) { RaisePropertyChanged(nameof(HasConflict)); RaisePropertyChanged(nameof(CanMarkUnresolved)); } }
         }
         public bool HasConflict => _conflictInfo?.HasConflicts == true;
+
+        /// <summary>"Mark Unresolved" (re-derive conflict markers for an already-resolved/staged
+        /// file) needs a single tracked "theirs" ref to recompute the 3-way merge from — see
+        /// <see cref="TheirsRefFor"/>. A plain rebase has none (the "theirs" commit changes every
+        /// step), so the action is hidden entirely rather than offered and then failing.</summary>
+        public bool CanMarkUnresolved => HasConflict && TheirsRefFor(_conflictInfo.Operation) != null;
 
         // ── Undo ──────────────────────────────────────────────────────────────
         private UndoEntry _lastUndo;
@@ -591,6 +597,7 @@ namespace PickleGit.ViewModels
         public ICommand SelectBranchCommand { get; }
         public ICommand SelectTagCommand { get; }
         public ICommand StageFileCommand { get; }
+        public ICommand StageSingleFileCommand { get; }
         public ICommand UnstageFileCommand { get; }
         public ICommand StageAllCommand { get; }
         public ICommand UnstageAllCommand { get; }
@@ -648,6 +655,7 @@ namespace PickleGit.ViewModels
         public ICommand TakeOursCommand { get; }
         public ICommand TakeTheirsCommand { get; }
         public ICommand MarkResolvedCommand { get; }
+        public ICommand MarkUnresolvedCommand { get; }
         public ICommand OpenMergeEditorCommand { get; }
         public ICommand UndoCommand { get; }
         public ICommand StageHunkOrLinesCommand { get; }
@@ -770,6 +778,7 @@ namespace PickleGit.ViewModels
             CopyFilePathCommand = new RelayCommand(CopyFilePath, _ => HasRepo);
             AddToGitignoreCommand = new RelayCommand(AddToGitignore, _ => HasRepo);
             StageFileCommand = new RelayCommand(param => _ = StageFileAsync(param), _ => HasRepo);
+            StageSingleFileCommand = new RelayCommand(param => _ = StageSingleFileAsync(param), _ => HasRepo);
             UnstageFileCommand = new RelayCommand(param => _ = UnstageFileAsync(param), _ => HasRepo);
             StageAllCommand = new RelayCommand(async () => await StageAllAsync(), () => HasRepo && WorkingDirFiles.Count > 0);
             UnstageAllCommand = new RelayCommand(async () => await UnstageAllAsync(), () => HasRepo && StagedFiles.Count > 0);
@@ -815,6 +824,7 @@ namespace PickleGit.ViewModels
             TakeTheirsCommand = new RelayCommand(
                 p => { if (p is FileChange fc) _ = ResolveConflictSideAsync(fc, "theirs"); }, _ => HasRepo);
             MarkResolvedCommand = new RelayCommand(p => _ = MarkResolvedAsync(p), _ => HasRepo);
+            MarkUnresolvedCommand = new RelayCommand(p => _ = MarkUnresolvedAsync(p), _ => CanMarkUnresolved);
             // Guards against the banner's "Resolve Conflicts…" button (no file parameter) silently
             // doing nothing once every conflict is already resolved — OpenMergeEditor bails out
             // early with nothing to show in that case, so disable the button instead of leaving a
@@ -1314,12 +1324,19 @@ namespace PickleGit.ViewModels
                 var commits = history.Commits;
                 var hasChanges = status.Count > 0;
                 var filtered = FilterCommits(commits);
+                var searching = !string.IsNullOrWhiteSpace(_searchText);
 
                 // Compute graph on background thread — not on the UI thread
                 // (uncommitted node is hidden while a search filter is active)
-                var displayList = BuildDisplayList(filtered,
-                    hasChanges && string.IsNullOrWhiteSpace(_searchText));
-                var nodes = GraphLayout.Compute(displayList);
+                var displayList = BuildDisplayList(filtered, hasChanges && !searching);
+                // A search filter's result set is a topologically discontiguous subset of the full
+                // history — feeding it to the full multi-lane Compute() (which assumes each row's
+                // parent is the very next row) produces bogus lanes/edges. ApplyFilter() already
+                // switches to the cheap single-lane ComputeFlat() while searching; this refresh path
+                // (fetch, auto-refresh tick, file-watcher tick) must match it, or the graph flips
+                // between correct (flat, from the user's last keystroke) and wrong (full layout on a
+                // discontiguous list) the moment any of those fire while a filter is still active.
+                var nodes = searching ? GraphLayout.ComputeFlat(displayList) : GraphLayout.Compute(displayList);
 
                 Application.Current.Dispatcher.Invoke(() =>
                 {
@@ -1608,6 +1625,21 @@ namespace PickleGit.ViewModels
                 if (!_git.IsOpen || IsBusy) return;
                 try
                 {
+                    // Every app-initiated git mutation calls GitService.Reopen() afterward (see
+                    // CLAUDE.md's "Hybrid git backend") because LibGit2Sharp's Repository caches ref
+                    // AND index state in-process — it never re-reads either from disk on its own.
+                    // This watcher callback is the one refresh path that was missing that call: an
+                    // external stage/unstage/commit (a different git client, or the command line)
+                    // moves the on-disk index/refs, but the cached Repository handle kept serving
+                    // the pre-change state to anything that reads it directly (GetStagedFileDiff/
+                    // GetUnstagedFileDiff compare against _repo.Diff, not a fresh process). The file
+                    // *list* looked right regardless, since GetWorkingDirectoryStatus prefers a
+                    // fresh `git status` CLI call when git.exe is available — only diff *content*
+                    // silently went stale, with no exception and no banner (a stale index blob that
+                    // happens to already match the working file's current content diffs to nothing,
+                    // rendering the diff pane completely blank). Reopen() before refreshing either
+                    // kind closes that gap.
+                    await _git.Executor.RunAsync(() => _git.Reopen());
                     if (kind == RepoChangeKind.Refs)
                         await RefreshAsync();
                     else

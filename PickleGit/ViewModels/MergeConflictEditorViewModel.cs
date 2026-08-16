@@ -446,6 +446,15 @@ namespace PickleGit.ViewModels
         private ObservableCollection<ConflictResultItem> _resultItems = new ObservableCollection<ConflictResultItem>();
         public ObservableCollection<ConflictResultItem> ResultItems { get => _resultItems; private set => Set(ref _resultItems, value); }
 
+        /// <summary>One entry per <see cref="ResultItems"/> row, for <see cref="Controls.DiffChangeMapControl"/>
+        /// (reused as a conflict-location minimap next to the Result pane's scrollbar): Added = an
+        /// already-resolved block's rows (green), Deleted = a still-unresolved block's rows (amber/red,
+        /// matching WarningBrush's "resolve above" styling elsewhere), Context = not part of any block
+        /// (unmarked). The control draws one contiguous colored band per contiguous run of matching
+        /// kind, so this naturally produces one band per conflict block.</summary>
+        private IReadOnlyList<DiffLineKind> _resultRowKinds = Array.Empty<DiffLineKind>();
+        public IReadOnlyList<DiffLineKind> ResultRowKinds { get => _resultRowKinds; private set => Set(ref _resultRowKinds, value); }
+
         private ExistenceChoice _existenceChoice;
         public ExistenceChoice ExistenceChoice
         {
@@ -988,6 +997,15 @@ namespace PickleGit.ViewModels
             }
             PaneItems = new ObservableCollection<ConflictPaneItem>(pane);
             ResultItems = new ObservableCollection<ConflictResultItem>(result);
+            var resultRowKinds = new DiffLineKind[result.Count];
+            for (int i = 0; i < result.Count; i++)
+            {
+                var rowBlock = result[i].BlockVm;
+                resultRowKinds[i] = rowBlock == null ? DiffLineKind.Context
+                    : rowBlock.IsResolvedEffective ? DiffLineKind.Added
+                    : DiffLineKind.Deleted;
+            }
+            ResultRowKinds = resultRowKinds;
         }
 
         /// <summary>Writes the resolution to disk (content conflict) or performs the keep/delete
@@ -1078,6 +1096,97 @@ namespace PickleGit.ViewModels
 
         private readonly Dictionary<string, string> _gitAncestorTextByPath;
 
+        // ── Find ──────────────────────────────────────────────────────────────
+        // Mirrors RepositoryViewModel.Diff.cs's "Find in diff" (DiffSearchText/DiffSearchStatus/
+        // NextDiffMatchCommand — see Behaviors/WordDiffHighlighter's SearchTerm attached property,
+        // which does the actual inline highlighting) but scoped to the current file's THREE panes
+        // (Left/Right/Result) instead of one flat list, since matches on the same text can appear
+        // independently on the Ours and Theirs sides of the same row.
+
+        public enum FindPane { Left, Right, Result }
+
+        private sealed class FindMatch
+        {
+            public object Item;
+            public FindPane Pane;
+        }
+
+        private bool _isFindOpen;
+        public bool IsFindOpen
+        {
+            get => _isFindOpen;
+            set { if (Set(ref _isFindOpen, value) && !value) FindText = string.Empty; }
+        }
+
+        private string _findText;
+        public string FindText
+        {
+            get => _findText;
+            set { if (Set(ref _findText, value)) RecomputeFindMatches(); }
+        }
+
+        private string _findStatus;
+        public string FindStatus { get => _findStatus; private set => Set(ref _findStatus, value); }
+
+        public ICommand NextFindMatchCommand { get; private set; }
+        public ICommand PrevFindMatchCommand { get; private set; }
+
+        /// <summary>Fired to ask the view to scroll a specific pane's ListView to a specific row —
+        /// the view knows which physical ListView each <see cref="FindPane"/> maps to.</summary>
+        public event Action<object, FindPane> ScrollToFindMatchRequested;
+
+        private readonly List<FindMatch> _findMatches = new List<FindMatch>();
+        private int _findMatchPos = -1;
+
+        private static bool ContainsTerm(string text, string term) =>
+            text != null && text.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
+
+        private void RecomputeFindMatches()
+        {
+            _findMatches.Clear();
+            _findMatchPos = -1;
+            var term = _findText?.Trim();
+            var file = CurrentFile;
+            if (!string.IsNullOrEmpty(term) && file != null)
+            {
+                foreach (var item in file.PaneItems)
+                {
+                    if (item.Kind == ConflictPaneRowKind.Context)
+                    {
+                        // Same context text is shown in both panes (shared, unchanged content) —
+                        // one match entry, arbitrarily targeting the Left ListView, is enough.
+                        if (ContainsTerm(item.Display?.Content, term))
+                            _findMatches.Add(new FindMatch { Item = item, Pane = FindPane.Left });
+                    }
+                    else if (item.Kind == ConflictPaneRowKind.BlockLine)
+                    {
+                        if (ContainsTerm(item.LeftLine?.Display?.Content, term))
+                            _findMatches.Add(new FindMatch { Item = item, Pane = FindPane.Left });
+                        if (ContainsTerm(item.RightLine?.Display?.Content, term))
+                            _findMatches.Add(new FindMatch { Item = item, Pane = FindPane.Right });
+                    }
+                }
+                foreach (var item in file.ResultItems)
+                {
+                    var content = item.SourceLine?.Display?.Content ?? item.Display?.Content;
+                    if (ContainsTerm(content, term))
+                        _findMatches.Add(new FindMatch { Item = item, Pane = FindPane.Result });
+                }
+            }
+            FindStatus = string.IsNullOrEmpty(term) ? null
+                : _findMatches.Count == 0 ? "0 matches" : $"{_findMatches.Count} matches";
+            if (_findMatches.Count > 0) NavigateFindMatch(+1);
+        }
+
+        private void NavigateFindMatch(int direction)
+        {
+            if (_findMatches.Count == 0) return;
+            _findMatchPos = ((_findMatchPos + direction) % _findMatches.Count + _findMatches.Count) % _findMatches.Count;
+            FindStatus = $"{_findMatchPos + 1} of {_findMatches.Count}";
+            var m = _findMatches[_findMatchPos];
+            ScrollToFindMatchRequested?.Invoke(m.Item, m.Pane);
+        }
+
         public MergeConflictSessionViewModel(IEnumerable<FileChange> conflictedFiles,
             Func<string, string> resolveAbsolutePath, Func<string, Task> stageFileAsync,
             string oursBranch = null, CommitInfo oursCommit = null,
@@ -1100,6 +1209,8 @@ namespace PickleGit.ViewModels
 
             SaveCurrentCommand = new RelayCommand(async () => await SaveCurrentAsync(), () => CurrentFile != null);
             CloseCommand = new RelayCommand(() => RequestClose?.Invoke(Files.Any(f => f.IsResolved)));
+            NextFindMatchCommand = new RelayCommand(() => NavigateFindMatch(+1));
+            PrevFindMatchCommand = new RelayCommand(() => NavigateFindMatch(-1));
 
             SelectedEntry = Files.FirstOrDefault(f => !f.IsResolved) ?? Files.FirstOrDefault();
         }
@@ -1109,8 +1220,10 @@ namespace PickleGit.ViewModels
 
         private void LoadSelected()
         {
+            if (_currentFile != null) _currentFile.PropertyChanged -= OnCurrentFilePropertyChanged;
+
             var entry = SelectedEntry;
-            if (entry == null) { CurrentFile = null; return; }
+            if (entry == null) { CurrentFile = null; RecomputeFindMatches(); return; }
             if (!_fileVmCache.TryGetValue(entry.Path, out var vm))
             {
                 var abs = _resolveAbsolutePath(entry.Path);
@@ -1120,6 +1233,18 @@ namespace PickleGit.ViewModels
                 _fileVmCache[entry.Path] = vm;
             }
             CurrentFile = vm;
+            vm.PropertyChanged += OnCurrentFilePropertyChanged;
+            // Switching files (or re-toggling a line, which rebuilds PaneItems/ResultItems into
+            // brand-new collection instances — see RebuildPaneAndResultItems) invalidates every
+            // previously-found match's item reference, so recompute rather than leave them stale.
+            RecomputeFindMatches();
+        }
+
+        private void OnCurrentFilePropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(MergeConflictFileViewModel.PaneItems) ||
+                e.PropertyName == nameof(MergeConflictFileViewModel.ResultItems))
+                RecomputeFindMatches();
         }
 
         private async Task SaveCurrentAsync()

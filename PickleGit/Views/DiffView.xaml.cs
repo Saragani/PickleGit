@@ -271,6 +271,12 @@ namespace PickleGit.Views
 
             if (TryGetRowTextForContentClick(lv, container, position, out var rowText))
             {
+                if (e.ClickCount == 2)
+                {
+                    _unifiedTextSelection.SelectWordAt(container, rowText, e.GetPosition(rowText));
+                    e.Handled = true;
+                    return;
+                }
                 _unifiedTextSelection.BeginSelection(e, container, rowText);
                 return;
             }
@@ -380,6 +386,12 @@ namespace PickleGit.Views
                 // text editor's behavior would lead you to expect. Starting a new one on this side
                 // drops whatever was selected on the other.
                 SideBySideController(!isLeft).ClearSelection();
+                if (e.ClickCount == 2)
+                {
+                    SideBySideController(isLeft).SelectWordAt(container, rowText, e.GetPosition(rowText));
+                    e.Handled = true;
+                    return;
+                }
                 SideBySideController(isLeft).BeginSelection(e, container, rowText);
                 return;
             }
@@ -512,12 +524,32 @@ namespace PickleGit.Views
                 : ReferenceEquals(lv, SideBySideLeftListView) ? _sideBySideLeftTextSelection
                 : _sideBySideRightTextSelection;
 
+        /// <summary>The pane's own ScrollViewer, keyed the same way as
+        /// <see cref="ResolveTextSelectionController"/> — used so Page Up/Down scrolls exactly the
+        /// pane that has focus. Scrolling it (rather than e.g. scrolling all three at once) is
+        /// enough to keep every pane in sync: each ScrollViewer's own ScrollChanged handler (wired in
+        /// the *_Loaded methods below) already calls SyncScroll to move its sibling(s) to match,
+        /// which is the exact same mechanism a mouse-driven scrollbar drag already goes through.</summary>
+        private ScrollViewer ResolveScrollViewerFor(ListView lv) =>
+            ReferenceEquals(lv, UnifiedListView) ? _unifiedScroll
+                : ReferenceEquals(lv, SideBySideLeftListView) ? _leftScroll
+                : _rightScroll;
+
         private void DiffTextSelection_KeyDown(object sender, KeyEventArgs e)
         {
             var lv = (ListView)sender;
             if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
             {
                 if (ResolveTextSelectionController(lv).TryCopySelection()) e.Handled = true;
+            }
+            else if ((e.Key == Key.PageUp || e.Key == Key.PageDown) && Keyboard.Modifiers == ModifierKeys.None)
+            {
+                var scrollViewer = ResolveScrollViewerFor(lv);
+                if (scrollViewer != null)
+                {
+                    if (e.Key == Key.PageUp) scrollViewer.PageUp(); else scrollViewer.PageDown();
+                    e.Handled = true;
+                }
             }
             else if (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control)
             {

@@ -18,6 +18,14 @@ namespace PickleGit.ViewModels
     {
         // ── Remote operations ─────────────────────────────────────────────────
 
+        /// <summary>Resolves the given remote's real default branch (e.g. "main") via its
+        /// <c>refs/remotes/&lt;name&gt;/HEAD</c> symbolic ref — used by <see cref="HostingViewModel"/>
+        /// to pick a Create-Pull-Request target that matches the actual remote default rather than
+        /// guessing "main" then "master". Returns null when that ref isn't set locally (nothing
+        /// resolved the remote's HEAD, e.g. a hand-added remote that was never cloned/`set-head`).</summary>
+        public Task<string> GetDefaultRemoteBranchAsync(string remoteName) =>
+            _git.Executor.RunAsync(() => _git.GetDefaultRemoteBranch(remoteName));
+
         /// <summary>Re-reads HEAD directly from disk right before a fetch/pull/push, in case an
         /// external change — another tab open on the same repo, or a git command run outside the
         /// app — moved the current branch since the last refresh. Acting on a stale cached

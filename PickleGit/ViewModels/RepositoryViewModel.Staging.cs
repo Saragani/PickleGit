@@ -271,6 +271,25 @@ namespace PickleGit.ViewModels
             }
         }
 
+        /// <summary>Backs the row's own inline '+' button specifically — always stages exactly the
+        /// clicked file, never expanding to the current multi-selection the way
+        /// <see cref="StageFileAsync"/> (shared by the context-menu "Stage" item and keyboard/menu
+        /// invocations, where "act on the selection" is the expected gesture) deliberately does.
+        /// Without this, staging one file via its own button could silently also stage every other
+        /// currently-selected file left over from an earlier Ctrl/Shift-click — the button gives no
+        /// visual indication selection even matters, so that read as "clicking + sometimes stages
+        /// more than one file" with no discoverable repro.</summary>
+        private async Task StageSingleFileAsync(object param)
+        {
+            if (!(param is FileChange fc)) return;
+            using (_watcher?.Suppress())
+            {
+                await _staging.StageAsync(new[] { fc.Path });
+                await LoadWorkingDirAsync();
+                await SyncDiffPaneAfterFileListChangeAsync();
+            }
+        }
+
         private async Task UnstageFileAsync(object param)
         {
             var targets = StagingService.ResolveTargets(_selectedStagedFiles, param);

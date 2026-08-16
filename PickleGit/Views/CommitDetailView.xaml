@@ -77,6 +77,14 @@
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext.File,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="Mark Unresolved"
+                                          Visibility="{Binding PlacementTarget.Tag.CanMarkUnresolved,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                    Converter={StaticResource BoolToVis}}"
+                                          Command="{Binding PlacementTarget.Tag.MarkUnresolvedCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.File,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <Separator/>
                                 <MenuItem Header="Open"
                                           Command="{Binding PlacementTarget.Tag.OpenFileCommand,
@@ -150,7 +158,7 @@
                                    Margin="6,0" TextTrimming="CharacterEllipsis" FontSize="11"/>
                         <Button Grid.Column="3" Content="+" Width="20" Height="20" FontSize="14"
                                 Style="{StaticResource ToolbarButton}" Padding="0"
-                                Command="{Binding DataContext.StageFileCommand,
+                                Command="{Binding DataContext.StageSingleFileCommand,
                                           RelativeSource={RelativeSource AncestorType=ListView}}"
                                 CommandParameter="{Binding File}"
                                 ToolTip="Stage"/>
@@ -188,6 +196,14 @@
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu},
                                                     Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"
                                           Command="{Binding PlacementTarget.Tag.MarkResolvedCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.File,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="Mark Unresolved"
+                                          Visibility="{Binding PlacementTarget.Tag.CanMarkUnresolved,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                    Converter={StaticResource BoolToVis}}"
+                                          Command="{Binding PlacementTarget.Tag.MarkUnresolvedCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext.File,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
@@ -828,7 +844,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="11"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   Text="{Binding ConflictInfo.ConflictedFiles.Count, StringFormat='{}{0} conflicted file(s)'}"/>
+                                   Text="{Binding ConflictInfo.RemainingFilesLabel, Mode=OneWay}"/>
                         <Button Grid.Column="1" Content="Resolve Conflicts…" FontSize="11" Padding="8,3"
                                 Style="{StaticResource ToolbarButton}"
                                 Command="{Binding OpenMergeEditorCommand}"/>
@@ -973,6 +989,14 @@
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                               CommandParameter="{Binding PlacementTarget.DataContext,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                    <MenuItem Header="Mark Unresolved"
+                                              Visibility="{Binding PlacementTarget.Tag.CanMarkUnresolved,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                        Converter={StaticResource BoolToVis}}"
+                                              Command="{Binding PlacementTarget.Tag.MarkUnresolvedCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{Binding PlacementTarget.DataContext,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                     <Separator/>
                                     <MenuItem Header="Open"
                                               Command="{Binding PlacementTarget.Tag.OpenFileCommand,
@@ -1113,7 +1137,7 @@
                                     <Button Grid.Column="2" Content="+" Width="20" Height="20"
                                 AutomationProperties.Name="Stage file"
                                             Style="{StaticResource ToolbarButton}" Padding="0"
-                                            Command="{Binding DataContext.StageFileCommand,
+                                            Command="{Binding DataContext.StageSingleFileCommand,
                                                       RelativeSource={RelativeSource AncestorType=ListView}}"
                                             CommandParameter="{Binding}"
                                             ToolTip="Stage"/>
@@ -1151,6 +1175,14 @@
                                                                 RelativeSource={RelativeSource AncestorType=ContextMenu},
                                                                 Converter={StaticResource EnumEqualsVis}, ConverterParameter=Conflicted}"
                                                       Command="{Binding PlacementTarget.Tag.MarkResolvedCommand,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                            <MenuItem Header="Mark Unresolved"
+                                                      Visibility="{Binding PlacementTarget.Tag.CanMarkUnresolved,
+                                                                RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                                Converter={StaticResource BoolToVis}}"
+                                                      Command="{Binding PlacementTarget.Tag.MarkUnresolvedCommand,
                                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                       CommandParameter="{Binding PlacementTarget.DataContext,
                                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>

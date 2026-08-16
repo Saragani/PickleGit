@@ -232,7 +232,8 @@
                                       IsEnabled="{Binding PlacementTarget.Tag.CanToggleSha,
                                                   RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                             <Separator/>
-                            <MenuItem Header="Smart Branch Visibility" IsCheckable="True"
+                            <MenuItem Header="Show current branch only" IsCheckable="True"
+                                      ToolTip="Unchecked: show commits from all branches. Checked: show only commits reachable from the current branch/HEAD."
                                       IsChecked="{Binding PlacementTarget.Tag.SmartBranchVisibility,
                                                   RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                             <Separator/>

@@ -34,6 +34,7 @@ namespace PickleGit.Controls
 
         private (int Row, int Ch)? _anchor;
         private (int Row, int Ch)? _focus;
+        private string _matchQuery;
         private Point _lastMousePosition;
         private int _autoScrollDirection;
         private ScrollViewer _scrollViewer;
@@ -99,6 +100,59 @@ namespace PickleGit.Controls
             int ch = Math.Max(PlainCharIndexAt(rowText, pointInRowText, textLength), SelectableStart(rowIndex));
             if (_anchor == null) _anchor = (rowIndex, ch);
             _focus = (rowIndex, ch);
+            UpdateOccurrenceHighlight();
+        }
+
+        /// <summary>Double-click word-select: expands the click point outward to the run of word
+        /// characters (letters, digits, underscore) surrounding it and selects exactly that run —
+        /// same anchor/focus mechanics as a plain click, just pre-expanded to word boundaries rather
+        /// than collapsed to a single point. A click that lands between words (whitespace/punctuation)
+        /// selects that single character instead of leaving a confusing zero-width no-op. Also feeds
+        /// <see cref="UpdateOccurrenceHighlight"/> — double-click-to-select-a-word is exactly the
+        /// gesture a normal code editor uses to also light up every other occurrence of that word.</summary>
+        public void SelectWordAt(ListViewItem container, TextBlock rowText, Point pointInRowText)
+        {
+            int rowIndex = _listView.ItemContainerGenerator.IndexFromContainer(container);
+            if (rowIndex < 0 || !IsRowSelectable(rowIndex)) return;
+            string text = _getRowText(_listView.Items[rowIndex]) ?? string.Empty;
+            int textLength = text.Length;
+            int selectableStart = SelectableStart(rowIndex);
+            int ch = Math.Max(PlainCharIndexAt(rowText, pointInRowText, textLength), selectableStart);
+
+            int start = ch, end = ch;
+            while (start > selectableStart && IsWordChar(text[start - 1])) start--;
+            while (end < textLength && IsWordChar(text[end])) end++;
+            if (start == end && end < textLength) end++;
+
+            _anchor = (rowIndex, start);
+            _focus = (rowIndex, end);
+            _listView.Focus();
+            UpdateOccurrenceHighlight();
+        }
+
+        private static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+
+        /// <summary>Decides which term (if any) gets the "highlight every other occurrence in this
+        /// pane" treatment in <see cref="Recompute"/>: the current selection's own text, trimmed of
+        /// surrounding whitespace, but only when the selection sits entirely on one row (a multi-row
+        /// selection is prose/code being copied, not a single token being inspected) and the trimmed
+        /// text is more than one character (skips a bare single-character selection, which would
+        /// otherwise light up nearly the whole pane on any common letter). Called once a selection
+        /// gesture actually finishes — mouse-up, Ctrl+click-extend, or double-click word-select — not
+        /// on every drag tick, since scanning every realized row's text is proportional to pane size.</summary>
+        private void UpdateOccurrenceHighlight()
+        {
+            _matchQuery = null;
+            if (_anchor != null && _focus != null)
+            {
+                GetOrderedRange(out int lo, out int loCh, out int hi, out int hiCh);
+                if (lo == hi && IsRowSelectable(lo))
+                {
+                    string text = _getRowText(_listView.Items[lo]) ?? string.Empty;
+                    string trimmed = SafeSubstring(text, loCh, hiCh).Trim();
+                    if (trimmed.Length > 1) _matchQuery = trimmed;
+                }
+            }
             Recompute();
         }
 
@@ -153,6 +207,7 @@ namespace PickleGit.Controls
 
             _focus = (row, ch);
             if (!extendSelection) _anchor = _focus;
+            _matchQuery = null; // caret moved — any occurrence highlight from the prior selection no longer applies
             Recompute();
             if (_listView.Items.Count > row) _listView.ScrollIntoView(_listView.Items[row]);
             return true;
@@ -181,6 +236,10 @@ namespace PickleGit.Controls
             int textLength = (_getRowText(_listView.Items[rowIndex]) ?? string.Empty).Length;
             int ch = Math.Max(PlainCharIndexAt(rowText, e.GetPosition(rowText), textLength), SelectableStart(rowIndex));
             _anchor = _focus = (rowIndex, ch);
+            // A fresh drag starting clears any occurrence highlight left over from the previous
+            // selection immediately, rather than leaving it visible (and increasingly stale) until
+            // this new gesture finishes — EndSelection recomputes it for the new selection.
+            _matchQuery = null;
             IsSelecting = true;
             _listView.Focus();
             // UIElement.CaptureMouse()/Mouse.Capture() silently fails (returns false, capture stays
@@ -215,6 +274,7 @@ namespace PickleGit.Controls
             _autoScrollTimer.Stop();
             if (Mouse.Captured == _overlay) Mouse.Capture(null);
             _overlay.IsHitTestVisible = false;
+            UpdateOccurrenceHighlight();
         }
 
         /// <summary>Drops the current selection entirely — must be called whenever the underlying
@@ -225,6 +285,7 @@ namespace PickleGit.Controls
         {
             _anchor = null;
             _focus = null;
+            _matchQuery = null;
             _overlay.Children.Clear();
         }
 
@@ -239,6 +300,21 @@ namespace PickleGit.Controls
             GetOrderedRange(out int lo, out int loCh, out int hi, out int hiCh);
             var brush = _overlay.TryFindResource("TextSelectionBrush") as Brush;
             if (brush == null) return;
+
+            // A "rest of the line" span's right edge (below) is otherwise RowText's own ActualWidth
+            // transformed into overlay space — correct for a row that fits within the pane, but for
+            // one wide enough to need horizontal scrolling (see the ClipToBounds comment on the
+            // Canvas itself in DiffView.xaml/MergeConflictEditorWindow.xaml) that can be far wider
+            // than the pane's viewport. ClipToBounds alone only stops it at the overlay's own edge,
+            // which spans this ListView's FULL control width — content column AND the vertical
+            // scrollbar's own reserved column (see DarkListView's ControlTemplate: content and
+            // scrollbar are sibling Grid columns, both inside the same outer Border the overlay
+            // Canvas is sized to match) — so without an explicit cap here the highlight visibly
+            // painted straight through the scrollbar's track instead of stopping at its left edge.
+            var scrollViewer = ResolveScrollViewer();
+            double? contentRightEdge = scrollViewer != null && scrollViewer.ViewportWidth > 0
+                ? _listView.TransformToVisual(_overlay).Transform(new Point(0, 0)).X + scrollViewer.ViewportWidth
+                : (double?)null;
 
             for (int i = lo; i <= hi; i++)
             {
@@ -276,7 +352,7 @@ namespace PickleGit.Controls
                 else if (i == lo)
                 {
                     left = XForCharIndex(textBlock, Math.Max(loCh, selectableStart), rowTextLength);
-                    right = textBottomRight.X;
+                    right = contentRightEdge.HasValue ? Math.Min(textBottomRight.X, contentRightEdge.Value) : textBottomRight.X;
                 }
                 else if (i == hi)
                 {
@@ -286,7 +362,7 @@ namespace PickleGit.Controls
                 else
                 {
                     left = XForCharIndex(textBlock, selectableStart, rowTextLength);
-                    right = textBottomRight.X;
+                    right = contentRightEdge.HasValue ? Math.Min(textBottomRight.X, contentRightEdge.Value) : textBottomRight.X;
                 }
 
                 if (right < left) { var t = left; left = right; right = t; }
@@ -308,6 +384,58 @@ namespace PickleGit.Controls
                 Canvas.SetLeft(rect, isCaret ? caretLeft - 0.75 : left);
                 Canvas.SetTop(rect, topLeft.Y);
                 _overlay.Children.Add(rect);
+            }
+
+            DrawOccurrenceHighlights(lo, loCh, hi, hiCh);
+        }
+
+        /// <summary>Draws a lighter overlay rectangle over every occurrence of <see cref="_matchQuery"/>
+        /// across every currently-realized row — the "highlight other occurrences of the selected
+        /// text" behavior. Skips the exact span the primary selection itself already covers (passed in
+        /// as <paramref name="lo"/>/<paramref name="loCh"/>/<paramref name="hi"/>/<paramref name="hiCh"/>,
+        /// the same ordered range <see cref="Recompute"/> just used) so that span isn't double-drawn
+        /// under two different brushes. Runs over every row in the pane, not just the selection's own
+        /// range — unlike the primary-selection loop above, occurrences can appear anywhere.</summary>
+        private void DrawOccurrenceHighlights(int lo, int loCh, int hi, int hiCh)
+        {
+            if (string.IsNullOrEmpty(_matchQuery)) return;
+            var matchBrush = _overlay.TryFindResource("TextMatchHighlightBrush") as Brush;
+            if (matchBrush == null) return;
+
+            for (int i = 0; i < _listView.Items.Count; i++)
+            {
+                if (!IsRowSelectable(i)) continue;
+                var container = _listView.ItemContainerGenerator.ContainerFromIndex(i) as ListViewItem;
+                if (container == null || !container.IsArrangeValid) continue;
+                var textBlock = FindNamedDescendant<TextBlock>(container, "RowText");
+                if (textBlock == null) continue;
+
+                string rowText = _getRowText(_listView.Items[i]) ?? string.Empty;
+                int searchFrom = SelectableStart(i);
+                int idx;
+                while ((idx = rowText.IndexOf(_matchQuery, searchFrom, StringComparison.Ordinal)) >= 0)
+                {
+                    int matchEnd = idx + _matchQuery.Length;
+                    searchFrom = idx + 1;
+                    bool isPrimarySpan = i == lo && i == hi && idx == loCh && matchEnd == hiCh;
+                    if (isPrimarySpan) continue;
+
+                    var topLeft = container.TransformToVisual(_overlay).Transform(new Point(0, 0));
+                    var bottomRight = container.TransformToVisual(_overlay).Transform(new Point(container.ActualWidth, container.ActualHeight));
+                    double left = XForCharIndex(textBlock, idx, rowText.Length);
+                    double right = XForCharIndex(textBlock, matchEnd, rowText.Length);
+                    if (right < left) { var t = left; left = right; right = t; }
+
+                    var rect = new System.Windows.Shapes.Rectangle
+                    {
+                        Width = Math.Max(0, right - left),
+                        Height = Math.Max(0, bottomRight.Y - topLeft.Y),
+                        Fill = matchBrush
+                    };
+                    Canvas.SetLeft(rect, left);
+                    Canvas.SetTop(rect, topLeft.Y);
+                    _overlay.Children.Add(rect);
+                }
             }
         }
 
@@ -366,7 +494,10 @@ namespace PickleGit.Controls
             int textLength = (_getRowText(_listView.Items[rowIndex]) ?? string.Empty).Length;
             int ch = Math.Max(PlainCharIndexAt(textBlock, pointInText, textLength), SelectableStart(rowIndex));
             _focus = (rowIndex, ch);
-            Recompute();
+            // Live occurrence highlighting: recompute on every drag tick (not just at mouse-up) so
+            // matches light up as the selection grows, the same way the primary highlight itself
+            // already updates live. UpdateOccurrenceHighlight calls Recompute() itself.
+            UpdateOccurrenceHighlight();
         }
 
         private void UpdateAutoScrollState(Point pointInListView)
@@ -379,11 +510,7 @@ namespace PickleGit.Controls
             _autoScrollDirection = direction;
             if (direction != 0)
             {
-                if (_scrollViewer == null)
-                {
-                    _listView.ApplyTemplate();
-                    _scrollViewer = FindNamedDescendant<ScrollViewer>(_listView, null);
-                }
+                ResolveScrollViewer();
                 if (!_autoScrollTimer.IsEnabled) _autoScrollTimer.Start();
             }
             else
@@ -391,6 +518,21 @@ namespace PickleGit.Controls
                 _pendingOffset = null;
                 _autoScrollTimer.Stop();
             }
+        }
+
+        /// <summary>Finds and caches this pane's ScrollViewer (template part of the ListView) —
+        /// needed both for auto-scroll-while-dragging and, in <see cref="Recompute"/>, to cap a
+        /// "rest of the line" highlight at the actual visible content width. ApplyTemplate() forces
+        /// the template to exist first; without it the descendant search can come up empty (see
+        /// CLAUDE.md's "ApplyTemplate() may still be needed after Loaded").</summary>
+        private ScrollViewer ResolveScrollViewer()
+        {
+            if (_scrollViewer == null)
+            {
+                _listView.ApplyTemplate();
+                _scrollViewer = FindNamedDescendant<ScrollViewer>(_listView, null);
+            }
+            return _scrollViewer;
         }
 
         // ScrollViewer.ScrollToVerticalOffset only REQUESTS a scroll — the actual Measure/Arrange

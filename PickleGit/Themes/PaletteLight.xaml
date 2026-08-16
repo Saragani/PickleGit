@@ -86,4 +86,10 @@
     <!-- Find-in-diff match highlight — amber, distinct from the green/red word-diff highlight hue. -->
     <SolidColorBrush x:Key="DiffSearchMatchBrush" Color="#66E0B000"/>
     <SolidColorBrush x:Key="DiffSearchCurrentMatchBrush" Color="#99FF9800"/>
+
+    <!-- "Highlight other occurrences" overlay — drawn on every other instance of whatever text is
+         currently selected in a diff/conflict pane. Teal, distinct from both TextSelectionBrush
+         (violet, the actual selection) and DiffSearchMatchBrush (amber, the separate find-in-diff
+         feature) so all three can coexist on screen without being confused for one another. -->
+    <SolidColorBrush x:Key="TextMatchHighlightBrush" Color="#4D009688"/>
 </ResourceDictionary>

@@ -20,6 +20,7 @@ namespace PickleGit.ViewModels
     public class HostingViewModel : BaseViewModel
     {
         private readonly RepositoryViewModel _repo;
+        private string _originRemoteName;
 
         public HostingViewModel(RepositoryViewModel repo)
         {
@@ -74,19 +75,38 @@ namespace PickleGit.ViewModels
             catch { }
         }
 
-        private void CreatePullRequest(object parameter)
+        private async void CreatePullRequest(object parameter)
         {
             if (HostingProvider == null) return;
             var source = (parameter as BranchInfo)?.DisplayName ?? _repo.CurrentBranch;
             if (string.IsNullOrEmpty(source) || source.StartsWith("detached", StringComparison.Ordinal)) return;
 
-            var target = _repo.RemoteBranches
-                .Select(b => b.DisplayName)
-                .FirstOrDefault(n => string.Equals(n, "main", StringComparison.OrdinalIgnoreCase))
-                ?? _repo.RemoteBranches.Select(b => b.DisplayName)
-                .FirstOrDefault(n => string.Equals(n, "master", StringComparison.OrdinalIgnoreCase))
-                ?? _repo.RemoteBranches.Select(b => b.DisplayName).FirstOrDefault(n => n != source);
+            var target = await ResolveDefaultTargetBranchAsync(source);
             ShowCreatePullRequestDialog(source, target);
+        }
+
+        /// <summary>Picks the PR target branch: the remote's real default branch (resolved from its
+        /// <c>refs/remotes/&lt;name&gt;/HEAD</c> symbolic ref — the same source `git clone` itself
+        /// uses) when available and not the source branch itself, falling back to a main/master/
+        /// first-other-branch guess only when that ref isn't set locally (e.g. a hand-added remote
+        /// that was never cloned or `set-head`-resolved). Guessing "main" then "master" unconditionally
+        /// used to pick the wrong branch for any repo whose real default was something else.</summary>
+        private async Task<string> ResolveDefaultTargetBranchAsync(string source)
+        {
+            if (!string.IsNullOrEmpty(_originRemoteName))
+            {
+                var resolved = await _repo.GetDefaultRemoteBranchAsync(_originRemoteName);
+                if (!string.IsNullOrEmpty(resolved) && !string.Equals(resolved, source, StringComparison.Ordinal) &&
+                    _repo.RemoteBranches.Any(b => string.Equals(b.DisplayName, resolved, StringComparison.Ordinal)))
+                    return resolved;
+            }
+
+            return _repo.RemoteBranches
+                .Select(b => b.DisplayName)
+                .FirstOrDefault(n => string.Equals(n, "main", StringComparison.OrdinalIgnoreCase) && n != source)
+                ?? _repo.RemoteBranches.Select(b => b.DisplayName)
+                .FirstOrDefault(n => string.Equals(n, "master", StringComparison.OrdinalIgnoreCase) && n != source)
+                ?? _repo.RemoteBranches.Select(b => b.DisplayName).FirstOrDefault(n => n != source);
         }
 
         /// <summary>Invoked when a branch is dropped onto another branch — both endpoints are already known.</summary>
@@ -179,6 +199,7 @@ namespace PickleGit.ViewModels
         public async Task LoadPullRequestsAsync()
         {
             var origin = _repo.Remotes.FirstOrDefault(r => r.Name == "origin") ?? _repo.Remotes.FirstOrDefault();
+            _originRemoteName = origin?.Name;
             HostingProvider = origin != null ? HostingProviderFactory.Create(origin.Url) : null;
             RaisePropertyChanged(nameof(HostingProvider));
             RaisePropertyChanged(nameof(HasHostingProvider));

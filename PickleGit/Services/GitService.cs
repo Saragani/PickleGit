@@ -234,7 +234,12 @@ namespace PickleGit.Services
         {
             reachedLimit = false;
             const string Format = "%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%ce%x1f%cI%x1f%B";
-            var args = $"log --branches --remotes HEAD --topo-order -z -n {maxCount + 1} --format={Format}";
+            // --date-order (not --topo-order): both keep parents after children, but --topo-order
+            // otherwise groups commits by lineage (all of one branch, then all of another) while
+            // --date-order interleaves them by commit timestamp as much as the parent/child
+            // constraint allows — matching the LibGit2Sharp fallback below's
+            // Topological | Time sort strategy, and what "ordered by date" means to a user.
+            var args = $"log --branches --remotes HEAD --date-order -z -n {maxCount + 1} --format={Format}";
             var result = Cli.RunAsync(args).GetAwaiter().GetResult();
             if (!result.Success) throw new InvalidOperationException(result.ErrorText);
 
@@ -1313,6 +1318,27 @@ namespace PickleGit.Services
             return _repo.Network.Remotes
                 .Select(r => new RemoteInfo { Name = r.Name, Url = r.Url, PushUrl = r.PushUrl })
                 .ToList();
+        }
+
+        /// <summary>Resolves a remote's actual default branch (e.g. "main") via the
+        /// <c>refs/remotes/&lt;name&gt;/HEAD</c> symbolic ref that git itself sets during clone (or via
+        /// <c>git remote set-head</c>) — the same source `git clone`'s own initial checkout relies on.
+        /// Returns null when that ref is absent (a remote added by hand, or one whose HEAD was never
+        /// resolved via `git remote set-head &lt;name&gt; --auto`) — callers should fall back to a
+        /// heuristic (main/master/first) rather than guessing further here. Deliberately not a
+        /// hardcoded "main" or "master" guess: a repo whose real default branch is neither (e.g.
+        /// "develop", "trunk") would otherwise never get a correct default PR target.</summary>
+        public string GetDefaultRemoteBranch(string remoteName)
+        {
+            EnsureOpen();
+            if (string.IsNullOrEmpty(remoteName)) return null;
+            var reference = _repo.Refs["refs/remotes/" + remoteName + "/HEAD"];
+            var targetIdentifier = (reference as SymbolicReference)?.TargetIdentifier;
+            if (string.IsNullOrEmpty(targetIdentifier)) return null;
+            var prefix = "refs/remotes/" + remoteName + "/";
+            return targetIdentifier.StartsWith(prefix, StringComparison.Ordinal)
+                ? targetIdentifier.Substring(prefix.Length)
+                : null;
         }
 
         public void AddRemote(string name, string url)
