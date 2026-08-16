@@ -148,7 +148,16 @@ namespace PickleGit.Views
             _sideBySideRightTextSelection.ClearSelection();
 
             var vm = (RepositoryViewModel)sender;
-            if (vm.FlatDiffItems.Count == 0 && vm.SideBySideItems.Count == 0) return; // the pre-load clear, not real content yet
+            // FlatDiffItems and SideBySideItems are two separate properties that this same load
+            // always reassigns back-to-back (never atomically) — so this handler runs TWICE for one
+            // real content arrival: once right after FlatDiffItems is set (SideBySideItems still the
+            // stale empty/previous-file array from the load's own initial clear) and once after
+            // SideBySideItems catches up. Requiring BOTH non-empty (not just "not both empty") skips
+            // that first, transitional call instead of treating it as "content has arrived" and
+            // consuming _pendingDiffScrollReset a step early — which left the *second* call falling
+            // through to the offset-restore branch and clobbering the just-reset scroll position
+            // back to the previous file's offset.
+            if (vm.FlatDiffItems.Count == 0 || vm.SideBySideItems.Count == 0) return; // not real content yet
 
             if (_pendingDiffScrollReset)
             {
@@ -354,6 +363,17 @@ namespace PickleGit.Views
 
             if (TryGetRowTextForContentClick(lv, container, position, out var rowText))
             {
+                // TryGetRowTextForContentClick only checks that the click landed on/right of the
+                // row's "RowText" element — a hunk-header row has one too (bound to Header), even
+                // though BeginSelection is about to refuse it via its own IsRowSelectable check
+                // (hunk headers are excluded, see IsSideBySideRowSelectable below). Clearing the
+                // OTHER pane's selection unconditionally, before that refusal happens, meant a
+                // stray click on a hunk header — which does nothing at all in the pane it lands in —
+                // still destroyed a valid, unrelated selection the user was holding on the other
+                // side. Checking the same selectability here first keeps a no-op click a no-op
+                // everywhere, not just in the pane it was clicked in.
+                if (!IsSideBySideRowSelectable(container.Content as SideBySideItem)) { e.Handled = true; return; }
+
                 // The two panes are independent DiffTextSelectionController instances, so nothing
                 // stops both from holding a selection at once by default — but a single logical
                 // selection that's either on the left or the right (never both) is what a normal
@@ -512,6 +532,12 @@ namespace PickleGit.Views
                 // it drives) and apply our own text SelectAll() instead — synchronous, so there's no
                 // visible flicker between the two.
                 lv.SelectedItems.Clear();
+                // Same "only one pane holds a selection at a time" rule the mouse-down path already
+                // enforces (see SideBySideListView_PreviewMouseLeftButtonDown) — without this,
+                // selecting text in one pane and then pressing Ctrl+A in the other left BOTH panes
+                // holding an active, independently highlighted/copyable selection at once.
+                if (ReferenceEquals(lv, SideBySideLeftListView)) _sideBySideRightTextSelection.ClearSelection();
+                else if (ReferenceEquals(lv, SideBySideRightListView)) _sideBySideLeftTextSelection.ClearSelection();
                 ResolveTextSelectionController(lv).SelectAll();
                 e.Handled = true;
             }

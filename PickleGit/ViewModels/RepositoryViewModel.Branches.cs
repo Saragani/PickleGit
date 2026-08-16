@@ -38,12 +38,24 @@ namespace PickleGit.ViewModels
             }
         }
 
-        private void RenameBranch(object param)
+        private async void RenameBranch(object param)
         {
             if (!(param is BranchInfo bi) || bi.IsRemote) return;
             var newName = DialogService.Prompt("Rename Branch", $"New name for '{bi.Name}':", bi.Name, "Rename");
             if (string.IsNullOrWhiteSpace(newName) || newName == bi.Name) return;
-            _ = RunThenRefresh($"Renaming {bi.Name} → {newName}…", () => _git.RenameBranch(bi.Name, newName));
+            var oldName = bi.Name;
+            if (await RunThenRefresh($"Renaming {oldName} → {newName}…", () => _git.RenameBranch(oldName, newName)))
+            {
+                // _starredBranches is keyed by branch name only — without this, a starred branch's
+                // entry stays under its old name forever (silently dropping the star, since nothing
+                // named that way exists anymore) and can later be inherited by an unrelated branch
+                // someone creates with that same old name.
+                if (_starredBranches.Remove(oldName))
+                {
+                    _starredBranches.Add(newName);
+                    AppSettings.SaveStarredBranches(RepoPath, _starredBranches);
+                }
+            }
         }
 
         /// <summary>Pure UI-state toggle — no git call, so no RunThenRefresh/busy indicator.</summary>
@@ -146,6 +158,11 @@ namespace PickleGit.ViewModels
                         BranchName = bi.Name,
                         Sha = bi.TipSha
                     };
+                    // Same name-only-keying concern as RenameBranch: leaving this branch's star
+                    // entry behind would auto-star a later, unrelated branch someone creates with
+                    // the same name — drop it now rather than let it linger as an orphaned entry.
+                    if (_starredBranches.Remove(bi.Name))
+                        AppSettings.SaveStarredBranches(RepoPath, _starredBranches);
                 }
             }
         }

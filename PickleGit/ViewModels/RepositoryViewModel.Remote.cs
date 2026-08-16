@@ -94,8 +94,8 @@ namespace PickleGit.ViewModels
                                 var result = _git.Cli.RunAsync(args, new GitCliOptions { Progress = progress, Env = env }).GetAwaiter().GetResult();
                                 if (!result.Success && IsAuthRejectionSignature(result.ErrorText))
                                 {
-                                    PurgeRejectedCredentialForRetry(r.Url);
-                                    if (TryAutoResolveCredential(r.Url))
+                                    var rejectedUser = PurgeRejectedCredentialForRetry(r.Url);
+                                    if (TryAutoResolveCredential(r.Url, rejectedUser))
                                     {
                                         var freshEnv = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, r.Url);
                                         result = _git.Cli.RunAsync(args, new GitCliOptions { Progress = progress, Env = freshEnv }).GetAwaiter().GetResult();
@@ -207,8 +207,8 @@ namespace PickleGit.ViewModels
 
                 if (!result.Success && authRetryRemoteUrl != null && IsAuthRejectionSignature(result.ErrorText))
                 {
-                    PurgeRejectedCredentialForRetry(authRetryRemoteUrl);
-                    if (TryAutoResolveCredential(authRetryRemoteUrl))
+                    var rejectedUser = PurgeRejectedCredentialForRetry(authRetryRemoteUrl);
+                    if (TryAutoResolveCredential(authRetryRemoteUrl, rejectedUser))
                     {
                         var freshEnv = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, authRetryRemoteUrl);
                         result = _git.Cli.RunAsync(args, new GitCliOptions
@@ -252,8 +252,8 @@ namespace PickleGit.ViewModels
 
                 if (!result.Success && authRetryRemoteUrl != null && IsAuthRejectionSignature(result.ErrorText))
                 {
-                    PurgeRejectedCredentialForRetry(authRetryRemoteUrl);
-                    if (TryAutoResolveCredential(authRetryRemoteUrl))
+                    var rejectedUser = PurgeRejectedCredentialForRetry(authRetryRemoteUrl);
+                    if (TryAutoResolveCredential(authRetryRemoteUrl, rejectedUser))
                     {
                         var freshEnv = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, authRetryRemoteUrl);
                         result = _git.Cli.RunAsync(args, new GitCliOptions
@@ -464,14 +464,17 @@ namespace PickleGit.ViewModels
         /// RunWorkAsync's catch does for a definitive failure, but WITHOUT forcing the interactive
         /// dialog, since the caller is about to give TryAutoResolveCredential a chance to find a
         /// fresh one first. Safe to call from the executor thread — RemoteUsername/RemotePassword
-        /// are plain auto-properties with no change notification, so there's no cross-thread hazard.</summary>
-        private void PurgeRejectedCredentialForRetry(string remoteUrl)
+        /// are plain auto-properties with no change notification, so there's no cross-thread hazard.
+        /// Returns the username that was actually rejected (or null), so the caller can hand it to
+        /// TryAutoResolveCredential and avoid silently picking a DIFFERENT stored account for the
+        /// same host.</summary>
+        private string PurgeRejectedCredentialForRetry(string remoteUrl)
         {
             var failedUser = RemoteUsername;
             var failedPassword = RemotePassword;
             RemoteUsername = null;
             RemotePassword = null;
-            if (string.IsNullOrEmpty(failedUser) || string.IsNullOrEmpty(remoteUrl)) return;
+            if (string.IsNullOrEmpty(failedUser) || string.IsNullOrEmpty(remoteUrl)) return failedUser;
             try
             {
                 if (Uri.TryCreate(remoteUrl, UriKind.Absolute, out var uri))
@@ -479,6 +482,7 @@ namespace PickleGit.ViewModels
             }
             catch { }
             Services.CredentialStore.RejectViaGitCredentialHelper(remoteUrl, failedUser, failedPassword);
+            return failedUser;
         }
 
         /// <summary>Synchronous variant of EnsureCredentialsAsync's auto-lookup chain (own store →
@@ -486,17 +490,28 @@ namespace PickleGit.ViewModels
         /// never shows the interactive dialog. Used for one silent recovery attempt right after
         /// PurgeRejectedCredentialForRetry: a token-based credential manager (GCM) can rotate/refresh
         /// a rejected token in the background with no visible prompt, so re-asking immediately often
-        /// already has a fresh one ready — confirmed this happens in practice against Bitbucket.</summary>
-        private bool TryAutoResolveCredential(string remoteUrl)
+        /// already has a fresh one ready — confirmed this happens in practice against Bitbucket.
+        ///
+        /// <paramref name="expectedUser"/> is the username that was just rejected (from
+        /// PurgeRejectedCredentialForRetry) — own-store entries are host-keyed only, so on a machine
+        /// with two stored accounts for the same host (e.g. personal + work) a bare host match would
+        /// take whichever happens to come back first, silently retrying — and possibly succeeding —
+        /// as a different identity than the one actually configured for this remote. Matching on
+        /// (host, expectedUser) keeps this path to "the same account came back", which is exactly
+        /// what the GCM-rotation scenario above needs; anything else falls through to the git
+        /// credential helper below, which resolves per-URL/protocol via git's own logic rather than
+        /// PickleGit's ambiguous multi-account list.</summary>
+        private bool TryAutoResolveCredential(string remoteUrl, string expectedUser = null)
         {
             if (string.IsNullOrEmpty(remoteUrl)) return false;
             try
             {
-                if (Uri.TryCreate(remoteUrl, UriKind.Absolute, out var uri))
+                if (Uri.TryCreate(remoteUrl, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(expectedUser))
                 {
                     foreach (var (host, user) in Services.CredentialStore.ListAll())
                     {
                         if (!string.Equals(host, uri.Host, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (!string.Equals(user, expectedUser, StringComparison.Ordinal)) continue;
                         var pw = Services.CredentialStore.Load(host, user);
                         if (pw != null) { RemoteUsername = user; RemotePassword = pw; return true; }
                     }

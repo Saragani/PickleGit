@@ -1733,13 +1733,20 @@ namespace PickleGit.Services
         /// limit (confirmed hit in production — see git log for RefreshLfsStatusForCheckoutAsync).</summary>
         private void DiscardPathsCli(IReadOnlyCollection<string> paths)
         {
-            foreach (var batch in ChunkPathsByLength(paths))
+            // Reopen() unconditionally, even when a later batch throws — earlier batches already
+            // mutated the working tree/index by that point, and skipping this via the exception
+            // would leave the cached libgit2 handle serving pre-discard state against a working
+            // tree that's actually partially discarded.
+            try
             {
-                var result = Cli.RunAsync("checkout HEAD -- " + string.Join(" ", batch.Select(Git.CliGitService.Quote)))
-                    .GetAwaiter().GetResult();
-                if (!result.Success) throw new InvalidOperationException(result.ErrorText);
+                foreach (var batch in ChunkPathsByLength(paths))
+                {
+                    var result = Cli.RunAsync("checkout HEAD -- " + string.Join(" ", batch.Select(Git.CliGitService.Quote)))
+                        .GetAwaiter().GetResult();
+                    if (!result.Success) throw new InvalidOperationException(result.ErrorText);
+                }
             }
-            Reopen();
+            finally { Reopen(); }
         }
 
         /// <summary>Splits a path list into batches whose joined length stays comfortably under

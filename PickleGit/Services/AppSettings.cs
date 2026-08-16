@@ -51,8 +51,13 @@ namespace PickleGit.Services
             public Dictionary<string, List<string>> StarredBranchesByRepo { get; set; }
                 = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
-            /// <summary>Sidebar local-branch filter — <see cref="Models.BranchFilterMode"/> name.</summary>
-            public string BranchFilterMode { get; set; } = "All";
+            /// <summary>Sidebar local-branch filter, per repo — <see cref="Models.BranchFilterMode"/>
+            /// name. Keyed like StarredBranchesByRepo: the starred set itself is per-repo, so a
+            /// global filter mode meant a repo with zero starred branches could inherit "Starred
+            /// Only" from whichever repo/tab set it last, showing an empty branch list with no
+            /// explanation until the user noticed and flipped it back.</summary>
+            public Dictionary<string, string> BranchFilterModeByRepo { get; set; }
+                = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             public bool SidebarLocalBranchesExpanded   { get; set; } = true;
             public bool SidebarRemoteBranchesExpanded  { get; set; } = true;
@@ -258,14 +263,24 @@ namespace PickleGit.Services
             catch { }
         }
 
-        public static Models.BranchFilterMode LoadBranchFilterMode() =>
-            Enum.TryParse((Load() ?? new SettingsData()).BranchFilterMode, out Models.BranchFilterMode mode)
-                ? mode : Models.BranchFilterMode.All;
-
-        public static void SaveBranchFilterMode(Models.BranchFilterMode mode)
+        public static Models.BranchFilterMode LoadBranchFilterMode(string repoPath)
         {
+            var d = Load() ?? new SettingsData();
+            if (string.IsNullOrEmpty(repoPath) ||
+                d.BranchFilterModeByRepo == null ||
+                !d.BranchFilterModeByRepo.TryGetValue(repoPath, out var s) ||
+                !Enum.TryParse(s, out Models.BranchFilterMode mode))
+                return Models.BranchFilterMode.All;
+            return mode;
+        }
+
+        public static void SaveBranchFilterMode(string repoPath, Models.BranchFilterMode mode)
+        {
+            if (string.IsNullOrEmpty(repoPath)) return;
             var data = Load() ?? new SettingsData();
-            data.BranchFilterMode = mode.ToString();
+            if (data.BranchFilterModeByRepo == null)
+                data.BranchFilterModeByRepo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            data.BranchFilterModeByRepo[repoPath] = mode.ToString();
             Save(data);
         }
 

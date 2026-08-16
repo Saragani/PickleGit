@@ -253,7 +253,10 @@ namespace PickleGit.Views
                 g += (255 - g) * 0.3;
                 b += (255 - b) * 0.3;
             }
-            return Color.FromRgb((byte)r, (byte)g, (byte)b);
+            // Color.FromRgb forces alpha to 255 — preserve the original alpha instead, so a
+            // (currently hypothetical, no built-in highlighting color actually does this today)
+            // semi-transparent foreground isn't silently made fully opaque by this correction.
+            return Color.FromArgb(c.A, (byte)r, (byte)g, (byte)b);
         }
 
         // Mirrors WordDiffHighlighter.SyntaxBrushes' colors exactly, matched by AvalonEdit's own

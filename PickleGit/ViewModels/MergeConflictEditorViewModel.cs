@@ -43,9 +43,12 @@ namespace PickleGit.ViewModels
         private int? _pickOrder;
         public int? PickOrder { get => _pickOrder; set => Set(ref _pickOrder, value); }
 
-        /// <summary>Flips Included — bound to a click anywhere on the line's row (not just its
-        /// hover glyph), and reused as-is by the Result pane's hover "remove" affordance (a line
-        /// shown there is always currently Included, so toggling it there always means "remove").</summary>
+        /// <summary>Flips Included — bound to the line's small hover/pick glyph (see
+        /// ConflictPaneLeftLineTemplate/RightLineTemplate's GlyphCircle in
+        /// MergeConflictEditorWindow.xaml, not a click anywhere on the row — the row's own text is
+        /// plain selectable/copyable content, handled separately by DiffTextSelectionController),
+        /// and reused as-is by the Result pane's hover "remove" affordance (a line shown there is
+        /// always currently Included, so toggling it there always means "remove").</summary>
         public ICommand ToggleCommand { get; }
 
         public ConflictLineOption(string text, Action<ConflictLineOption> onToggle)
@@ -744,30 +747,44 @@ namespace PickleGit.ViewModels
         /// <paramref name="cursor"/> onward, first verbatim, then — if that fails — with
         /// progressively more of its own leading lines dropped (up to
         /// <see cref="MaxAnchorLeadingLinesDropped"/>), returning the START position of whichever
-        /// attempt matches first, plus (via <paramref name="matchedLength"/>) how much of the
-        /// (possibly-trimmed) text that match actually covers — callers that need the position right
-        /// AFTER the match (advancing past a Context run) add the two themselves; a block's own
-        /// "bound my slice at the next Context" caller wants the bare start instead, so returning
-        /// only the end here (as an earlier version of this method did) silently made a block's slice
-        /// swallow the entire next Context run into its own "base" content instead of stopping at its
-        /// start — confirmed on a real file, where Add's own base line incorporated the whole of
-        /// Subtract's signature+body+Multiply's signature too, and every position after it in the
-        /// file was then off by that same amount, duplicating content downstream.
+        /// attempt matches first AND is unambiguous (see <see cref="HasLaterOccurrence"/>), plus
+        /// (via <paramref name="matchedLength"/>) how much of the (possibly-trimmed) text that match
+        /// actually covers — callers that need the position right AFTER the match (advancing past a
+        /// Context run) add the two themselves; a block's own "bound my slice at the next Context"
+        /// caller wants the bare start instead, so returning only the end here (as an earlier version
+        /// of this method did) silently made a block's slice swallow the entire next Context run into
+        /// its own "base" content instead of stopping at its start — confirmed on a real file, where
+        /// Add's own base line incorporated the whole of Subtract's signature+body+Multiply's
+        /// signature too, and every position after it in the file was then off by that same amount,
+        /// duplicating content downstream.
         ///
         /// This directly covers the case both this method's own doc comment and
         /// ApplyGitAncestorText's already describe: both branches independently converge on the same
         /// *new* trailing text (e.g. both extracting a variable and both ending with "return
         /// result;") that the real ancestor never had — so the run's own leading line(s) won't be
-        /// found verbatim, but the unchanged lines after them usually still are. Returns -1 only if
-        /// even the shortest attempt fails (dropping down to one line is the floor — text.Length == 0
-        /// is handled separately by the caller, matching over the empty string isn't meaningful
-        /// here).</summary>
+        /// found verbatim, but the unchanged lines after them usually still are. Returns -1 if even
+        /// the shortest attempt fails (dropping down to one line is the floor — text.Length == 0 is
+        /// handled separately by the caller, matching over the empty string isn't meaningful here) —
+        /// or if every attempt that DID match was ambiguous (see below).
+        ///
+        /// Real source files are full of short, repeated lines — a bare "}", a blank line, "return
+        /// null;" — that recur many times across a file. Blindly taking IndexOf's first hit past
+        /// cursor (as an earlier version of this method did) risked locking onto the wrong
+        /// occurrence with no way to tell: the block's BaseText then gets silently sliced from the
+        /// wrong window and presented as a safe, auto-resolved default with no "unresolved" warning,
+        /// desyncing every later block's position in the file by the same amount. Each drop level
+        /// making the search text progressively shorter and more generic only makes this worse, not
+        /// better. Rather than trying to guess which occurrence is "right" with no real signal to go
+        /// on, a match that recurs again later in the ancestor (from this same cursor) is treated as
+        /// unresolvably ambiguous and skipped — consistent with this method's existing philosophy
+        /// elsewhere (see ApplyGitAncestorText's own remarks) of leaving a genuinely ambiguous region
+        /// unfilled rather than silently committing to a guess.</summary>
         private static int FindAnchorStart(string ancestor, string text, int cursor, out int matchedLength)
         {
             matchedLength = text.Length;
             if (text.Length == 0) return cursor;
             int idx = ancestor.IndexOf(text, cursor, StringComparison.Ordinal);
-            if (idx >= 0) return idx;
+            if (idx >= 0 && !HasLaterOccurrence(ancestor, text, idx)) return idx;
 
             var lines = text.Split('\n');
             int maxDrop = Math.Min(MaxAnchorLeadingLinesDropped, lines.Length - 1);
@@ -776,10 +793,18 @@ namespace PickleGit.ViewModels
                 var shorter = string.Join("\n", lines, drop, lines.Length - drop);
                 if (shorter.Length == 0) continue;
                 int shorterIdx = ancestor.IndexOf(shorter, cursor, StringComparison.Ordinal);
-                if (shorterIdx >= 0) { matchedLength = shorter.Length; return shorterIdx; }
+                if (shorterIdx >= 0 && !HasLaterOccurrence(ancestor, shorter, shorterIdx))
+                { matchedLength = shorter.Length; return shorterIdx; }
             }
             return -1;
         }
+
+        /// <summary>True when <paramref name="text"/> occurs again in <paramref name="ancestor"/>
+        /// strictly after the occurrence already found at <paramref name="foundAt"/> — i.e. the match
+        /// isn't unique from here on, so picking "the nearest one" would be a guess rather than a
+        /// determination. See <see cref="FindAnchorStart"/>'s remarks.</summary>
+        private static bool HasLaterOccurrence(string ancestor, string text, int foundAt) =>
+            ancestor.IndexOf(text, foundAt + 1, StringComparison.Ordinal) >= 0;
 
         private void GoToConflict(int delta)
         {

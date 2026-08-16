@@ -607,22 +607,32 @@ namespace PickleGit.ViewModels
         private Task UnstageHunkOrLinesAsync(object param) => HunkOrLinesPatchAsync(param, StagingPatchOp.Unstage, "Unstaging…", "Unstage");
 
         /// <summary>Stages/discards/unstages just the hunk's currently-selected lines when it has a
-        /// selection, otherwise the whole hunk — mirrors SourceTree's per-hunk button behavior.</summary>
+        /// selection, otherwise the whole hunk — mirrors SourceTree's per-hunk button behavior.
+        ///
+        /// RunCliAsync's own watcher suppression (via RunAsync/RunWorkAsync) only spans the git
+        /// call itself, closing before this method's own ReloadCurrentDiffAsync() below even
+        /// starts — the exact same stale/wrong-diff-pane race the whole-file Stage/Unstage/Discard
+        /// paths fix by widening their own Suppress() scope to cover their follow-up reload calls
+        /// too (see StageFileAsync's remarks). Wrapping the whole method the same way here closes
+        /// that same gap for the more common partial-staging workflow.</summary>
         private async Task HunkOrLinesPatchAsync(object param, StagingPatchOp op, string status, string featureName)
         {
             if (!(param is DiffHunk hunk) || _currentDiffFile == null) return;
-            string patch;
-            if (hunk.HasLineSelection)
+            using (_watcher?.Suppress())
             {
-                var selected = new HashSet<DiffLine>(hunk.Lines.Where(l => l.Kind != DiffLineKind.Context && _selectedLines.Contains(l)));
-                patch = StagingService.BuildLinePatch(_currentDiffFile, new List<(DiffHunk, HashSet<DiffLine>)> { (hunk, selected) }, op);
+                string patch;
+                if (hunk.HasLineSelection)
+                {
+                    var selected = new HashSet<DiffLine>(hunk.Lines.Where(l => l.Kind != DiffLineKind.Context && _selectedLines.Contains(l)));
+                    patch = StagingService.BuildLinePatch(_currentDiffFile, new List<(DiffHunk, HashSet<DiffLine>)> { (hunk, selected) }, op);
+                }
+                else
+                {
+                    patch = StagingService.BuildHunkPatch(_currentDiffFile, hunk);
+                }
+                if (await RunCliAsync(status, StagingService.ApplyArgs(op), featureName, patch))
+                    await ReloadCurrentDiffAsync();
             }
-            else
-            {
-                patch = StagingService.BuildHunkPatch(_currentDiffFile, hunk);
-            }
-            if (await RunCliAsync(status, StagingService.ApplyArgs(op), featureName, patch))
-                await ReloadCurrentDiffAsync();
         }
 
         // ── Diff navigation (next/prev hunk) ────────────────────────────────────

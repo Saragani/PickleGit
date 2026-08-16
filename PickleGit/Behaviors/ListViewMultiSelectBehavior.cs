@@ -92,7 +92,20 @@ namespace PickleGit.Behaviors
                 {
                     if (_updating || SelectedItems == null || lv.IsVisible == false) return;
                     _updating = true;
-                    try { foreach (var item in removed) SelectedItems.Remove(item); }
+                    try
+                    {
+                        // IsVisible alone isn't enough: a shrink-then-grow drag (select 1-10, shrink
+                        // to 1-5 — queuing this deferred removal of 6-10 — then drag back past 10
+                        // before mouse-up) re-adds the captured items to the ListView's own live
+                        // selection before this callback fires, with IsVisible staying true the whole
+                        // time (no tab switch occurred). Removing them from SelectedItems here anyway
+                        // would silently desync the VM collection from what's actually still
+                        // highlighted. Re-check against the ListView's own current SelectedItems —
+                        // the real-time source of truth — and only drop an item that's genuinely
+                        // still deselected there.
+                        foreach (var item in removed)
+                            if (!lv.SelectedItems.Contains(item)) SelectedItems.Remove(item);
+                    }
                     finally { _updating = false; }
                 }), System.Windows.Threading.DispatcherPriority.Background);
                 return;

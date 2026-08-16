@@ -462,11 +462,13 @@ namespace PickleGit.ViewModels
         }
 
         // ── Sidebar local-branch star filter ────────────────────────────────────────────────
-        private BranchFilterMode _branchFilterMode = AppSettings.LoadBranchFilterMode();
+        // Loaded per-repo in OpenRepoAsync (matching _starredBranches — the starred set it filters
+        // is itself per-repo) — defaults to All here since RepoPath isn't known yet at construction.
+        private BranchFilterMode _branchFilterMode = BranchFilterMode.All;
         public BranchFilterMode BranchFilterMode
         {
             get => _branchFilterMode;
-            set { if (Set(ref _branchFilterMode, value)) AppSettings.SaveBranchFilterMode(value); }
+            set { if (Set(ref _branchFilterMode, value)) AppSettings.SaveBranchFilterMode(RepoPath, value); }
         }
 
         private ObservableCollection<FileTreeRow> _stagedFileTreeRows = new ObservableCollection<FileTreeRow>();
@@ -876,6 +878,8 @@ namespace PickleGit.ViewModels
                         _collapsedBranchNodes.Add(key);
                 }
                 _starredBranches = AppSettings.LoadStarredBranches(path);
+                _branchFilterMode = AppSettings.LoadBranchFilterMode(path);
+                RaisePropertyChanged(nameof(BranchFilterMode));
                 RaisePropertyChanged(nameof(RepoName));
                 RaisePropertyChanged(nameof(HasRepo));
                 await LoadIdentityAsync(path);
@@ -1470,9 +1474,19 @@ namespace PickleGit.ViewModels
         /// <summary>"N matches" label next to the search box; hidden while the box is empty.</summary>
         public bool ShowSearchMatchCount => !string.IsNullOrWhiteSpace(_searchText);
 
+        // Bumped on every ApplyFilter() call — each spawns its own untracked Task.Run with no
+        // ordering guarantee on completion, so a rapid run of search keystrokes can have an older
+        // (already-superseded) call's background computation finish AFTER a newer one's. Without a
+        // guard, that stale callback would still overwrite GraphNodes — and, worse, SelectedNode and
+        // the scroll target — with results computed against a search string the user has already
+        // changed away from. Each call captures its own generation stamp and only applies its result
+        // if it's still the most recent call by the time the background work finishes.
+        private int _applyFilterGeneration;
+
         private void ApplyFilter()
         {
             if (_allCommits.Count == 0) return;
+            int generation = ++_applyFilterGeneration;
             var searching = !string.IsNullOrWhiteSpace(_searchText);
             var filtered = FilterCommits(_allCommits);
             SearchMatchCount = filtered.Count;
@@ -1485,6 +1499,7 @@ namespace PickleGit.ViewModels
                 var nodes = searching ? GraphLayout.ComputeFlat(displayList) : GraphLayout.Compute(displayList);
                 Application.Current.Dispatcher.Invoke(() =>
                 {
+                    if (generation != _applyFilterGeneration) return; // superseded by a later keystroke
                     GraphNodes = new ObservableCollection<GraphNode>(nodes);
 
                     // Rebuilding GraphNodes replaces every GraphNode instance, so the previously
