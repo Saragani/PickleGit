@@ -452,6 +452,7 @@
         <li><a href="#phase-7"><span class="num mono">07</span>Staging &amp; Workflow Polish</a></li>
         <li><a href="#phase-8"><span class="num mono">08</span>Performance &amp; Git LFS Workflow</a></li>
         <li><a href="#phase-9"><span class="num mono">09</span>Sidebar, Blame &amp; LFS Reliability</a></li>
+        <li><a href="#phase-10"><span class="num mono">10</span>Native Git Backend &amp; Conflict Rewrite</a></li>
       </ol>
       <ol class="rail-extra">
         <li><a href="#architecture"><span class="num mono">—</span>Architecture</a></li>
@@ -470,8 +471,8 @@
          and a fair number of things that broke along the way and got fixed before they shipped.</p>
 
       <div class="stats">
-        <div class="stat"><div class="n mono">10</div><div class="l">phases, 00 → 09</div></div>
-        <div class="stat"><div class="n mono">19</div><div class="l">bugs caught live, not just in review</div></div>
+        <div class="stat"><div class="n mono">11</div><div class="l">phases, 00 → 10</div></div>
+        <div class="stat"><div class="n mono">30</div><div class="l">bugs caught live, not just in review</div></div>
         <div class="stat"><div class="n mono">3</div><div class="l">hosting providers, one abstraction</div></div>
         <div class="stat"><div class="n mono">1</div><div class="l">theme — dark, start to finish</div></div>
       </div>
@@ -1036,6 +1037,92 @@
              <code>git lfs checkout</code> first (see <code>SmudgeLfsFromLocalCacheAsync</code> above) and only
              falling through to the network-fetching "Pull Now" prompt when files are genuinely missing from the
              cache.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ PHASE 10 ══════════════════════ -->
+    <section class="phase" id="phase-10">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 10</span>
+        <h2 class="phase-title display">Native Git Backend &amp; Conflict Rewrite</h2>
+      </div>
+      <p class="thesis">Since <span class="mono">PickleGit_1.0.20</span>: the two biggest structural changes since
+         Foundations, landing back to back — routing every filesystem-mutating git operation through
+         <code>git.exe</code> for real LFS-aware performance, and rebuilding the merge conflict editor from
+         whole-block accept buttons into true per-line picking — alongside a full rewrite of diff/conflict text
+         selection and Find, branch starring, safer HTTPS auth, and a run of watcher and race-condition fixes that
+         had been quietly costing correctness rather than crashing loudly.</p>
+
+      <ul class="feature-list">
+        <li><div><b>Star/Unstar branches</b> — <span class="desc">a gold star badge in the sidebar, a context-menu
+            toggle, and an All/Starred filter above the branch list, persisted per-repo.</span></div></li>
+        <li><div><b><code>git.exe</code>-backed mutations, LFS-aware</b> — <span class="desc">checkout, status,
+            discard, reset, stash, merge, cherry-pick, and revert now prefer <code>git.exe</code> over
+            LibGit2Sharp (falling back to libgit2 when git.exe isn't installed), because git.exe smudges any
+            LFS-tracked content it touches inline from the local cache — something libgit2's paths can't do
+            without a much slower manual pass. Measured on a real 34K-file, LFS-heavy repo: branch switches
+            dropped from ~160–178s to ~32s.</span></div></li>
+        <li><div><b>HTTPS auth moved to <code>git.exe</code> too, and scoped</b> — <span class="desc">Fetch, Pull,
+            Push, PushBranch, PushTag, and Clone inject credentials as a Basic-auth header via
+            <code>GIT_CONFIG_KEY</code>/<code>VALUE</code> — never on the command line or in a URL — scoped to the
+            target remote's own scheme+host+port so it can't leak onto another host the same git.exe invocation
+            happens to talk to. A rejected credential now retries silently once (picking up a helper's freshly
+            rotated token) before ever bothering the user, and Push/Pull/Fetch wait long enough for Git Credential
+            Manager's real browser-based OAuth sign-in instead of always timing out in 5 seconds and falling back
+            to PickleGit's own password dialog.</span></div></li>
+        <li><div><b>Merge conflict editor, rebuilt</b> — <span class="desc">true per-line picking (not whole-block
+            accept) with LCS-based line/word alignment, syntax-highlighted panes, a live Result preview, real
+            ancestor content fetched from git's own index, and a manual-edit mode (AvalonEdit, this app's own
+            dark palette) for the conflicts that can't be auto-resolved safely — both sides independently
+            converging on new shared code the common ancestor never had, for instance.</span></div></li>
+        <li><div><b>Diff &amp; conflict text selection</b> — <span class="desc">double-click word selection, live
+            occurrence highlighting while dragging, cross-pane selection clearing, a working Ctrl+A, and a fixed
+            half-character rendering bias that shifted every highlight slightly left of its real position.</span></div></li>
+        <li><div><b>Find, redesigned</b> — <span class="desc">per-pane find bars (Ctrl+F, Esc/✕ to close) with
+            per-occurrence matches — a line containing the search term twice is two separate, independently
+            navigable results, not one — and now scrolls horizontally to the match, not just vertically, so a hit
+            far down a long line no longer sits off-screen.</span></div></li>
+        <li><div><b>Mark Unresolved</b> — <span class="desc">the counterpart to Mark Resolved, from the
+            staged/unstaged file context menu.</span></div></li>
+        <li><div><b>Commit-search graph coloring</b> — <span class="desc">search results now run through the same
+            multi-lane <code>GraphLayout.Compute()</code> as the normal graph instead of a flattened, single-color
+            layout — each result keeps its real branch color/lane, with a connector between two results that are
+            genuinely adjacent in history.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Caught in testing — the quiet-correctness kind, not the crashing kind</p>
+          <p><b>One remote's credentials could leak onto another host.</b> The Basic-auth header (and disabled
+             credential helper) injected for an HTTPS operation was set as bare, unscoped git config — applying to
+             every HTTP request that git.exe process made, not just the remote being pushed to. An LFS lock-verify
+             request to a separate server during the same push inherited the wrong host's header and lost its own
+             credential resolution. Fixed by scoping both keys to the remote's scheme+host+port via git's own
+             URL-prefix config matching.</p>
+          <p><b>A rejected credential could hang the app indefinitely.</b> With the system credential helper (GCM)
+             left enabled for these calls, a rejected credential made git.exe wait on an invisible interactive
+             prompt instead of failing. Fixed by disabling the helper and pointing <code>GIT_ASKPASS</code> at
+             git.exe itself for just these calls, so a rejection now fails in under a second with a message the
+             existing purge-and-reprompt logic already recognizes.</p>
+          <p><b>The diff pane could show a different file's stale content after stage/unstage.</b> Stage/Unstage/
+             Discard only suppressed <code>RepositoryWatcher</code> around the git call itself, not around the
+             follow-up refresh that rebuilds the file lists and re-points the diff pane — the watcher's own
+             debounced refresh could fire in that gap and race the explicit one over the same state. Fixed by
+             widening each suppression scope to cover the whole sequence.</p>
+          <p><b>The app could flicker "Working" about 45 times after a single branch checkout.</b>
+             <code>git status</code> rewrites <code>.git/index</code>'s own stat cache — especially right after a
+             checkout, when every file's mtime just changed — and <code>RepositoryWatcher</code> classifies that
+             write as a workdir change, so the watcher-driven light refresh kept re-triggering itself. Confirmed
+             directly in the log: ~45 back-to-back busy cycles over about a minute, with no external cause.</p>
+          <p><b>A branch switch or commit made from the command line could leave the UI stuck on the old state.</b>
+             The grace-period fix above (self-suppressing the watcher after its own refresh) turned out to discard
+             <i>any</i> signal that arrived during its window, including a genuine branch/HEAD change, whenever the
+             refresh it followed had only covered working-directory state — so a checkout or commit landing in
+             that window left the UI showing the old branch, or a stale "Uncommitted changes" node, until some
+             unrelated later change happened to arrive outside every suppression window. The grace period is now
+             kind-aware: it only discards what it actually covered, and resumes anything more significant.</p>
         </div>
       </div>
     </section>
