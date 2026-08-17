@@ -49,6 +49,17 @@ namespace PickleGit.ViewModels
             await RefreshConflictStateAsync();
             if (ApplyWorkingDirStatus(changes, updateGraph: true))
                 await SyncDiffPaneAfterFileListChangeAsync();
+            // `git status` (GetWorkingDirectoryStatus's CLI path) can itself rewrite .git/index to
+            // refresh its stat cache — e.g. right after a branch checkout, when every file's mtime
+            // just changed and the cache is cold for the whole tree. RepositoryWatcher classifies an
+            // index write as a WorkingDir change (RepositoryWatcher.cs), so without this, that
+            // self-inflicted write re-triggers THIS SAME method, which calls `git status` again,
+            // which rewrites the index again — a self-sustaining feedback loop that only stopped
+            // once the stat cache happened to converge (confirmed directly in picklegit.log: ~45
+            // back-to-back "IsBusy -> True/False" cycles, over a minute, after one branch switch,
+            // with no external cause). RefreshAsync already guards its own equivalent call with
+            // exactly this pattern; this watcher-driven light refresh was the one path missing it.
+            _watcher?.SuppressForGracePeriod(2000);
         }
 
         private async Task RefreshConflictStateAsync()
