@@ -59,7 +59,15 @@ namespace PickleGit.ViewModels
             // back-to-back "IsBusy -> True/False" cycles, over a minute, after one branch switch,
             // with no external cause). RefreshAsync already guards its own equivalent call with
             // exactly this pattern; this watcher-driven light refresh was the one path missing it.
-            _watcher?.SuppressForGracePeriod(2000);
+            // Pass WorkingDir explicitly (not the default Refs) — this method never re-reads
+            // branch/HEAD/ref state, so it must not swallow a Refs-kind signal (a branch switch or
+            // commit) that lands during this grace window; RepositoryWatcher.SuppressForGracePeriod
+            // resumes anything above the kind actually covered instead of discarding it. Without
+            // this, a checkout or commit whose HEAD write happened to land inside this window (e.g.
+            // right after this same checkout's own working-dir echo) left the UI showing the old
+            // branch / stale "Uncommitted changes" state until some unrelated later change escaped
+            // every suppression window.
+            _watcher?.SuppressForGracePeriod(2000, RepoChangeKind.WorkingDir);
         }
 
         private async Task RefreshConflictStateAsync()

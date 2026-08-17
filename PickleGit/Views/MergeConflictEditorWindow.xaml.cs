@@ -73,9 +73,23 @@ namespace PickleGit.Views
             RewireFileVm(_sessionVm?.CurrentFile);
         }
 
-        private void OnLeftFindScrollRequested(object item) => ConflictLeftListView.ScrollIntoView(item);
-        private void OnRightFindScrollRequested(object item) => ConflictRightListView.ScrollIntoView(item);
-        private void OnResultFindScrollRequested(object item) => ConflictResultListView.ScrollIntoView(item);
+        private void OnLeftFindScrollRequested(object item)
+        {
+            ConflictLeftListView.ScrollIntoView(item);
+            DiffTextSelectionController.ScrollToHighlightRangeHorizontally(ConflictLeftListView, item, _sessionVm?.LeftFind.CurrentMatchRange);
+        }
+
+        private void OnRightFindScrollRequested(object item)
+        {
+            ConflictRightListView.ScrollIntoView(item);
+            DiffTextSelectionController.ScrollToHighlightRangeHorizontally(ConflictRightListView, item, _sessionVm?.RightFind.CurrentMatchRange);
+        }
+
+        private void OnResultFindScrollRequested(object item)
+        {
+            ConflictResultListView.ScrollIntoView(item);
+            DiffTextSelectionController.ScrollToHighlightRangeHorizontally(ConflictResultListView, item, _sessionVm?.ResultFind.CurrentMatchRange);
+        }
 
         private void OnSessionVmPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {

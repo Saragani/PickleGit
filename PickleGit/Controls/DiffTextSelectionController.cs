@@ -7,6 +7,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using PickleGit.Models;
 
 namespace PickleGit.Controls
 {
@@ -701,13 +702,58 @@ namespace PickleGit.Controls
         /// walking a TextRange to reconstruct plain text, which measurably lagged scrolling once a
         /// multi-row selection existed (every row's boundary needs this). Monospace font throughout
         /// this app's diff/conflict text, so any single character is representative of the row.</summary>
-        private static double EstimateCharWidth(TextBlock textBlock)
+        internal static double EstimateCharWidth(TextBlock textBlock)
         {
             var typeface = new Typeface(textBlock.FontFamily, textBlock.FontStyle, textBlock.FontWeight, textBlock.FontStretch);
             var dpi = VisualTreeHelper.GetDpi(textBlock).PixelsPerDip;
             var ft = new FormattedText("0", CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
                 typeface, textBlock.FontSize, Brushes.Black, dpi);
             return ft.WidthIncludingTrailingWhitespace;
+        }
+
+        /// <summary>Scrolls <paramref name="listView"/> horizontally so the current Find match — an
+        /// exact (Start, Length) character range within the matched row's own "RowText" element,
+        /// per <see cref="PickleGit.ViewModels.PaneFindState.CurrentMatchRange"/> — is actually
+        /// visible. The vertical <c>ScrollIntoView</c> every ScrollToMatchRequested handler already
+        /// calls says nothing about the horizontal offset, so a match far to the right of a long
+        /// line stays off-screen with no further action. Deferred to
+        /// <see cref="DispatcherPriority.Loaded"/> since the target row's container may not exist
+        /// yet immediately after ScrollIntoView returns for a recycling-virtualized ListView — but
+        /// that deferral alone isn't enough for a pane whose ancestor started
+        /// <c>Visibility="Collapsed"</c> (e.g. Side-by-side before its first toggle): neither
+        /// <c>Loaded</c> firing nor a same-priority dispatcher callback reliably guarantees the
+        /// ListView's own ControlTemplate (where its internal ScrollViewer lives) or its items'
+        /// containers have actually been realized yet (see CLAUDE.md's "ApplyTemplate() may still
+        /// be needed after Loaded" — the exact same gap this file's own DiffView.xaml.cs callers
+        /// already work around for their ScrollViewer lookups). ApplyTemplate() + UpdateLayout()
+        /// below force both before searching, the same fix already applied there.</summary>
+        internal static void ScrollToHighlightRangeHorizontally(ListView listView, object item, DiffHighlightSpan? range)
+        {
+            if (range == null || item == null) return;
+            listView.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                listView.ApplyTemplate();
+                listView.UpdateLayout();
+                var container = listView.ItemContainerGenerator.ContainerFromItem(item) as DependencyObject;
+                if (container == null) return;
+                var rowText = FindNamedDescendant<TextBlock>(container, "RowText");
+                var scrollViewer = FindNamedDescendant<ScrollViewer>(listView, null);
+                if (rowText == null || scrollViewer == null || scrollViewer.ScrollableWidth <= 0) return;
+
+                var charWidth = EstimateCharWidth(rowText);
+                var rowTextLeftContent = rowText.TransformToAncestor(listView).Transform(new Point(0, 0)).X
+                    + scrollViewer.HorizontalOffset;
+                var matchStart = rowTextLeftContent + range.Value.Start * charWidth;
+                var matchEnd = rowTextLeftContent + (range.Value.Start + range.Value.Length) * charWidth;
+                var viewLeft = scrollViewer.HorizontalOffset;
+                var viewRight = viewLeft + scrollViewer.ViewportWidth;
+                const double margin = 24;
+
+                if (matchStart < viewLeft)
+                    scrollViewer.ScrollToHorizontalOffset(Math.Max(0, matchStart - margin));
+                else if (matchEnd > viewRight)
+                    scrollViewer.ScrollToHorizontalOffset(matchEnd - scrollViewer.ViewportWidth + margin);
+            }));
         }
 
         private static string SafeSubstring(string text, int start, int end)

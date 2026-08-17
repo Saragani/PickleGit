@@ -647,7 +647,7 @@
                                 <TextBlock Grid.Column="1" Text="{Binding LineNumber}" FontFamily="Consolas" FontSize="11"
                                            HorizontalAlignment="Right" Margin="0,0,8,0"
                                            Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                <TextBlock Grid.Column="2" behaviors:BlameSearchHighlighter.Content="{Binding Content}"
+                                <TextBlock x:Name="RowText" Grid.Column="2" behaviors:BlameSearchHighlighter.Content="{Binding Content}"
                                            FontFamily="Cascadia Code, Consolas"
                                            Typography.StandardLigatures="False" Typography.ContextualAlternates="False"
                                            FontSize="12" TextWrapping="NoWrap">

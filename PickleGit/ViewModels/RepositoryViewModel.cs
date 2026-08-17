@@ -1188,8 +1188,10 @@ namespace PickleGit.ViewModels
                 // discarding it, a bug now fixed at the source in RepositoryWatcher. With that fixed,
                 // this window only needs to cover the real, short internal gap, not an imagined
                 // multi-second one — kept brief so a genuinely new external change is never
-                // suppressed for long.)
-                _watcher?.SuppressForGracePeriod(2000);
+                // suppressed for long.) Explicit Refs: this pass just refreshed everything up to
+                // and including branch/HEAD state, so it's safe to also discard a Refs-kind signal
+                // that arrives during this window, not just WorkingDir ones.
+                _watcher?.SuppressForGracePeriod(2000, RepoChangeKind.Refs);
             }
             finally { _refreshInFlight = false; }
         }
@@ -1631,6 +1633,17 @@ namespace PickleGit.ViewModels
                 // the Reopen() call below, leaving a real (if narrow) window where closing the tab
                 // mid-refresh could race GitService.Dispose() against this still-running executor work.
                 IsBusy = true;
+                // Mirrors RunWorkAsync's own Suppress() scope: without it, a second external change
+                // (another edit, or the second half of a checkout/commit whose ref-write lands a
+                // moment after its index-write) arriving while THIS handler is still running would
+                // get its own independent debounced Changed() call — which then hits the IsBusy
+                // guard above and is dropped with no pending state at all, unlike a signal arriving
+                // during an explicit Suppress()/SuppressForGracePeriod() window, which is coalesced
+                // and can still resume afterward. Confirmed contributor to reports of "uncommitted
+                // changes don't show for several seconds" — a real edit landing mid-refresh had no
+                // recovery path until some later, unrelated change happened to arrive completely
+                // outside this window.
+                var suppression = _watcher?.Suppress();
                 try
                 {
                     // Every app-initiated git mutation calls GitService.Reopen() afterward (see
@@ -1654,7 +1667,7 @@ namespace PickleGit.ViewModels
                         await RefreshWorkingDirStatusAsync();
                 }
                 catch { }
-                finally { IsBusy = false; }
+                finally { suppression?.Dispose(); IsBusy = false; }
             }));
         }
 

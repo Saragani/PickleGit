@@ -294,29 +294,47 @@ namespace PickleGit.Services
 
         private Timer _graceSuppressTimer;
         private bool _graceSuppressActive;
+        private RepoChangeKind _graceMaxCoveredKind = RepoChangeKind.Refs;
 
         /// <summary>Suppresses for a fixed grace period rather than an explicit scope — call this
         /// right after an explicit refresh completes to swallow that operation's own trailing FS
         /// events. Unlike <see cref="Suppress"/>/<see cref="EndSuppress"/> (which deliberately
         /// *resume* any pending signal once a real operation's suppression scope ends — correct
         /// there, since something genuinely might have changed that the operation's own explicit
-        /// refresh didn't yet account for), this must NOT resume anything when the grace period
-        /// elapses: we already did an accurate refresh, so by definition anything the grace period
-        /// swallowed is trailing feedback from what we already captured, not new information.
-        /// Reusing EndSuppress() as originally written was the actual bug behind an apparently
-        /// unprompted refresh firing a fixed delay after every fetch — it wasn't discarding the
-        /// pending signal at all, just deferring it by exactly the grace period's own duration
-        /// (confirmed: 400ms with none, 5.4s with a 5s grace period, 10.4s with a 10s one — always
-        /// grace-period-plus-the-400ms-debounce, not a real external delivery delay).</summary>
-        public void SuppressForGracePeriod(int milliseconds)
+        /// refresh didn't yet account for), this must NOT resume a signal AT OR BELOW
+        /// <paramref name="maxCoveredKind"/> when the grace period elapses: the just-completed
+        /// refresh already accounted for everything up to that kind, so by definition anything of
+        /// that kind swallowed during the grace period is trailing feedback from what we already
+        /// captured, not new information. Reusing EndSuppress() as originally written was the
+        /// actual bug behind an apparently unprompted refresh firing a fixed delay after every
+        /// fetch — it wasn't discarding the pending signal at all, just deferring it by exactly the
+        /// grace period's own duration (confirmed: 400ms with none, 5.4s with a 5s grace period,
+        /// 10.4s with a 10s one — always grace-period-plus-the-400ms-debounce, not a real external
+        /// delivery delay).
+        ///
+        /// A signal ABOVE <paramref name="maxCoveredKind"/> — e.g. a Refs change (branch/HEAD move)
+        /// arriving during a grace period opened by a WorkingDir-only refresh — was never accounted
+        /// for by that refresh at all, so discarding it unconditionally (the original, kind-blind
+        /// behavior) silently dropped a real branch switch or commit: the UI kept showing the old
+        /// branch/stale "uncommitted changes" state until some unrelated later change happened to
+        /// arrive outside any suppression window. That case resumes instead, the same way
+        /// EndSuppress() would.</summary>
+        public void SuppressForGracePeriod(int milliseconds, RepoChangeKind maxCoveredKind = RepoChangeKind.Refs)
         {
             lock (_lock)
             {
                 if (_graceSuppressActive)
                 {
+                    // Keep the widest coverage seen while a grace window is still active — a later
+                    // WorkingDir-only call arriving before an already-active Refs-covering window
+                    // (opened by a just-finished full refresh) elapses must not downgrade it back
+                    // to WorkingDir, which would make a still-pending Refs signal that full refresh
+                    // already accounted for look uncovered again and get needlessly re-fired.
+                    if (maxCoveredKind > _graceMaxCoveredKind) _graceMaxCoveredKind = maxCoveredKind;
                     _graceSuppressTimer.Change(milliseconds, Timeout.Infinite);
                     return;
                 }
+                _graceMaxCoveredKind = maxCoveredKind;
                 _suppressCount++;
                 _graceSuppressActive = true;
                 _graceSuppressTimer = new Timer(_ => ReleaseGraceSuppression(), null, milliseconds, Timeout.Infinite);
@@ -330,14 +348,24 @@ namespace PickleGit.Services
                 if (!_graceSuppressActive) return;
                 _graceSuppressActive = false;
                 _suppressCount = Math.Max(0, _suppressCount - 1);
-                // Only discard the shared pending state once nothing else is still suppressing —
+                // Only decide the shared pending state once nothing else is still suppressing —
                 // if a real operation's own scope is concurrently open, its own EndSuppress() must
                 // still get to decide whether to resume whatever arrived, once IT finishes.
                 if (_suppressCount == 0)
                 {
-                    _hasPending = false;
-                    _pendingWhileSuppressed = false;
-                    _pendingKind = RepoChangeKind.WorkingDir;
+                    if (_hasPending && _pendingKind > _graceMaxCoveredKind)
+                    {
+                        // Genuinely new information the covering refresh never captured — resume it
+                        // rather than discarding, same as EndSuppress().
+                        _pendingWhileSuppressed = false;
+                        _debounceTimer.Change(DebounceMs, Timeout.Infinite);
+                    }
+                    else
+                    {
+                        _hasPending = false;
+                        _pendingWhileSuppressed = false;
+                        _pendingKind = RepoChangeKind.WorkingDir;
+                    }
                 }
             }
         }

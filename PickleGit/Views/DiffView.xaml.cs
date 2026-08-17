@@ -130,10 +130,29 @@ namespace PickleGit.Views
             }
         }
 
-        private void OnUnifiedFindScrollRequested(object item) => UnifiedListView.ScrollIntoView(item);
-        private void OnSideBySideLeftFindScrollRequested(object item) => SideBySideLeftListView.ScrollIntoView(item);
-        private void OnSideBySideRightFindScrollRequested(object item) => SideBySideRightListView.ScrollIntoView(item);
-        private void OnBlameFindScrollRequested(object item) => BlameListView.ScrollIntoView(item);
+        private void OnUnifiedFindScrollRequested(object item)
+        {
+            UnifiedListView.ScrollIntoView(item);
+            DiffTextSelectionController.ScrollToHighlightRangeHorizontally(UnifiedListView, item, RepoVm?.UnifiedFind.CurrentMatchRange);
+        }
+
+        private void OnSideBySideLeftFindScrollRequested(object item)
+        {
+            SideBySideLeftListView.ScrollIntoView(item);
+            DiffTextSelectionController.ScrollToHighlightRangeHorizontally(SideBySideLeftListView, item, RepoVm?.SideBySideLeftFind.CurrentMatchRange);
+        }
+
+        private void OnSideBySideRightFindScrollRequested(object item)
+        {
+            SideBySideRightListView.ScrollIntoView(item);
+            DiffTextSelectionController.ScrollToHighlightRangeHorizontally(SideBySideRightListView, item, RepoVm?.SideBySideRightFind.CurrentMatchRange);
+        }
+
+        private void OnBlameFindScrollRequested(object item)
+        {
+            BlameListView.ScrollIntoView(item);
+            DiffTextSelectionController.ScrollToHighlightRangeHorizontally(BlameListView, item, RepoVm?.BlameFind.CurrentMatchRange);
+        }
 
         private void OnDiffFileSwitched(object sender, EventArgs e) => _pendingDiffScrollReset = true;
 
