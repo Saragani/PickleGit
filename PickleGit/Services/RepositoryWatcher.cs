@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 
@@ -118,8 +119,57 @@ namespace PickleGit.Services
         private void HandleWorkDirPath(string fullPath)
         {
             if (IsUnderGitDir(fullPath)) return;
+            if (IsUnderKnownIgnoredPrefix(fullPath)) return;
             if (RegisterStormEvent()) return;
             Signal(RepoChangeKind.WorkingDir);
+        }
+
+        // ── Ignored-path filtering ────────────────────────────────────────────
+        // A build (compiling the project, restoring packages, ...) writes hundreds of files under
+        // gitignored output directories (bin/, obj/, node_modules/, .vs/, ...), none of which git
+        // cares about — but every one of those writes is still a real workdir FS event, so without
+        // this filter each one still drove a full IsBusy flicker for no reason. Deliberately NOT a
+        // hand-rolled .gitignore matcher (nested .gitignore files, negation, and glob edge cases are
+        // easy to get subtly wrong, and a wrong "ignored" verdict here would silently swallow a real
+        // change) — the caller supplies the actual list of ignored top-level entries as reported by
+        // git's own exclude engine (see RepositoryViewModel.RefreshIgnoredPathCacheAsync, which runs
+        // `git ls-files --others --ignored --exclude-standard --directory`), and this class only
+        // ever does a cheap prefix comparison against that. Empty/never-set means every path falls
+        // through unfiltered — the original, safe behavior.
+        private volatile HashSet<string> _ignoredPrefixes = EmptyIgnoredPrefixes;
+        private static readonly HashSet<string> EmptyIgnoredPrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Replaces the known-ignored top-level path list. Safe to call from any thread —
+        /// always swaps in a brand-new immutable set rather than mutating the current one, so a
+        /// concurrent read on the watcher thread never sees a half-updated collection.</summary>
+        public void SetIgnoredPrefixes(IEnumerable<string> absolutePaths)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (absolutePaths != null)
+            {
+                foreach (var p in absolutePaths)
+                {
+                    var norm = TrimSeparator(p);
+                    if (!string.IsNullOrEmpty(norm)) set.Add(norm);
+                }
+            }
+            _ignoredPrefixes = set;
+        }
+
+        private bool IsUnderKnownIgnoredPrefix(string fullPath)
+        {
+            if (fullPath == null) return false;
+            var prefixes = _ignoredPrefixes; // single volatile read — stable snapshot for this call
+            if (prefixes.Count == 0) return false;
+            foreach (var prefix in prefixes)
+            {
+                if (fullPath.Equals(prefix, StringComparison.OrdinalIgnoreCase)) return true;
+                if (fullPath.Length > prefix.Length &&
+                    fullPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+                    fullPath[prefix.Length] == Path.DirectorySeparatorChar)
+                    return true;
+            }
+            return false;
         }
 
         private void OnGitDirEvent(object sender, FileSystemEventArgs e) => HandleGitDirPath(e.FullPath);

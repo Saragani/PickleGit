@@ -1192,6 +1192,9 @@ namespace PickleGit.ViewModels
                 // and including branch/HEAD state, so it's safe to also discard a Refs-kind signal
                 // that arrives during this window, not just WorkingDir ones.
                 _watcher?.SuppressForGracePeriod(2000, RepoChangeKind.Refs);
+                // Opportunistically keeps the watcher's ignored-path list current (a newly created
+                // ignored directory, or an edited .gitignore) without a dedicated file-watch for it.
+                _ = RefreshIgnoredPathCacheAsync();
             }
             finally { _refreshInFlight = false; }
         }
@@ -1618,8 +1621,42 @@ namespace PickleGit.ViewModels
             {
                 _watcher = new RepositoryWatcher(_git.WorkingDirectory, _git.GitDirectory);
                 _watcher.Changed += OnRepoChangedExternally;
+                _ = RefreshIgnoredPathCacheAsync();
             }
             catch { _watcher = null; }
+        }
+
+        /// <summary>Tells the watcher which top-level workdir paths git itself currently considers
+        /// ignored (bin/, obj/, node_modules/, .vs/, ...), so writes under them — e.g. compiling the
+        /// project — never trigger a busy refresh at all, instead of one that immediately finds
+        /// nothing changed. Deliberately uses git's own exclude engine
+        /// (<c>git ls-files --others --ignored --exclude-standard --directory</c>) rather than a
+        /// hand-rolled .gitignore matcher — see RepositoryWatcher.IsUnderKnownIgnoredPrefix's own
+        /// comment for why. Best-effort and fire-and-forget: on any failure (git.exe missing, repo
+        /// closed mid-call, ...) the watcher just keeps whatever list it already had — worst case is
+        /// the pre-existing behavior, never a wrongly-swallowed real change. Called once when the
+        /// watcher starts and again after every full refresh, so a newly created ignored directory
+        /// (e.g. the very first build after a fresh clone) or an edited .gitignore is picked up
+        /// without needing its own dedicated file-watch.</summary>
+        private async Task RefreshIgnoredPathCacheAsync()
+        {
+            var watcher = _watcher;
+            if (watcher == null || !_git.IsOpen || !_git.Cli.IsAvailable) return;
+            try
+            {
+                var result = await _git.Cli.RunAsync(
+                    "ls-files --others --ignored --exclude-standard --directory --no-empty-directory");
+                if (!result.Success) return;
+                var workDir = _git.WorkingDirectory;
+                if (string.IsNullOrEmpty(workDir)) return;
+                var absolutePaths = result.StdOut
+                    .Split('\n')
+                    .Select(l => l.Trim().TrimEnd('/'))
+                    .Where(l => l.Length > 0)
+                    .Select(l => Path.Combine(workDir, l.Replace('/', Path.DirectorySeparatorChar)));
+                watcher.SetIgnoredPrefixes(absolutePaths);
+            }
+            catch { /* best-effort — see doc comment above */ }
         }
 
         private void OnRepoChangedExternally(RepoChangeKind kind)
