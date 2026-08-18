@@ -575,9 +575,11 @@
                    Foreground="{DynamicResource TextSecondaryBrush}" IsHitTestVisible="False"
                    Visibility="{Binding ShowEmptyState, Converter={StaticResource BoolToVis}}"/>
 
-        <!-- Row 2 overlay: subtle loading indicator while a refresh/operation runs -->
+        <!-- Row 2 overlay: subtle loading indicator while a refresh/operation runs. IsActive
+             (not bare IsBusy) so the visible-light background tier shows this too — see
+             PickleGit/plans/quiet-background-refresh.md. -->
         <Border Grid.Row="2" VerticalAlignment="Top" Height="3" IsHitTestVisible="False"
-                Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
+                Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}">
             <ProgressBar IsIndeterminate="True" Height="3" BorderThickness="0"/>
         </Border>
 

@@ -41,33 +41,47 @@ namespace PickleGit.ViewModels
         /// <summary>Watcher-driven light refresh: status lists + the uncommitted graph node only. Only
         /// re-syncs the diff pane when the file lists actually changed — the watcher fires on ANY workdir
         /// write anywhere in the repo, and re-pointing the diff pane unconditionally on every tick would
-        /// otherwise drop the current selection (see ApplyWorkingDirStatus) even for unrelated files.</summary>
+        /// otherwise drop the current selection (see ApplyWorkingDirStatus) even for unrelated files.
+        ///
+        /// Silent by default (IsSilentlyRefreshing — no UI element at all, see its doc comment): the
+        /// only standalone caller is OnRepoChangedExternally(WorkingDir), which already opened that
+        /// tier itself before calling in here (covering its own Reopen() call too), so
+        /// <c>ownsFlag</c> below is false there and this method leaves it alone. The one other
+        /// caller, AddToGitignore, wraps itself in the heavy IsBusy scope first (it's a direct user
+        /// action, not a background poll) — <c>ownsFlag</c> is false there too, for the same
+        /// reason: something is already scoped, so this just does the work.</summary>
         private async Task RefreshWorkingDirStatusAsync()
         {
             if (!_git.IsOpen || RepoDirectoryMissing()) return;
-            var changes = await _git.Executor.RunAsync(() => _git.GetWorkingDirectoryStatus());
-            await RefreshConflictStateAsync();
-            if (ApplyWorkingDirStatus(changes, updateGraph: true))
-                await SyncDiffPaneAfterFileListChangeAsync();
-            // `git status` (GetWorkingDirectoryStatus's CLI path) can itself rewrite .git/index to
-            // refresh its stat cache — e.g. right after a branch checkout, when every file's mtime
-            // just changed and the cache is cold for the whole tree. RepositoryWatcher classifies an
-            // index write as a WorkingDir change (RepositoryWatcher.cs), so without this, that
-            // self-inflicted write re-triggers THIS SAME method, which calls `git status` again,
-            // which rewrites the index again — a self-sustaining feedback loop that only stopped
-            // once the stat cache happened to converge (confirmed directly in picklegit.log: ~45
-            // back-to-back "IsBusy -> True/False" cycles, over a minute, after one branch switch,
-            // with no external cause). RefreshAsync already guards its own equivalent call with
-            // exactly this pattern; this watcher-driven light refresh was the one path missing it.
-            // Pass WorkingDir explicitly (not the default Refs) — this method never re-reads
-            // branch/HEAD/ref state, so it must not swallow a Refs-kind signal (a branch switch or
-            // commit) that lands during this grace window; RepositoryWatcher.SuppressForGracePeriod
-            // resumes anything above the kind actually covered instead of discarding it. Without
-            // this, a checkout or commit whose HEAD write happened to land inside this window (e.g.
-            // right after this same checkout's own working-dir echo) left the UI showing the old
-            // branch / stale "Uncommitted changes" state until some unrelated later change escaped
-            // every suppression window.
-            _watcher?.SuppressForGracePeriod(2000, RepoChangeKind.WorkingDir);
+            var ownsFlag = !IsBusy && !IsRefreshing && !IsSilentlyRefreshing;
+            if (ownsFlag) IsSilentlyRefreshing = true;
+            try
+            {
+                var changes = await _git.Executor.RunAsync(() => _git.GetWorkingDirectoryStatus());
+                await RefreshConflictStateAsync();
+                if (ApplyWorkingDirStatus(changes, updateGraph: true))
+                    await SyncDiffPaneAfterFileListChangeAsync();
+                // `git status` (GetWorkingDirectoryStatus's CLI path) can itself rewrite .git/index to
+                // refresh its stat cache — e.g. right after a branch checkout, when every file's mtime
+                // just changed and the cache is cold for the whole tree. RepositoryWatcher classifies an
+                // index write as a WorkingDir change (RepositoryWatcher.cs), so without this, that
+                // self-inflicted write re-triggers THIS SAME method, which calls `git status` again,
+                // which rewrites the index again — a self-sustaining feedback loop that only stopped
+                // once the stat cache happened to converge (confirmed directly in picklegit.log: ~45
+                // back-to-back "IsBusy -> True/False" cycles, over a minute, after one branch switch,
+                // with no external cause). RefreshAsync already guards its own equivalent call with
+                // exactly this pattern; this watcher-driven light refresh was the one path missing it.
+                // Pass WorkingDir explicitly (not the default Refs) — this method never re-reads
+                // branch/HEAD/ref state, so it must not swallow a Refs-kind signal (a branch switch or
+                // commit) that lands during this grace window; RepositoryWatcher.SuppressForGracePeriod
+                // resumes anything above the kind actually covered instead of discarding it. Without
+                // this, a checkout or commit whose HEAD write happened to land inside this window (e.g.
+                // right after this same checkout's own working-dir echo) left the UI showing the old
+                // branch / stale "Uncommitted changes" state until some unrelated later change escaped
+                // every suppression window.
+                _watcher?.SuppressForGracePeriod(2000, RepoChangeKind.WorkingDir);
+            }
+            finally { if (ownsFlag) IsSilentlyRefreshing = false; }
         }
 
         private async Task RefreshConflictStateAsync()
@@ -590,6 +604,11 @@ namespace PickleGit.ViewModels
             if (string.IsNullOrEmpty(rel)) return;
             var workDir = _git.WorkingDirectory ?? RepoPath;
             if (string.IsNullOrEmpty(workDir)) return;
+            // A direct user action, not a background poll — wrap in the heavy scope like every
+            // other explicit mutation (a pre-existing gap: this used to call the refresh below with
+            // no busy scope open at all, so RefreshWorkingDirStatusAsync's "am I already scoped?"
+            // check would have opened its own silent one otherwise).
+            if (!TryEnterBusyScope()) return;
             try
             {
                 var gitignore = Path.Combine(workDir.TrimEnd('\\', '/'), ".gitignore");
@@ -600,13 +619,13 @@ namespace PickleGit.ViewModels
                 File.AppendAllText(gitignore, (needsLeadingNewline ? Environment.NewLine : string.Empty)
                     + entry + Environment.NewLine);
                 StatusMessage = $"Added {entry} to .gitignore";
+                await RefreshWorkingDirStatusAsync();
             }
             catch (Exception ex)
             {
                 DialogService.ShowError(".gitignore", ex.Message);
-                return;
             }
-            await RefreshWorkingDirStatusAsync();
+            finally { IsBusy = false; }
         }
 
     }

@@ -487,7 +487,7 @@ namespace PickleGit.ViewModels
         private void CloseOtherTabs(object param)
         {
             if (!(param is RepositoryViewModel keep)) return;
-            foreach (var tab in Tabs.Where(t => t != keep && !t.IsBusy).ToList())
+            foreach (var tab in Tabs.Where(t => t != keep && t.CanClose).ToList())
             {
                 Tabs.Remove(tab);
                 tab.Dispose();
@@ -501,7 +501,7 @@ namespace PickleGit.ViewModels
             if (!(param is RepositoryViewModel anchor)) return;
             var idx = Tabs.IndexOf(anchor);
             if (idx < 0) return;
-            foreach (var tab in Tabs.Skip(idx + 1).Where(t => !t.IsBusy).ToList())
+            foreach (var tab in Tabs.Skip(idx + 1).Where(t => t.CanClose).ToList())
             {
                 Tabs.Remove(tab);
                 tab.Dispose();
@@ -512,7 +512,7 @@ namespace PickleGit.ViewModels
 
         private void CloseAllTabs()
         {
-            foreach (var tab in Tabs.Where(t => !t.IsBusy).ToList())
+            foreach (var tab in Tabs.Where(t => t.CanClose).ToList())
             {
                 Tabs.Remove(tab);
                 tab.Dispose();
@@ -780,7 +780,7 @@ namespace PickleGit.ViewModels
         private void CloseTab(object param)
         {
             if (!(param is RepositoryViewModel tab)) return;
-            if (tab.IsBusy) return;
+            if (!tab.CanClose) return;
             var idx = Tabs.IndexOf(tab);
             Tabs.Remove(tab);
             tab.Dispose();

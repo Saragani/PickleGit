@@ -72,9 +72,59 @@ namespace PickleGit.ViewModels
             {
                 if (!Set(ref _isBusy, value)) return;
                 RaisePropertyChanged(nameof(ShowEmptyState));
+                RaisePropertyChanged(nameof(IsActive));
+                RaisePropertyChanged(nameof(CanClose));
                 AppLog.Info($"IsBusy -> {value} (status={StatusMessage}) [{RepoName}]");
             }
         }
+
+        private bool _isRefreshing;
+        /// <summary>Set only around watcher/timer-triggered background refreshes that aren't
+        /// silent (an external branch/HEAD change, or the 5-minute failsafe poll) — visible via the
+        /// tab spinner and the commit-list's progress bar (see <see cref="IsActive"/>), but never
+        /// locks the toolbar or the sidebar the way <see cref="IsBusy"/> does, and never goes
+        /// through <see cref="TryEnterBusyScope"/>, so a real command can start immediately
+        /// regardless of whether this is set. See PickleGit/plans/quiet-background-refresh.md.</summary>
+        public bool IsRefreshing
+        {
+            get => _isRefreshing;
+            set
+            {
+                if (!Set(ref _isRefreshing, value)) return;
+                RaisePropertyChanged(nameof(IsActive));
+                RaisePropertyChanged(nameof(CanClose));
+            }
+        }
+
+        private bool _isSilentlyRefreshing;
+        /// <summary>Set only around ordinary working-directory changes — a file added, removed,
+        /// edited, or renamed, compiling included. Deliberately drives no UI element at all, not
+        /// even the tab spinner: see <see cref="IsActive"/>, which excludes it on purpose. Still
+        /// tracked (rather than not tracked at all) purely so <see cref="CanClose"/> still refuses
+        /// to close a tab mid-refresh, exactly as it does for <see cref="IsBusy"/>/
+        /// <see cref="IsRefreshing"/> — closing mid-Reopen()/mid-git-status is the same disposal
+        /// race whether or not anything was ever shown on screen for it.</summary>
+        public bool IsSilentlyRefreshing
+        {
+            get => _isSilentlyRefreshing;
+            set
+            {
+                if (!Set(ref _isSilentlyRefreshing, value)) return;
+                RaisePropertyChanged(nameof(CanClose));
+            }
+        }
+
+        /// <summary>What the tab spinner, the commit-list progress bar, and the taskbar indicator
+        /// bind to instead of bare <see cref="IsBusy"/> — covers the heavy and visible-light tiers,
+        /// deliberately not the silent one (<see cref="IsSilentlyRefreshing"/>).</summary>
+        public bool IsActive => IsBusy || IsRefreshing;
+
+        /// <summary>False while any git-executor activity for this tab — heavy, light, or silent —
+        /// is in flight, so closing it can't race GitService.Dispose() against still-running
+        /// executor work. Extends the previous IsBusy-only tab-close guard to the two background
+        /// tiers introduced alongside this property.</summary>
+        public bool CanClose => !IsBusy && !IsRefreshing && !IsSilentlyRefreshing;
+
         public bool HasRepo => _git.IsOpen;
 
         // ── Graph data ────────────────────────────────────────────────────────
@@ -1128,6 +1178,13 @@ namespace PickleGit.ViewModels
         private bool _refreshPending;
         private bool _refreshPendingForce;
         private RefreshScope _refreshPendingScope = RefreshScope.Full;
+        // Resets to true (the permissive default) each pass, mirroring _refreshPendingForce's reset
+        // to false — AND-combined with each coalesced request's own value, so a merged pass only
+        // stays background-triggered (light, no lock) if EVERY request that fed into it agreed;
+        // one real user-triggered request (e.g. pressing F5 mid-refresh) always wins and the merged
+        // pass shows the full heavy lock instead, never less feedback than any single contributor
+        // asked for.
+        private bool _refreshPendingIsBackgroundTrigger = true;
 
         public Task RefreshAsync() => RefreshAsync(false, RefreshScope.Full);
 
@@ -1144,7 +1201,16 @@ namespace PickleGit.ViewModels
         /// pass (which GitExecutor would have serialized back-to-back anyway, just wastefully).</summary>
         public Task RefreshAsync(bool force) => RefreshAsync(force, RefreshScope.Full);
 
-        public async Task RefreshAsync(bool force, RefreshScope scope)
+        /// <summary><paramref name="isBackgroundTrigger"/>: true only for the standalone,
+        /// non-reentrant callers that represent a passive background poll rather than something the
+        /// user explicitly asked for or is already watching (currently just the 5-minute failsafe
+        /// timer) — routes the refresh through the visible-light tier (<see cref="IsRefreshing"/>)
+        /// instead of the full <see cref="IsBusy"/> lock. Has no effect when a scope is already open
+        /// (<see cref="RefreshOnceAsync"/> just reuses whichever one is active) — most callers,
+        /// including every other standalone one (an explicit "Refresh" click, the tail of a
+        /// RunThenRefresh* sequence), leave this false and get the original heavy behavior. See
+        /// PickleGit/plans/quiet-background-refresh.md.</summary>
+        public async Task RefreshAsync(bool force, RefreshScope scope, bool isBackgroundTrigger = false)
         {
             if (_refreshInFlight)
             {
@@ -1154,10 +1220,12 @@ namespace PickleGit.ViewModels
                 // Union, not overwrite — a coalesced Branches-only request must not cause an
                 // already-pending Full request (or vice versa) to lose categories it needed.
                 _refreshPendingScope |= scope;
+                _refreshPendingIsBackgroundTrigger = _refreshPendingIsBackgroundTrigger && isBackgroundTrigger;
                 return;
             }
             _refreshInFlight = true;
             _refreshPendingScope = scope;
+            _refreshPendingIsBackgroundTrigger = isBackgroundTrigger;
             var sw = System.Diagnostics.Stopwatch.StartNew();
             AppLog.Info($"RefreshAsync(force={force}, scope={scope}) start [{RepoName}]");
             try
@@ -1169,10 +1237,12 @@ namespace PickleGit.ViewModels
                     _refreshPending = false;
                     var thisForce = force || _refreshPendingForce;
                     var thisScope = _refreshPendingScope;
+                    var thisIsBackgroundTrigger = _refreshPendingIsBackgroundTrigger;
                     _refreshPendingForce = false;
                     _refreshPendingScope = RefreshScope.Full; // any request that arrives after this pass starts defaults full again
+                    _refreshPendingIsBackgroundTrigger = true; // permissive default — see field's own comment
                     AppLog.Info($"RefreshAsync - starting {thisScope} refresh in {sw.ElapsedMilliseconds}ms [{RepoName}]");
-                    await RefreshOnceAsync(thisForce, thisScope);
+                    await RefreshOnceAsync(thisForce, thisScope, thisIsBackgroundTrigger);
                     AppLog.Info($"RefreshAsync - finished {thisScope} refresh in {sw.ElapsedMilliseconds}ms [{RepoName}]");
                     force = false; // only the original caller's own force flag applies to the first pass
                 }
@@ -1199,7 +1269,7 @@ namespace PickleGit.ViewModels
             finally { _refreshInFlight = false; }
         }
 
-        private async Task RefreshOnceAsync(bool force, RefreshScope scope = RefreshScope.Full)
+        private async Task RefreshOnceAsync(bool force, RefreshScope scope = RefreshScope.Full, bool isBackgroundTrigger = false)
         {
             if (!_git.IsOpen || RepoDirectoryMissing()) return;
             _isLoaded = true;
@@ -1207,7 +1277,10 @@ namespace PickleGit.ViewModels
             // are already inside a busy scope) and as the last step of a RunThenRefresh* sequence
             // (which already holds the busy scope). In the latter case, go through RunWorkAsync
             // directly so refresh doesn't re-trip the "already busy" guard or drop IsBusy back to
-            // false before the whole sequence is actually done (see TryEnterBusyScope).
+            // false before the whole sequence is actually done (see TryEnterBusyScope). "Already
+            // scoped" now also covers IsRefreshing/IsSilentlyRefreshing — OnRepoChangedExternally
+            // opens one of those itself (covering its own Reopen() call too) before calling in
+            // here, so this must recognize that and not also open a heavy scope on top of it.
             Action work = () =>
             {
                 // For any category `scope` excludes, reuse the existing VM state instead of paying
@@ -1396,8 +1469,10 @@ namespace PickleGit.ViewModels
                 });
             };
 
-            if (IsBusy)
+            if (IsBusy || IsRefreshing || IsSilentlyRefreshing)
                 await RunWorkAsync("Refreshing…", work);
+            else if (isBackgroundTrigger)
+                await RunLightAsync(work);
             else
                 await RunAsync("Refreshing…", work);
         }
@@ -1664,16 +1739,23 @@ namespace PickleGit.ViewModels
             // Raised on a threadpool thread — marshal to the dispatcher
             Application.Current?.Dispatcher.BeginInvoke(new Action(async () =>
             {
-                if (!_git.IsOpen || IsBusy) return;
-                // Set before the first await, not just inside RefreshAsync/RefreshWorkingDirStatusAsync's
-                // own try/finally — otherwise CloseTab's "if (tab.IsBusy) return" guard doesn't cover
-                // the Reopen() call below, leaving a real (if narrow) window where closing the tab
-                // mid-refresh could race GitService.Dispose() against this still-running executor work.
-                IsBusy = true;
+                if (!_git.IsOpen || IsBusy || IsRefreshing || IsSilentlyRefreshing) return;
+                // A Refs change (external branch/HEAD move) gets the visible-light tier — an
+                // external checkout/commit is significant enough to be worth the tab spinner. A
+                // WorkingDir change (an ordinary file add/edit/delete/rename — compiling included)
+                // gets the silent tier: no UI element at all, see IsSilentlyRefreshing's own doc
+                // comment for why. Set before the first await, not just inside
+                // RefreshAsync/RefreshWorkingDirStatusAsync's own try/finally — otherwise CanClose's
+                // guard doesn't cover the Reopen() call below, leaving a real (if narrow) window
+                // where closing the tab mid-refresh could race GitService.Dispose() against this
+                // still-running executor work. RefreshAsync/RefreshWorkingDirStatusAsync each detect
+                // that a scope is already open here and just do the work without opening their own.
+                var isRefsChange = kind == RepoChangeKind.Refs;
+                if (isRefsChange) IsRefreshing = true; else IsSilentlyRefreshing = true;
                 // Mirrors RunWorkAsync's own Suppress() scope: without it, a second external change
                 // (another edit, or the second half of a checkout/commit whose ref-write lands a
                 // moment after its index-write) arriving while THIS handler is still running would
-                // get its own independent debounced Changed() call — which then hits the IsBusy
+                // get its own independent debounced Changed() call — which then hits the busy-tier
                 // guard above and is dropped with no pending state at all, unlike a signal arriving
                 // during an explicit Suppress()/SuppressForGracePeriod() window, which is coalesced
                 // and can still resume afterward. Confirmed contributor to reports of "uncommitted
@@ -1704,7 +1786,11 @@ namespace PickleGit.ViewModels
                         await RefreshWorkingDirStatusAsync();
                 }
                 catch { }
-                finally { suppression?.Dispose(); IsBusy = false; }
+                finally
+                {
+                    suppression?.Dispose();
+                    if (isRefsChange) IsRefreshing = false; else IsSilentlyRefreshing = false;
+                }
             }));
         }
 
@@ -1719,8 +1805,8 @@ namespace PickleGit.ViewModels
             };
             _refreshTimer.Tick += async (s, e) =>
             {
-                if (!_git.IsOpen || IsBusy) return;
-                try { await RefreshAsync(); }
+                if (!_git.IsOpen || IsBusy || IsRefreshing || IsSilentlyRefreshing) return;
+                try { await RefreshAsync(false, RefreshScope.Full, isBackgroundTrigger: true); }
                 catch { }
             };
             _refreshTimer.Start();
@@ -1887,6 +1973,22 @@ namespace PickleGit.ViewModels
             if (!TryEnterBusyScope()) return false;
             try { return await RunWorkAsync(status, work); }
             finally { IsBusy = false; }
+        }
+
+        /// <summary>The visible-light-tier counterpart to <see cref="RunAsync"/>, for a standalone
+        /// background-triggered refresh (currently just the 5-minute failsafe timer — see
+        /// <see cref="RefreshOnceAsync"/>'s dispatch). Deliberately not <see cref="RunWorkAsync"/>:
+        /// doesn't touch <see cref="StatusMessage"/>, doesn't populate <c>_opCts</c> (which would pop
+        /// the Cancel button into view for something the toolbar isn't even showing as busy), and
+        /// doesn't show an error dialog on failure — every caller of this tier already wraps its own
+        /// call in a silent try/catch. Never calls <see cref="TryEnterBusyScope"/>, so a real command
+        /// can start immediately regardless of whether this is running.</summary>
+        private async Task RunLightAsync(Action work)
+        {
+            IsRefreshing = true;
+            var suppression = _watcher?.Suppress();
+            try { await _git.Executor.RunAsync(work); }
+            finally { suppression?.Dispose(); IsRefreshing = false; }
         }
 
         /// <summary>Runs one unit of git work and reports/classifies failures. Does not touch

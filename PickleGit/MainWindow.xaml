@@ -27,7 +27,7 @@
                                                 Converter={StaticResource PercentToFraction}, FallbackValue=0}">
             <shell:TaskbarItemInfo.ProgressState>
                 <MultiBinding Converter="{StaticResource TaskbarProgressState}">
-                    <Binding Path="ActiveTab.IsBusy" Mode="OneWay"/>
+                    <Binding Path="ActiveTab.IsActive" Mode="OneWay"/>
                     <Binding Path="ActiveTab.HasProgress" Mode="OneWay"/>
                 </MultiBinding>
             </shell:TaskbarItemInfo.ProgressState>
@@ -384,7 +384,7 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="{Binding RepoName}" VerticalAlignment="Center" FontSize="15"/>
                             <Path Style="{StaticResource TabBusyIndicator}"
-                                  Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
+                                  Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}"/>
                             <Button Content="✕"
                                 AutomationProperties.Name="Close tab"
                                     Style="{StaticResource TabCloseButton}"
