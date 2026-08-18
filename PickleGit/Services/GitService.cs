@@ -932,7 +932,18 @@ namespace PickleGit.Services
         public void UnstageAll()
         {
             EnsureOpen();
-            Commands.Unstage(_repo, "*");
+            // Commands.Unstage(_repo, "*") throws InvalidOperationException ("bears an unexpected
+            // ChangeKind 'Conflicted'") the moment any conflicted (unmerged) path exists anywhere
+            // in the repo, even one nobody asked to unstage — internally it diffs HEAD against the
+            // index for the matched paths and hands the result to Index.Replace(TreeChanges), which
+            // only knows how to restore Added/Modified/Deleted/Renamed entries from HEAD, not a
+            // multi-stage conflict entry. Conflicted paths are never staged in the first place (see
+            // BuildFileChange/GetWorkingDirectoryStatus — Conflicted only ever comes back with
+            // IsStaged=false), so excluding them here changes nothing about what actually gets
+            // unstaged; it just stops the wildcard from touching paths it has no business touching.
+            var stagedPaths = GetWorkingDirectoryStatus().Where(f => f.IsStaged).Select(f => f.Path).ToList();
+            if (stagedPaths.Count == 0) return;
+            Commands.Unstage(_repo, stagedPaths);
         }
 
         /// <summary>Reads a boolean git config value (repo, then global, then system scope).</summary>
