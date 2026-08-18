@@ -453,6 +453,7 @@
         <li><a href="#phase-8"><span class="num mono">08</span>Performance &amp; Git LFS Workflow</a></li>
         <li><a href="#phase-9"><span class="num mono">09</span>Sidebar, Blame &amp; LFS Reliability</a></li>
         <li><a href="#phase-10"><span class="num mono">10</span>Native Git Backend &amp; Conflict Rewrite</a></li>
+        <li><a href="#phase-11"><span class="num mono">11</span>Background Refresh, Decoupled</a></li>
       </ol>
       <ol class="rail-extra">
         <li><a href="#architecture"><span class="num mono">—</span>Architecture</a></li>
@@ -471,8 +472,8 @@
          and a fair number of things that broke along the way and got fixed before they shipped.</p>
 
       <div class="stats">
-        <div class="stat"><div class="n mono">11</div><div class="l">phases, 00 → 10</div></div>
-        <div class="stat"><div class="n mono">30</div><div class="l">bugs caught live, not just in review</div></div>
+        <div class="stat"><div class="n mono">12</div><div class="l">phases, 00 → 11</div></div>
+        <div class="stat"><div class="n mono">31</div><div class="l">bugs caught live, not just in review</div></div>
         <div class="stat"><div class="n mono">3</div><div class="l">hosting providers, one abstraction</div></div>
         <div class="stat"><div class="n mono">1</div><div class="l">theme — dark, start to finish</div></div>
       </div>
@@ -1123,6 +1124,54 @@
              that window left the UI showing the old branch, or a stale "Uncommitted changes" node, until some
              unrelated later change happened to arrive outside every suppression window. The grace period is now
              kind-aware: it only discards what it actually covered, and resumes anything more significant.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ PHASE 11 ══════════════════════ -->
+    <section class="phase" id="phase-11">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 11</span>
+        <h2 class="phase-title display">Background Refresh, Decoupled</h2>
+      </div>
+      <p class="thesis">Since <span class="mono">PickleGit_1.0.21</span>: the single <code>IsBusy</code> flag that
+         locked the toolbar and the sidebar for <i>every</i> git-executor activity — a full Fetch and the watcher
+         noticing one file changed, treated identically — is now three tiers, so routine background activity stops
+         disabling Fetch/Pull/Push and blocking the sidebar for no reason.</p>
+
+      <ul class="feature-list">
+        <li><div><b>Three tiers instead of one</b> — <span class="desc"><code>IsBusy</code> (unchanged: Commit,
+            Checkout, Fetch/Pull/Push, Merge, Rebase, … still get the full toolbar lock, sidebar scrim, and tab
+            spinner); <code>IsRefreshing</code> (new: an external branch/HEAD change the watcher detects, or the
+            5-minute failsafe poll — tab spinner and commit-list progress bar only, toolbar and sidebar stay
+            live); <code>IsSilentlyRefreshing</code> (new: an ordinary working-directory change — a file added,
+            removed, edited, or renamed, compiling included — shows nothing at all). Neither of the two new tiers
+            ever goes through the exclusive busy scope, so a real command can start immediately regardless of
+            what's running in the background — it simply queues behind it on the same single executor thread,
+            same as it always has.</span></div></li>
+        <li><div><b><code>IsActive</code> / <code>CanClose</code></b> — <span class="desc">the tab spinner, the
+            commit-list progress bar, and the taskbar indicator now bind to <code>IsActive</code>
+            (<code>IsBusy || IsRefreshing</code>), deliberately excluding the silent tier. Every tab-close guard
+            that used to check bare <code>IsBusy</code> now checks <code>CanClose</code> (none of the three tiers
+            active), so a tab mid-background-refresh — visible or silent — stays exactly as protected against the
+            executor-disposal race as one mid-Fetch.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Found while chasing a layout report</p>
+          <p><b>A stale selection could outlive the graph it belonged to.</b> Every refresh or search-filter pass
+             replaces every <code>GraphNode</code> instance wholesale, so the two places that re-resolve the
+             previously selected commit by SHA afterward only ever handled the "found a match" case — when the
+             selected node had no match in the new list (most commonly the synthetic "Uncommitted changes" node,
+             gone right after committing everything), <code>SelectedNode</code> was left pointing at an orphaned
+             instance, relying entirely on WPF's own internal ListView selection-clearing to notice and propagate
+             it back on its own schedule. Both call sites now clear the selection explicitly and synchronously
+             the moment no match is found, in the same call that already swapped the graph, instead of depending
+             on that separate, unsynchronized path. This was a real gap regardless of its role in the specific
+             report that surfaced it — a detail-column layout glitch after committing that neither reproduced
+             reliably enough to confirm as fixed on its own.</p>
         </div>
       </div>
     </section>
