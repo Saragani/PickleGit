@@ -1351,7 +1351,7 @@ namespace PickleGit.ViewModels
                         // dispatcher, same as the scope-based reuse block above, since this runs on
                         // the background executor thread.
                         CommitHistory captured = null;
-                        Application.Current.Dispatcher.Invoke(() =>
+                        Application.Current?.Dispatcher?.Invoke(() =>
                         {
                             captured = new CommitHistory { Commits = _allCommits, BranchMasks = BranchMasks, ReachedLimit = HasMoreCommits };
                         });
@@ -1449,6 +1449,24 @@ namespace PickleGit.ViewModels
                             // Rebuilding GraphNodes resets the ListView scroll — bring the
                             // restored selection back into view (no-op if already visible)
                             ScrollToNodeRequested?.Invoke(this, restored);
+                        }
+                        else
+                        {
+                            // The previously selected node — typically the synthetic "Uncommitted
+                            // changes" node, gone now that everything's been committed — no longer
+                            // exists in the rebuilt list. Clear the selection explicitly, right here,
+                            // instead of leaving _selectedNode pointing at an orphaned GraphNode
+                            // instance for WPF's own internal ListView selection-clearing (mirrored
+                            // back via ListViewMultiSelectBehavior) to notice and propagate on its
+                            // own time. That path firing late/out-of-order relative to this same
+                            // GraphNodes swap is exactly what left ShowWorkingDir/DetailCommit/
+                            // HasDetailPanel unresolved for a moment — long enough, in one observed
+                            // case, for the detail column's Grid to get stuck not reclaiming the
+                            // freed width even across several later, correctly-fired selection
+                            // changes. Setting it to null here runs the whole
+                            // OnSelectedNodesChanged/RaiseDetailPanelPropertiesChanged chain
+                            // synchronously, in the same call that already changed GraphNodes.
+                            SelectedNode = null;
                         }
                     }
                 });
@@ -1613,6 +1631,14 @@ namespace PickleGit.ViewModels
                         {
                             SelectedNode = restored;
                             ScrollToNodeRequested?.Invoke(this, restored);
+                        }
+                        else
+                        {
+                            // No longer exists in the rebuilt list (e.g. the synthetic "Uncommitted
+                            // changes" node, gone now that everything's committed) — clear the
+                            // selection explicitly and synchronously here, same reasoning as
+                            // RefreshOnceAsync's identical fix.
+                            SelectedNode = null;
                         }
                     }
                 });
