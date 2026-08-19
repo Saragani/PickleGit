@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -18,6 +19,14 @@ namespace PickleGit
     {
         private readonly AppViewModel _vm;
         private RepositoryViewModel _trackedTab;
+
+        /// <summary>Remembers each tab's last manually-dragged detail-panel width (keyed by
+        /// RepositoryViewModel so it survives the tab's Grid being unloaded/reloaded across tab
+        /// switches — see ApplyDetailPanelColumnWidths). A ConditionalWeakTable rather than a plain
+        /// Dictionary so a closed tab's entry doesn't need explicit cleanup to avoid leaking the
+        /// ViewModel.</summary>
+        private readonly ConditionalWeakTable<RepositoryViewModel, object> _rememberedDetailPanelWidths =
+            new ConditionalWeakTable<RepositoryViewModel, object>();
 
         private void ApplyDarkTitleBar()
         {
@@ -58,7 +67,7 @@ namespace PickleGit
             grid.Tag = null;
         }
 
-        private static void ApplyDetailPanelColumnWidths(Grid grid, RepositoryViewModel vm)
+        private void ApplyDetailPanelColumnWidths(Grid grid, RepositoryViewModel vm)
         {
             var cols = grid.ColumnDefinitions;
             if (cols.Count < 5) return;
@@ -69,8 +78,28 @@ namespace PickleGit
             cols[2].Width = new GridLength(1, GridUnitType.Star);
             cols[2].MinWidth = 300;
             cols[3].Width = hasDetail ? new GridLength(5) : new GridLength(0);
-            cols[4].Width = hasDetail ? new GridLength(350) : new GridLength(0);
-            cols[4].MinWidth = hasDetail ? 350 : 0;
+            if (hasDetail)
+            {
+                // Restore whatever the user last dragged it to (captured below, right before it
+                // last collapsed), not a hardcoded default — a resizable panel that silently forgets
+                // your resize every time it's hidden and reshown reads as broken, not intentional.
+                var width = _rememberedDetailPanelWidths.TryGetValue(vm, out var boxed) ? (double)boxed : 350.0;
+                cols[4].MinWidth = 350;
+                cols[4].Width = new GridLength(Math.Min(Math.Max(width, 350), 600));
+            }
+            else
+            {
+                // ActualWidth still reflects the last real layout pass (the one that was stable
+                // right before this change), so this is the width to remember — capture it before
+                // collapsing the column, not after.
+                if (cols[4].ActualWidth > 0)
+                {
+                    _rememberedDetailPanelWidths.Remove(vm);
+                    _rememberedDetailPanelWidths.Add(vm, cols[4].ActualWidth);
+                }
+                cols[4].MinWidth = 0;
+                cols[4].Width = new GridLength(0);
+            }
         }
 
         /// <summary>Rebuilds Window.InputBindings from Services/ShortcutManager.cs. Each KeyBinding's
