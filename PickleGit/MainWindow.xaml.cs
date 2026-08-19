@@ -32,59 +32,66 @@ namespace PickleGit
         /// touch these two controls' Width in reaction to HasDetailPanel changing — an Auto column
         /// collapses to zero on its own the moment its (single) child's Visibility goes Collapsed,
         /// so there's no separate "width" state that can drift out of sync with "visibility" the
-        /// way there was when columns 3/4 had their own bound Pixel widths.</summary>
+        /// way there was when columns 3/4 had their own bound Pixel widths.
+        ///
+        /// This and the four Thumb handlers below are this window's one deliberate exception to
+        /// CLAUDE.md's "no code-behind logic" rule: SidebarView/CommitDetailView's Width has to be
+        /// something a Thumb.DragDelta handler can set directly (see the handlers' own doc
+        /// comments for why a {Binding} here specifically doesn't mix safely with an interactive
+        /// drag), and a DragDelta handler is inherently code-behind — there's no bindable command
+        /// for "the mouse moved by this many pixels while a button is held."</summary>
         private void TabContentColumnsGrid_Loaded(object sender, RoutedEventArgs e)
         {
             if (!(sender is Grid grid)) return;
             var sidebar = grid.Children.OfType<Views.SidebarView>().FirstOrDefault();
             if (sidebar != null) sidebar.Width = _vm.SidebarPaneWidth;
+            else AppLog.Warn("TabContentColumnsGrid_Loaded: SidebarView not found — sidebar width not seeded");
             var detail = grid.Children.OfType<Views.CommitDetailView>().FirstOrDefault();
             if (detail != null) detail.Width = _vm.DetailPanelPaneWidth;
+            else AppLog.Warn("TabContentColumnsGrid_Loaded: CommitDetailView not found — detail panel width not seeded");
         }
 
-        /// <summary>Live-resizes the sidebar while dragging its Thumb (Grid.Column="1") — a plain
-        /// Thumb, not GridSplitter: see MainWindow.xaml's own comment on why GridSplitter's
-        /// built-in column-resize behavior doesn't mix safely with this shell's layout. A Thumb has
-        /// no resize logic of its own at all, so this handler is the only thing that ever sets
-        /// SidebarView.Width.</summary>
-        private void SidebarThumb_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+        /// <summary>Live-resizes <typeparamref name="T"/> (SidebarView or CommitDetailView) while
+        /// dragging its neighboring Thumb — a plain Thumb, not GridSplitter: see MainWindow.xaml's
+        /// own comment on why GridSplitter's built-in column-resize behavior doesn't mix safely
+        /// with this shell's layout. A Thumb has no resize logic of its own at all, so this (and
+        /// <see cref="PersistPaneWidth{T}"/>) are the only things that ever set either control's
+        /// Width. <paramref name="sign"/> is +1 for a pane to the Thumb's left (dragging right
+        /// grows it) or -1 for one to its right (dragging right shrinks it).</summary>
+        private static void ResizePaneOnDrag<T>(object sender, double horizontalChange, double sign, double min, double max)
+            where T : FrameworkElement
         {
             if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid)) return;
-            var sidebar = grid.Children.OfType<Views.SidebarView>().FirstOrDefault();
-            if (sidebar == null) return;
-            var current = double.IsNaN(sidebar.Width) ? sidebar.ActualWidth : sidebar.Width;
-            sidebar.Width = Clamp(current + e.HorizontalChange, 210, 400);
+            var pane = grid.Children.OfType<T>().FirstOrDefault();
+            if (pane == null) return;
+            var current = double.IsNaN(pane.Width) ? pane.ActualWidth : pane.Width;
+            pane.Width = Math.Max(min, Math.Min(max, current + sign * horizontalChange));
         }
 
-        /// <summary>Persists the sidebar's dragged width once the drag actually finishes.</summary>
-        private void SidebarThumb_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        /// <summary>Persists <typeparamref name="T"/>'s current Width once its drag actually
+        /// finishes, via <paramref name="save"/> — <see cref="AppViewModel.SidebarPaneWidth"/> or
+        /// <see cref="AppViewModel.DetailPanelPaneWidth"/>, each of which clamps and writes to
+        /// settings.json on its own.</summary>
+        private static void PersistPaneWidth<T>(object sender, Action<double> save) where T : FrameworkElement
         {
             if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid)) return;
-            var sidebar = grid.Children.OfType<Views.SidebarView>().FirstOrDefault();
-            if (sidebar != null) _vm.SidebarPaneWidth = sidebar.Width;
+            var pane = grid.Children.OfType<T>().FirstOrDefault();
+            if (pane != null) save(pane.Width);
         }
 
-        /// <summary>Same idea as <see cref="SidebarThumb_DragDelta"/>, for the detail panel's own
-        /// Thumb (Grid.Column="3", to its left — dragging right shrinks the panel, hence the
-        /// subtraction rather than addition).</summary>
-        private void DetailPanelThumb_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
-        {
-            if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid)) return;
-            var detail = grid.Children.OfType<Views.CommitDetailView>().FirstOrDefault();
-            if (detail == null) return;
-            var current = double.IsNaN(detail.Width) ? detail.ActualWidth : detail.Width;
-            detail.Width = Clamp(current - e.HorizontalChange, 350, 600);
-        }
+        private void SidebarThumb_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e) =>
+            ResizePaneOnDrag<Views.SidebarView>(sender, e.HorizontalChange, +1,
+                AppViewModel.MinSidebarPaneWidth, AppViewModel.MaxSidebarPaneWidth);
 
-        /// <summary>Persists the detail panel's dragged width once the drag actually finishes.</summary>
-        private void DetailPanelThumb_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
-        {
-            if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid)) return;
-            var detail = grid.Children.OfType<Views.CommitDetailView>().FirstOrDefault();
-            if (detail != null) _vm.DetailPanelPaneWidth = detail.Width;
-        }
+        private void SidebarThumb_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
+            PersistPaneWidth<Views.SidebarView>(sender, w => _vm.SidebarPaneWidth = w);
 
-        private static double Clamp(double value, double min, double max) => Math.Max(min, Math.Min(value, max));
+        private void DetailPanelThumb_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e) =>
+            ResizePaneOnDrag<Views.CommitDetailView>(sender, e.HorizontalChange, -1,
+                AppViewModel.MinDetailPanelPaneWidth, AppViewModel.MaxDetailPanelPaneWidth);
+
+        private void DetailPanelThumb_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
+            PersistPaneWidth<Views.CommitDetailView>(sender, w => _vm.DetailPanelPaneWidth = w);
 
         /// <summary>Rebuilds Window.InputBindings from Services/ShortcutManager.cs. Each KeyBinding's
         /// Command (and CommandParameter, where the action needs one) is a live data binding against

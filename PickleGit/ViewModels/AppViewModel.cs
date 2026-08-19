@@ -19,6 +19,16 @@ namespace PickleGit.ViewModels
         public const double MinColWidthDateTime   = 50;
         public const double MinColWidthSha        = 40;
 
+        // Matches the range MainWindow.xaml.cs's Thumb drag handlers clamp to. Also enforced here,
+        // not just there: a value loaded straight from settings.json (hand-edited, or written by a
+        // stale/buggy older build — this exact pane-width feature has a real history of that) skips
+        // the drag path entirely, and WPF's FrameworkElement.Width setter throws outright for a
+        // negative value, so an unclamped load could crash on startup rather than just look wrong.
+        public const double MinSidebarPaneWidth     = 210;
+        public const double MaxSidebarPaneWidth     = 400;
+        public const double MinDetailPanelPaneWidth = 350;
+        public const double MaxDetailPanelPaneWidth = 600;
+
         public ObservableCollection<RepositoryViewModel> Tabs { get; }
             = new ObservableCollection<RepositoryViewModel>();
 
@@ -81,20 +91,30 @@ namespace PickleGit.ViewModels
         public double ColWidthSha        { get => _colWidthSha;        set { if (Set(ref _colWidthSha,        Math.Max(MinColWidthSha, value))) OnColumnWidthChanged(); } }
 
         /// <summary>The sidebar (left pane) width, persisted across restarts. Set by
-        /// MainWindow.xaml.cs once a GridSplitter drag on that column completes — not a live
-        /// {Binding} on the ColumnDefinition itself; see its own DragCompleted handler for why.</summary>
+        /// MainWindow.xaml.cs once a Thumb drag on that pane completes — not a live {Binding} on
+        /// a ColumnDefinition; see its own DragCompleted handler for why. Clamped here (not just at
+        /// the drag site) so a value loaded straight from settings.json can't push it out of
+        /// range.</summary>
         public double SidebarPaneWidth
         {
             get => _sidebarPaneWidth;
-            set { if (Set(ref _sidebarPaneWidth, value)) AppSettings.SaveSidebarPaneWidth(value); }
+            set
+            {
+                var clamped = Math.Max(MinSidebarPaneWidth, Math.Min(MaxSidebarPaneWidth, value));
+                if (Set(ref _sidebarPaneWidth, clamped)) AppSettings.SaveSidebarPaneWidth(clamped);
+            }
         }
 
         /// <summary>The commit-detail panel (right pane) width, persisted across restarts. Same
-        /// DragCompleted-driven update pattern as <see cref="SidebarPaneWidth"/>.</summary>
+        /// DragCompleted-driven update pattern and clamping rationale as <see cref="SidebarPaneWidth"/>.</summary>
         public double DetailPanelPaneWidth
         {
             get => _detailPanelPaneWidth;
-            set { if (Set(ref _detailPanelPaneWidth, value)) AppSettings.SaveDetailPanelPaneWidth(value); }
+            set
+            {
+                var clamped = Math.Max(MinDetailPanelPaneWidth, Math.Min(MaxDetailPanelPaneWidth, value));
+                if (Set(ref _detailPanelPaneWidth, clamped)) AppSettings.SaveDetailPanelPaneWidth(clamped);
+            }
         }
 
         public double CommitListViewportWidth
@@ -612,7 +632,13 @@ namespace PickleGit.ViewModels
             _colWidthDateTime   = wdt;
             _colWidthSha        = wsha;
 
-            (_sidebarPaneWidth, _detailPanelPaneWidth) = AppSettings.LoadPaneWidths();
+            // Through the properties, not the backing fields directly — SidebarPaneWidth/
+            // DetailPanelPaneWidth's setters clamp to their valid range, which a value loaded
+            // straight from settings.json (hand-edited, or written by a stale/buggy older build)
+            // still needs even though it never went through a live drag.
+            var (loadedSidebarWidth, loadedDetailPanelWidth) = AppSettings.LoadPaneWidths();
+            SidebarPaneWidth = loadedSidebarWidth;
+            DetailPanelPaneWidth = loadedDetailPanelWidth;
 
             var (sLocal, sRemote, sTags, sStashes, sRemotes) = AppSettings.LoadSidebarSectionStates();
             _sidebarLocalBranchesExpanded  = sLocal;

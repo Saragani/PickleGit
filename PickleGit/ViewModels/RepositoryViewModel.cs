@@ -614,14 +614,12 @@ namespace PickleGit.ViewModels
         private bool _credentialsFromDialog;
         private bool _forceCredentialDialog;
 
+        // DetailPanelWidth/DetailPanelMinWidth/DetailSplitterWidth used to live here (bound
+        // directly to MainWindow.xaml's ColumnDefinitions) but were removed once those columns
+        // became Auto-sized from SidebarView/CommitDetailView's own Width instead — see
+        // MainWindow.xaml.cs. HasDetailPanel remains the one thing everything else (Visibility
+        // bindings, this class's own selection logic) still keys off.
         public bool HasDetailPanel => ShowWorkingDir || IsMultiSelection || DetailCommit != null || IsComparisonMode || HasBisect;
-        public GridLength DetailPanelWidth => HasDetailPanel ? new GridLength(350) : new GridLength(0);
-        // A plain MinWidth="350" on the column would defeat the width-0 collapse above whenever
-        // the panel is hidden (ColumnDefinition.MinWidth always wins over a smaller bound Width),
-        // permanently reserving 350px of blank space — so the minimum has to collapse right along
-        // with the width.
-        public double DetailPanelMinWidth => HasDetailPanel ? 350 : 0;
-        public GridLength DetailSplitterWidth => HasDetailPanel ? new GridLength(5) : new GridLength(0);
 
         private readonly HashSet<string> _collapsedBranchNodes = new HashSet<string>();
         private bool _hasSavedBranchNodeState;
@@ -2273,9 +2271,6 @@ namespace PickleGit.ViewModels
         private void RaiseDetailPanelPropertiesChanged()
         {
             RaisePropertyChanged(nameof(HasDetailPanel));
-            RaisePropertyChanged(nameof(DetailPanelWidth));
-            RaisePropertyChanged(nameof(DetailPanelMinWidth));
-            RaisePropertyChanged(nameof(DetailSplitterWidth));
             RaisePropertyChanged(nameof(ShowDiffInsteadOfCommits));
             RaisePropertyChanged(nameof(ShowCommitFilesPanel));
         }

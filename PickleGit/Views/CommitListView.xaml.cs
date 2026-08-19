@@ -61,12 +61,11 @@ namespace PickleGit.Views
 
         private void OnRepoVmPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
-            // The detail panel's column collapses/expands (HasDetailPanel/DetailPanelWidth) whenever
-            // the selection changes — recompute the last column's tracked width once that layout pass
-            // has actually settled, so the commit list fills the freed space immediately instead of
+            // The detail panel's column collapses/expands (HasDetailPanel) whenever the selection
+            // changes — recompute the last column's tracked width once that layout pass has
+            // actually settled, so the commit list fills the freed space immediately instead of
             // waiting for an incidental scroll/resize to trigger it.
-            if (e.PropertyName == nameof(RepositoryViewModel.HasDetailPanel) ||
-                e.PropertyName == nameof(RepositoryViewModel.DetailPanelWidth))
+            if (e.PropertyName == nameof(RepositoryViewModel.HasDetailPanel))
             {
                 Dispatcher.BeginInvoke(new Action(UpdateCommitListViewportWidth), DispatcherPriority.Render);
             }

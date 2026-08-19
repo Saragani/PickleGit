@@ -923,6 +923,12 @@ namespace PickleGit.Services
             Commands.Unstage(_repo, filePaths);
         }
 
+        // Commands.Stage doesn't share UnstageAll's problem below: staging (git add) never runs a
+        // HEAD-vs-index diff-and-replace, it just adds the working-tree/index content directly, so
+        // a conflicted path's multi-stage index entry is never routed through the ChangeKind
+        // machinery that throws for Unstage. Staging a conflicted path this way is also the normal,
+        // supported way to mark it resolved (accept the current working-tree content) — unlike
+        // unstaging, wildcard-including conflicted paths here is correct, not incidental.
         public void StageAll()
         {
             EnsureOpen();
@@ -941,7 +947,18 @@ namespace PickleGit.Services
             // BuildFileChange/GetWorkingDirectoryStatus — Conflicted only ever comes back with
             // IsStaged=false), so excluding them here changes nothing about what actually gets
             // unstaged; it just stops the wildcard from touching paths it has no business touching.
-            var stagedPaths = GetWorkingDirectoryStatus().Where(f => f.IsStaged).Select(f => f.Path).ToList();
+            //
+            // Costs one extra full status scan (GetWorkingDirectoryStatus) before the actual
+            // unstage that the old one-shot "*" pathspec didn't need — an accepted trade-off for not
+            // crashing. Include OldPath alongside Path for a staged rename: Commands.Unstage's own
+            // HEAD-vs-index diff needs BOTH sides of the rename in its pathspec to restore the index
+            // entry fully — passing only the new path left the old path's "deleted" half outside the
+            // diff, undoing only half the rename (new path reverts to untracked, old path stays
+            // gone) instead of fully restoring HEAD's single entry for it.
+            var stagedPaths = GetWorkingDirectoryStatus().Where(f => f.IsStaged)
+                .SelectMany(f => string.IsNullOrEmpty(f.OldPath) ? new[] { f.Path } : new[] { f.Path, f.OldPath })
+                .Distinct()
+                .ToList();
             if (stagedPaths.Count == 0) return;
             Commands.Unstage(_repo, stagedPaths);
         }
