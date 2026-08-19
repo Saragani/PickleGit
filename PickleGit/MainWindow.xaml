@@ -402,13 +402,23 @@
                         <Grid>
                             <!-- Normal 3-panel layout, hidden for a "+"-created placeholder tab
                                  (see IsPlaceholder) in favor of NewTabPlaceholderView below. -->
-                            <Grid Visibility="{Binding IsPlaceholder, Converter={StaticResource InvertBoolToVis}}">
+                            <Grid Visibility="{Binding IsPlaceholder, Converter={StaticResource InvertBoolToVis}}"
+                                  Loaded="TabContentColumnsGrid_Loaded" Unloaded="TabContentColumnsGrid_Unloaded">
+                                <!-- Columns 2-4's widths are applied imperatively from code-behind
+                                     (see TabContentColumnsGrid_Loaded/ApplyDetailPanelColumnWidths),
+                                     not via {Binding}, on purpose: GridSplitter (below) interactively
+                                     resizes both its neighbors (columns 2 and 4) directly, which can
+                                     leave a stale local value a data binding never cleanly overrides
+                                     again afterward — Visibility is a separate, untouched binding,
+                                     which is why the detail panel can visually hide correctly while
+                                     these columns stay stuck at their last dragged width. The literal
+                                     values below are just the pre-Loaded fallback. -->
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="230" MinWidth="210" MaxWidth="400"/>
                                     <ColumnDefinition Width="5"/>
                                     <ColumnDefinition Width="*" MinWidth="300"/>
-                                    <ColumnDefinition Width="{Binding DetailSplitterWidth}"/>
-                                    <ColumnDefinition Width="{Binding DetailPanelWidth}" MinWidth="{Binding DetailPanelMinWidth}" MaxWidth="600"/>
+                                    <ColumnDefinition Width="0"/>
+                                    <ColumnDefinition Width="0" MinWidth="0" MaxWidth="600"/>
                                 </Grid.ColumnDefinitions>
 
                                 <views:SidebarView Grid.Column="0"/>

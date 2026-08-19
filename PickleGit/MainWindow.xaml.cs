@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -21,6 +22,55 @@ namespace PickleGit
         private void ApplyDarkTitleBar()
         {
             Services.TitleBarTheme.Apply(this, !App.IsLightTheme);
+        }
+
+        /// <summary>Per-tab: forces the commit-list/detail-panel columns back to their correct
+        /// widths every time <see cref="RepositoryViewModel.HasDetailPanel"/> changes, instead of
+        /// relying solely on the {Binding DetailSplitterWidth}/{Binding DetailPanelWidth} that used
+        /// to sit directly on those ColumnDefinitions in MainWindow.xaml. The GridSplitter between
+        /// columns 2 and 4 interactively resizes both of them directly when dragged — which can leave
+        /// a stale local value on one or both ColumnDefinitions that the data binding never cleanly
+        /// overrides again afterward (Visibility is a separate, untouched binding, which is why the
+        /// detail panel could visually hide correctly while the commit list stayed permanently short
+        /// of the freed width). Re-applying these three values imperatively, unconditionally, every
+        /// time sidesteps that entirely — there's no longer a persistent binding for a drag to
+        /// disrupt in the first place. One subscription per tab's own Grid/RepositoryViewModel
+        /// instance (TabControl only realizes the active tab's DataTemplate), torn down on Unloaded
+        /// so switching tabs doesn't accumulate handlers.</summary>
+        private void TabContentColumnsGrid_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is Grid grid) || !(grid.DataContext is RepositoryViewModel vm)) return;
+            PropertyChangedEventHandler handler = (s, ev) =>
+            {
+                if (ev.PropertyName == nameof(RepositoryViewModel.HasDetailPanel))
+                    ApplyDetailPanelColumnWidths(grid, vm);
+            };
+            grid.Tag = handler;
+            vm.PropertyChanged += handler;
+            ApplyDetailPanelColumnWidths(grid, vm);
+        }
+
+        private void TabContentColumnsGrid_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is Grid grid) || !(grid.DataContext is RepositoryViewModel vm)) return;
+            if (grid.Tag is PropertyChangedEventHandler handler)
+                vm.PropertyChanged -= handler;
+            grid.Tag = null;
+        }
+
+        private static void ApplyDetailPanelColumnWidths(Grid grid, RepositoryViewModel vm)
+        {
+            var cols = grid.ColumnDefinitions;
+            if (cols.Count < 5) return;
+            var hasDetail = vm.HasDetailPanel;
+            // Column 2 (commit list) is reset back to a clean, unweighted Star every time too —
+            // not just the two detail-panel columns — since the same drag that disrupts columns
+            // 3/4 also directly touches this one (it's the GridSplitter's other neighbor).
+            cols[2].Width = new GridLength(1, GridUnitType.Star);
+            cols[2].MinWidth = 300;
+            cols[3].Width = hasDetail ? new GridLength(5) : new GridLength(0);
+            cols[4].Width = hasDetail ? new GridLength(350) : new GridLength(0);
+            cols[4].MinWidth = hasDetail ? 350 : 0;
         }
 
         /// <summary>Rebuilds Window.InputBindings from Services/ShortcutManager.cs. Each KeyBinding's
