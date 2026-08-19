@@ -454,6 +454,7 @@
         <li><a href="#phase-9"><span class="num mono">09</span>Sidebar, Blame &amp; LFS Reliability</a></li>
         <li><a href="#phase-10"><span class="num mono">10</span>Native Git Backend &amp; Conflict Rewrite</a></li>
         <li><a href="#phase-11"><span class="num mono">11</span>Background Refresh, Decoupled</a></li>
+        <li><a href="#phase-12"><span class="num mono">12</span>Pane Resizing, Rebuilt</a></li>
       </ol>
       <ol class="rail-extra">
         <li><a href="#architecture"><span class="num mono">—</span>Architecture</a></li>
@@ -472,8 +473,8 @@
          and a fair number of things that broke along the way and got fixed before they shipped.</p>
 
       <div class="stats">
-        <div class="stat"><div class="n mono">12</div><div class="l">phases, 00 → 11</div></div>
-        <div class="stat"><div class="n mono">31</div><div class="l">bugs caught live, not just in review</div></div>
+        <div class="stat"><div class="n mono">13</div><div class="l">phases, 00 → 12</div></div>
+        <div class="stat"><div class="n mono">34</div><div class="l">bugs caught live, not just in review</div></div>
         <div class="stat"><div class="n mono">3</div><div class="l">hosting providers, one abstraction</div></div>
         <div class="stat"><div class="n mono">1</div><div class="l">theme — dark, start to finish</div></div>
       </div>
@@ -1172,6 +1173,83 @@
              on that separate, unsynchronized path. This was a real gap regardless of its role in the specific
              report that surfaced it — a detail-column layout glitch after committing that neither reproduced
              reliably enough to confirm as fixed on its own.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ PHASE 12 ══════════════════════ -->
+    <section class="phase" id="phase-12">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 12</span>
+        <h2 class="phase-title display">Pane Resizing, Rebuilt</h2>
+      </div>
+      <p class="thesis">Since <span class="mono">PickleGit_1.0.22</span>: a three-round bug hunt into why the
+         commit list sometimes didn't reclaim its full width — each round root-caused live, against a real
+         reproducing instance, via UI Automation rather than a screenshot guess — that ended with removing
+         <code>GridSplitter</code> from the app entirely, plus a real crash fix for "Unstage All."</p>
+
+      <ul class="feature-list">
+        <li><div><b>Sidebar and detail-panel widths now persist</b> — <span class="desc">both were purely
+            in-memory before: the sidebar always started at a literal 230px, and the detail panel always reset
+            to a hardcoded 350px. Both now save to <code>settings.json</code> and restore on next launch.</span></div></li>
+        <li><div><b>Pane resizing rebuilt on <code>Thumb</code>, not <code>GridSplitter</code></b> — <span class="desc">see
+            the callout below for why. The sidebar and detail-panel columns are now <code>Auto</code>-sized from
+            <code>SidebarView</code>/<code>CommitDetailView</code>'s own <code>Width</code> instead of a
+            data-bound <code>ColumnDefinition</code>, and two plain <code>Thumb</code>s (styled to look and behave
+            identically to the <code>GridSplitter</code>s they replace) are the only code that ever sets
+            either.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Three rounds, one real root cause each time</p>
+          <p><b>Round 1 — dragging the splitter, then hiding the panel, left the commit list stuck short.</b>
+             Live UI Automation on a real reproducing instance found the exact mechanism: the commit-list
+             (Star), detail-splitter, and detail-panel columns' widths were all set via
+             <code>{Binding DetailSplitterWidth}</code>/<code>{Binding DetailPanelWidth}</code>, and
+             <code>GridSplitter</code> interactively resizes both of its neighboring columns directly when
+             dragged — leaving a stale local value on those <code>ColumnDefinition</code>s that the data binding
+             never cleanly overrode again afterward. <code>Visibility</code> is a separate, untouched binding,
+             which is exactly why the detail panel could visually hide correctly while the commit list stayed
+             permanently short of the freed width, confirmed by a collapsed <code>CommitDetailView</code> still
+             carrying a real, non-empty, stale internal <code>GridSplitter</code> rect sitting exactly in the
+             missing gap. First fix: stop binding those three columns' widths at all; apply them imperatively
+             from code-behind every time the detail panel's visibility changes instead.</p>
+          <p><b>Along the way: a resizable panel that doesn't remember your resize reads as broken, even when
+             it isn't.</b> The imperative fix above reset the panel back to a hardcoded 350px every time it
+             reappeared — which it had always done, by design, but a binding bug had previously made a dragged
+             width appear to "stick" as an unintended side effect of not resetting correctly. Once the reset
+             became reliable, that illusion went away and the panel visibly snapping back to 350 read as a
+             regression. Adding session-only "remember the last drag" logic to fix that was itself reverted in
+             favor of just persisting the width properly (see the feature list above) — the cleaner, actually-requested
+             fix.</p>
+          <p><b>Round 2 — even without ever touching the splitter, switching tabs could reproduce the same
+             gap.</b> Selecting a commit in one tab, switching to a second tab with no selection, and selecting
+             a commit there could still leave the first tab's commit list short — no drag involved at all. The
+             one-time <code>Loaded</code> snapshot each tab's fresh <code>Grid</code> took of
+             <code>HasDetailPanel</code> could run before that tab's own async load sequence had finished
+             settling its selection state. Patched to react to every property change on the tab's view model
+             (not just <code>HasDetailPanel</code>) plus a deferred re-check after layout — but by this point,
+             two independent trigger paths into the same symptom meant the real problem was the mechanism
+             itself, not either specific trigger.</p>
+          <p><b>Round 3 — removed the mechanism instead of patching a third trigger.</b> The sidebar and
+             detail-panel columns are now <code>Auto</code>, sized from <code>SidebarView</code>/
+             <code>CommitDetailView</code>'s own <code>Width</code> — never a bound <code>ColumnDefinition</code>
+             at all — and <code>GridSplitter</code> is replaced by a plain <code>Thumb</code>, which has no
+             built-in resize behavior of its own (it only reports <code>DragDelta</code>), so exactly one code
+             path ever touches either control's width. An <code>Auto</code> column collapses to zero on its own
+             the moment its child's <code>Visibility</code> goes <code>Collapsed</code>, so there's no longer a
+             separate width value that can drift out of sync with visibility at all — closing the whole class of
+             bug rather than its third symptom.</p>
+          <p><b>"Unstage All" crashed outright if any conflicted file existed anywhere in the repo.</b>
+             <code>Commands.Unstage(_repo, "*")</code> matches every path including conflicted (unmerged) ones —
+             LibGit2Sharp diffs HEAD against the index for the matched paths and hands the result to
+             <code>Index.Replace(TreeChanges)</code>, which has no handling for a multi-stage conflict entry, so
+             it threw <i>"bears an unexpected ChangeKind 'Conflicted'"</i> even for a conflicted file nobody
+             asked to unstage. Fixed by narrowing the call to the actual staged paths (via the same status query
+             the UI already uses) — and, caught in the next review pass, that narrowing itself needed both sides
+             of a staged rename's path in its pathspec, or the rename only came half-undone.</p>
         </div>
       </div>
     </section>
