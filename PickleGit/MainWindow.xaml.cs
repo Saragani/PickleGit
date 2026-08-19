@@ -24,77 +24,67 @@ namespace PickleGit
             Services.TitleBarTheme.Apply(this, !App.IsLightTheme);
         }
 
-        /// <summary>Per-tab: forces the commit-list/detail-panel columns back to their correct
-        /// widths every time <see cref="RepositoryViewModel.HasDetailPanel"/> changes, instead of
-        /// relying solely on the {Binding DetailSplitterWidth}/{Binding DetailPanelWidth} that used
-        /// to sit directly on those ColumnDefinitions in MainWindow.xaml. The GridSplitter between
-        /// columns 2 and 4 interactively resizes both of them directly when dragged — which can leave
-        /// a stale local value on one or both ColumnDefinitions that the data binding never cleanly
-        /// overrides again afterward (Visibility is a separate, untouched binding, which is why the
-        /// detail panel could visually hide correctly while the commit list stayed permanently short
-        /// of the freed width). Re-applying these three values imperatively, unconditionally, every
-        /// time sidesteps that entirely — there's no longer a persistent binding for a drag to
-        /// disrupt in the first place. One subscription per tab's own Grid/RepositoryViewModel
-        /// instance (TabControl only realizes the active tab's DataTemplate), torn down on Unloaded
-        /// so switching tabs doesn't accumulate handlers. Also seeds column 0 (sidebar) from the
-        /// persisted <see cref="AppViewModel.SidebarPaneWidth"/> — that column isn't touched by
-        /// HasDetailPanel at all, but still needs its saved width applied on every fresh Grid
-        /// instance the same way.</summary>
+        /// <summary>Seeds SidebarView/CommitDetailView's own Width (not their ColumnDefinition's —
+        /// both columns are Auto, see MainWindow.xaml's own comment) from the persisted
+        /// <see cref="AppViewModel.SidebarPaneWidth"/>/<see cref="AppViewModel.DetailPanelPaneWidth"/>
+        /// once per fresh Grid instance (TabControl only realizes the active tab's DataTemplate, so
+        /// this runs again every time a different tab becomes active). Nothing else ever needs to
+        /// touch these two controls' Width in reaction to HasDetailPanel changing — an Auto column
+        /// collapses to zero on its own the moment its (single) child's Visibility goes Collapsed,
+        /// so there's no separate "width" state that can drift out of sync with "visibility" the
+        /// way there was when columns 3/4 had their own bound Pixel widths.</summary>
         private void TabContentColumnsGrid_Loaded(object sender, RoutedEventArgs e)
         {
-            if (!(sender is Grid grid) || !(grid.DataContext is RepositoryViewModel vm)) return;
-            if (grid.ColumnDefinitions.Count > 0)
-                grid.ColumnDefinitions[0].Width = new GridLength(_vm.SidebarPaneWidth);
-            PropertyChangedEventHandler handler = (s, ev) =>
-            {
-                if (ev.PropertyName == nameof(RepositoryViewModel.HasDetailPanel))
-                    ApplyDetailPanelColumnWidths(grid, vm);
-            };
-            grid.Tag = handler;
-            vm.PropertyChanged += handler;
-            ApplyDetailPanelColumnWidths(grid, vm);
+            if (!(sender is Grid grid)) return;
+            var sidebar = grid.Children.OfType<Views.SidebarView>().FirstOrDefault();
+            if (sidebar != null) sidebar.Width = _vm.SidebarPaneWidth;
+            var detail = grid.Children.OfType<Views.CommitDetailView>().FirstOrDefault();
+            if (detail != null) detail.Width = _vm.DetailPanelPaneWidth;
         }
 
-        private void TabContentColumnsGrid_Unloaded(object sender, RoutedEventArgs e)
+        /// <summary>Live-resizes the sidebar while dragging its Thumb (Grid.Column="1") — a plain
+        /// Thumb, not GridSplitter: see MainWindow.xaml's own comment on why GridSplitter's
+        /// built-in column-resize behavior doesn't mix safely with this shell's layout. A Thumb has
+        /// no resize logic of its own at all, so this handler is the only thing that ever sets
+        /// SidebarView.Width.</summary>
+        private void SidebarThumb_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
         {
-            if (!(sender is Grid grid) || !(grid.DataContext is RepositoryViewModel vm)) return;
-            if (grid.Tag is PropertyChangedEventHandler handler)
-                vm.PropertyChanged -= handler;
-            grid.Tag = null;
+            if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid)) return;
+            var sidebar = grid.Children.OfType<Views.SidebarView>().FirstOrDefault();
+            if (sidebar == null) return;
+            var current = double.IsNaN(sidebar.Width) ? sidebar.ActualWidth : sidebar.Width;
+            sidebar.Width = Clamp(current + e.HorizontalChange, 210, 400);
         }
 
-        private void ApplyDetailPanelColumnWidths(Grid grid, RepositoryViewModel vm)
+        /// <summary>Persists the sidebar's dragged width once the drag actually finishes.</summary>
+        private void SidebarThumb_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
         {
-            var cols = grid.ColumnDefinitions;
-            if (cols.Count < 5) return;
-            var hasDetail = vm.HasDetailPanel;
-            // Column 2 (commit list) is reset back to a clean, unweighted Star every time too —
-            // not just the two detail-panel columns — since the same drag that disrupts columns
-            // 3/4 also directly touches this one (it's the GridSplitter's other neighbor).
-            cols[2].Width = new GridLength(1, GridUnitType.Star);
-            cols[2].MinWidth = 300;
-            cols[3].Width = hasDetail ? new GridLength(5) : new GridLength(0);
-            cols[4].MinWidth = hasDetail ? 350 : 0;
-            cols[4].Width = hasDetail ? new GridLength(_vm.DetailPanelPaneWidth) : new GridLength(0);
+            if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid)) return;
+            var sidebar = grid.Children.OfType<Views.SidebarView>().FirstOrDefault();
+            if (sidebar != null) _vm.SidebarPaneWidth = sidebar.Width;
         }
 
-        /// <summary>Persists the sidebar's dragged width once the drag actually finishes — not a
-        /// live {Binding} on the column itself, deliberately: see ApplyDetailPanelColumnWidths'
-        /// own doc comment for why a GridSplitter and a bound ColumnDefinition.Width don't mix
-        /// safely on this app's shell layout.</summary>
-        private void SidebarSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        /// <summary>Same idea as <see cref="SidebarThumb_DragDelta"/>, for the detail panel's own
+        /// Thumb (Grid.Column="3", to its left — dragging right shrinks the panel, hence the
+        /// subtraction rather than addition).</summary>
+        private void DetailPanelThumb_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
         {
-            if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid) || grid.ColumnDefinitions.Count < 1) return;
-            _vm.SidebarPaneWidth = grid.ColumnDefinitions[0].ActualWidth;
+            if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid)) return;
+            var detail = grid.Children.OfType<Views.CommitDetailView>().FirstOrDefault();
+            if (detail == null) return;
+            var current = double.IsNaN(detail.Width) ? detail.ActualWidth : detail.Width;
+            detail.Width = Clamp(current - e.HorizontalChange, 350, 600);
         }
 
-        /// <summary>Same idea as <see cref="SidebarSplitter_DragCompleted"/>, for the detail panel's
-        /// own splitter (column 3, resizing column 4).</summary>
-        private void DetailPanelSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        /// <summary>Persists the detail panel's dragged width once the drag actually finishes.</summary>
+        private void DetailPanelThumb_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
         {
-            if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid) || grid.ColumnDefinitions.Count < 5) return;
-            _vm.DetailPanelPaneWidth = grid.ColumnDefinitions[4].ActualWidth;
+            if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid)) return;
+            var detail = grid.Children.OfType<Views.CommitDetailView>().FirstOrDefault();
+            if (detail != null) _vm.DetailPanelPaneWidth = detail.Width;
         }
+
+        private static double Clamp(double value, double min, double max) => Math.Max(min, Math.Min(value, max));
 
         /// <summary>Rebuilds Window.InputBindings from Services/ShortcutManager.cs. Each KeyBinding's
         /// Command (and CommandParameter, where the action needs one) is a live data binding against

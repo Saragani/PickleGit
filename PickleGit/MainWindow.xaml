@@ -35,6 +35,27 @@
     </Window.TaskbarItemInfo>
 
     <Window.Resources>
+        <!-- ── Pane-resize handle ──────────────────────────────────────────────
+             A plain Thumb, not GridSplitter — see MainWindow.xaml.cs's own notes on why
+             GridSplitter's built-in column-resize logic doesn't mix safely with this shell's
+             layout (it directly manipulates its neighboring ColumnDefinitions, including the
+             center Star column, which repeatedly turned out to leave stale/stuck widths behind).
+             A Thumb has no built-in resize behavior at all — it only reports DragDelta — so the
+             two panes' own explicit Width (not their ColumnDefinition's) is exactly and only ever
+             set by this app's own code-behind. Styled to look identical to the plain
+             Background-only GridSplitter style it replaces (Themes/DarkTheme.xaml). -->
+        <Style x:Key="PaneResizeThumb" TargetType="Thumb">
+            <Setter Property="Background" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Cursor" Value="SizeWE"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Rectangle Fill="{TemplateBinding Background}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ── Dark TabItem style ──────────────────────────────────────────── -->
         <Style x:Key="DarkTabItem" TargetType="TabItem">
             <Setter Property="Background" Value="Transparent"/>
@@ -403,27 +424,35 @@
                             <!-- Normal 3-panel layout, hidden for a "+"-created placeholder tab
                                  (see IsPlaceholder) in favor of NewTabPlaceholderView below. -->
                             <Grid Visibility="{Binding IsPlaceholder, Converter={StaticResource InvertBoolToVis}}"
-                                  Loaded="TabContentColumnsGrid_Loaded" Unloaded="TabContentColumnsGrid_Unloaded">
-                                <!-- Columns 2-4's widths are applied imperatively from code-behind
-                                     (see TabContentColumnsGrid_Loaded/ApplyDetailPanelColumnWidths),
-                                     not via {Binding}, on purpose: GridSplitter (below) interactively
-                                     resizes both its neighbors (columns 2 and 4) directly, which can
-                                     leave a stale local value a data binding never cleanly overrides
-                                     again afterward — Visibility is a separate, untouched binding,
-                                     which is why the detail panel can visually hide correctly while
-                                     these columns stay stuck at their last dragged width. The literal
-                                     values below are just the pre-Loaded fallback. -->
+                                  Loaded="TabContentColumnsGrid_Loaded">
+                                <!-- Columns 0/3/4 are Auto, not Pixel/Star-bound-to-a-property: an
+                                     Auto column's width is simply whatever its (single) child
+                                     currently measures, so SidebarView/CommitDetailView's own Width
+                                     — set directly by this app's code-behind, never by a {Binding}
+                                     a Thumb drag could disrupt — drives columns 0/4 entirely, and
+                                     column 3 (the detail-panel Thumb's own column) automatically
+                                     collapses to zero right along with the Thumb's Visibility going
+                                     Collapsed, with no separate width to fall out of sync with it.
+                                     Plain Thumbs, not GridSplitter, on purpose: GridSplitter
+                                     interactively resizes its neighboring ColumnDefinitions directly
+                                     (including the center Star column), which repeatedly left a
+                                     stale/stuck width behind that a data binding never cleanly
+                                     recovered from. A Thumb has no built-in resize behavior at all —
+                                     it only reports DragDelta — so SidebarThumb_DragDelta/
+                                     DetailPanelThumb_DragDelta (MainWindow.xaml.cs) are the only
+                                     code that ever touches these two controls' Width. -->
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="230" MinWidth="210" MaxWidth="400"/>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="5"/>
                                     <ColumnDefinition Width="*" MinWidth="300"/>
-                                    <ColumnDefinition Width="0"/>
-                                    <ColumnDefinition Width="0" MinWidth="0" MaxWidth="600"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
                                 <views:SidebarView Grid.Column="0"/>
-                                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                                              DragCompleted="SidebarSplitter_DragCompleted"/>
+                                <Thumb Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                                       Style="{StaticResource PaneResizeThumb}"
+                                       DragDelta="SidebarThumb_DragDelta" DragCompleted="SidebarThumb_DragCompleted"/>
 
                                 <Grid Grid.Column="2">
                                     <!-- S single selected file takes over this whole
@@ -434,9 +463,10 @@
                                     <views:DiffView Visibility="{Binding ShowDiffInsteadOfCommits, Converter={StaticResource BoolToVis}}"/>
                                 </Grid>
 
-                                <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch"
-                                              Visibility="{Binding HasDetailPanel, Converter={StaticResource BoolToVis}}"
-                                              DragCompleted="DetailPanelSplitter_DragCompleted"/>
+                                <Thumb Grid.Column="3" Width="5" HorizontalAlignment="Stretch"
+                                       Style="{StaticResource PaneResizeThumb}"
+                                       Visibility="{Binding HasDetailPanel, Converter={StaticResource BoolToVis}}"
+                                       DragDelta="DetailPanelThumb_DragDelta" DragCompleted="DetailPanelThumb_DragCompleted"/>
                                 <views:CommitDetailView Grid.Column="4"
                                                         Visibility="{Binding HasDetailPanel, Converter={StaticResource BoolToVis}}"/>
                             </Grid>
