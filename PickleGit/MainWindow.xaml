@@ -422,7 +422,8 @@
                                 </Grid.ColumnDefinitions>
 
                                 <views:SidebarView Grid.Column="0"/>
-                                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"/>
+                                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                                              DragCompleted="SidebarSplitter_DragCompleted"/>
 
                                 <Grid Grid.Column="2">
                                     <!-- S single selected file takes over this whole
@@ -434,7 +435,8 @@
                                 </Grid>
 
                                 <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch"
-                                              Visibility="{Binding HasDetailPanel, Converter={StaticResource BoolToVis}}"/>
+                                              Visibility="{Binding HasDetailPanel, Converter={StaticResource BoolToVis}}"
+                                              DragCompleted="DetailPanelSplitter_DragCompleted"/>
                                 <views:CommitDetailView Grid.Column="4"
                                                         Visibility="{Binding HasDetailPanel, Converter={StaticResource BoolToVis}}"/>
                             </Grid>

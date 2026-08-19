@@ -45,6 +45,13 @@ namespace PickleGit.Services
             public double ColWidthDateTime   { get; set; } = 110;
             public double ColWidthSha        { get; set; } = 80;
 
+            // Outer shell pane widths — sidebar (left) and commit-detail panel (right). Saved on
+            // GridSplitter.DragCompleted rather than bound live: see MainWindow.xaml.cs's own
+            // pitfall notes on why ColumnDefinition.Width shouldn't be a live {Binding} target on a
+            // column a GridSplitter also interactively resizes.
+            public double SidebarPaneWidth     { get; set; } = 230;
+            public double DetailPanelPaneWidth { get; set; } = 350;
+
             public Dictionary<string, List<string>> CollapsedBranchNodesByRepo { get; set; }
                 = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
@@ -205,6 +212,26 @@ namespace PickleGit.Services
         {
             var d = Load() ?? new SettingsData();
             return (d.ColWidthBranchTag, d.ColWidthGraph, d.ColWidthCommitDesc, d.ColWidthAuthor, d.ColWidthDateTime, d.ColWidthSha);
+        }
+
+        public static (double sidebarWidth, double detailPanelWidth) LoadPaneWidths()
+        {
+            var d = Load() ?? new SettingsData();
+            return (d.SidebarPaneWidth, d.DetailPanelPaneWidth);
+        }
+
+        public static void SaveSidebarPaneWidth(double width)
+        {
+            var d = Load() ?? new SettingsData();
+            d.SidebarPaneWidth = width;
+            Save(d);
+        }
+
+        public static void SaveDetailPanelPaneWidth(double width)
+        {
+            var d = Load() ?? new SettingsData();
+            d.DetailPanelPaneWidth = width;
+            Save(d);
         }
 
         public static HashSet<string> LoadCollapsedBranchNodes(string repoPath)

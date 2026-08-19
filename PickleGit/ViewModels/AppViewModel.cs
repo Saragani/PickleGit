@@ -53,6 +53,8 @@ namespace PickleGit.ViewModels
         private double _colWidthDateTime   = 110;
         private double _colWidthSha        = 80;
         private double _commitListViewportWidth;
+        private double _sidebarPaneWidth     = 230;
+        private double _detailPanelPaneWidth = 350;
 
         private bool _sidebarLocalBranchesExpanded  = true;
         private bool _sidebarRemoteBranchesExpanded = true;
@@ -77,6 +79,23 @@ namespace PickleGit.ViewModels
         public double ColWidthAuthor     { get => _colWidthAuthor;     set { if (Set(ref _colWidthAuthor,     Math.Max(MinColWidthAuthor, value))) OnColumnWidthChanged(); } }
         public double ColWidthDateTime   { get => _colWidthDateTime;   set { if (Set(ref _colWidthDateTime,   Math.Max(MinColWidthDateTime, value))) OnColumnWidthChanged(); } }
         public double ColWidthSha        { get => _colWidthSha;        set { if (Set(ref _colWidthSha,        Math.Max(MinColWidthSha, value))) OnColumnWidthChanged(); } }
+
+        /// <summary>The sidebar (left pane) width, persisted across restarts. Set by
+        /// MainWindow.xaml.cs once a GridSplitter drag on that column completes — not a live
+        /// {Binding} on the ColumnDefinition itself; see its own DragCompleted handler for why.</summary>
+        public double SidebarPaneWidth
+        {
+            get => _sidebarPaneWidth;
+            set { if (Set(ref _sidebarPaneWidth, value)) AppSettings.SaveSidebarPaneWidth(value); }
+        }
+
+        /// <summary>The commit-detail panel (right pane) width, persisted across restarts. Same
+        /// DragCompleted-driven update pattern as <see cref="SidebarPaneWidth"/>.</summary>
+        public double DetailPanelPaneWidth
+        {
+            get => _detailPanelPaneWidth;
+            set { if (Set(ref _detailPanelPaneWidth, value)) AppSettings.SaveDetailPanelPaneWidth(value); }
+        }
 
         public double CommitListViewportWidth
         {
@@ -592,6 +611,8 @@ namespace PickleGit.ViewModels
             _colWidthAuthor     = wau;
             _colWidthDateTime   = wdt;
             _colWidthSha        = wsha;
+
+            (_sidebarPaneWidth, _detailPanelPaneWidth) = AppSettings.LoadPaneWidths();
 
             var (sLocal, sRemote, sTags, sStashes, sRemotes) = AppSettings.LoadSidebarSectionStates();
             _sidebarLocalBranchesExpanded  = sLocal;

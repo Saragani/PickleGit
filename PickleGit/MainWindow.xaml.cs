@@ -36,10 +36,15 @@ namespace PickleGit
         /// time sidesteps that entirely — there's no longer a persistent binding for a drag to
         /// disrupt in the first place. One subscription per tab's own Grid/RepositoryViewModel
         /// instance (TabControl only realizes the active tab's DataTemplate), torn down on Unloaded
-        /// so switching tabs doesn't accumulate handlers.</summary>
+        /// so switching tabs doesn't accumulate handlers. Also seeds column 0 (sidebar) from the
+        /// persisted <see cref="AppViewModel.SidebarPaneWidth"/> — that column isn't touched by
+        /// HasDetailPanel at all, but still needs its saved width applied on every fresh Grid
+        /// instance the same way.</summary>
         private void TabContentColumnsGrid_Loaded(object sender, RoutedEventArgs e)
         {
             if (!(sender is Grid grid) || !(grid.DataContext is RepositoryViewModel vm)) return;
+            if (grid.ColumnDefinitions.Count > 0)
+                grid.ColumnDefinitions[0].Width = new GridLength(_vm.SidebarPaneWidth);
             PropertyChangedEventHandler handler = (s, ev) =>
             {
                 if (ev.PropertyName == nameof(RepositoryViewModel.HasDetailPanel))
@@ -58,7 +63,7 @@ namespace PickleGit
             grid.Tag = null;
         }
 
-        private static void ApplyDetailPanelColumnWidths(Grid grid, RepositoryViewModel vm)
+        private void ApplyDetailPanelColumnWidths(Grid grid, RepositoryViewModel vm)
         {
             var cols = grid.ColumnDefinitions;
             if (cols.Count < 5) return;
@@ -69,8 +74,26 @@ namespace PickleGit
             cols[2].Width = new GridLength(1, GridUnitType.Star);
             cols[2].MinWidth = 300;
             cols[3].Width = hasDetail ? new GridLength(5) : new GridLength(0);
-            cols[4].Width = hasDetail ? new GridLength(350) : new GridLength(0);
             cols[4].MinWidth = hasDetail ? 350 : 0;
+            cols[4].Width = hasDetail ? new GridLength(_vm.DetailPanelPaneWidth) : new GridLength(0);
+        }
+
+        /// <summary>Persists the sidebar's dragged width once the drag actually finishes — not a
+        /// live {Binding} on the column itself, deliberately: see ApplyDetailPanelColumnWidths'
+        /// own doc comment for why a GridSplitter and a bound ColumnDefinition.Width don't mix
+        /// safely on this app's shell layout.</summary>
+        private void SidebarSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        {
+            if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid) || grid.ColumnDefinitions.Count < 1) return;
+            _vm.SidebarPaneWidth = grid.ColumnDefinitions[0].ActualWidth;
+        }
+
+        /// <summary>Same idea as <see cref="SidebarSplitter_DragCompleted"/>, for the detail panel's
+        /// own splitter (column 3, resizing column 4).</summary>
+        private void DetailPanelSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        {
+            if (!(sender is FrameworkElement el) || !(el.Parent is Grid grid) || grid.ColumnDefinitions.Count < 5) return;
+            _vm.DetailPanelPaneWidth = grid.ColumnDefinitions[4].ActualWidth;
         }
 
         /// <summary>Rebuilds Window.InputBindings from Services/ShortcutManager.cs. Each KeyBinding's
