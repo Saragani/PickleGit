@@ -312,6 +312,7 @@
                                       Visibility="{Binding IsStarred, Converter={StaticResource BoolToVis}}"/>
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding DisplayName}"
+                                           ToolTip="{Binding FullName}"
                                            TextTrimming="CharacterEllipsis"
                                            FontSize="13"
                                            Foreground="{DynamicResource TextPrimaryBrush}"
@@ -499,6 +500,7 @@
                                               CommandParameter="{Binding BranchInfo}"/>
                             </Grid.InputBindings>
                             <TextBlock Text="{Binding DisplayName}"
+                                       ToolTip="{Binding FullName}"
                                        TextTrimming="CharacterEllipsis"
                                        VerticalAlignment="Center" Margin="2,3,0,3"
                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
