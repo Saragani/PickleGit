@@ -32,7 +32,9 @@ namespace PickleGit.Models
         /// "0 conflicted file(s)" in that state reads as if something's wrong; this instead tells the
         /// user what to do next.</summary>
         public string RemainingFilesLabel => ConflictedFiles.Count == 0
-            ? "All conflicts resolved — click Continue to complete the operation"
+            ? (Operation == ConflictOperation.Merge
+                ? "All conflicts resolved — click Continue, then Commit, to complete the merge"
+                : "All conflicts resolved — click Continue to complete the operation")
             : $"{ConflictedFiles.Count} conflicted file(s)";
 
         public string OperationLabel
