@@ -27,9 +27,9 @@ namespace PickleGit.Views
             _unifiedTextSelection = new DiffTextSelectionController(UnifiedListView, UnifiedTextSelectionOverlay,
                 GetUnifiedRowText, GetUnifiedSelectableStart, IsUnifiedRowSelectable);
             _sideBySideLeftTextSelection = new DiffTextSelectionController(SideBySideLeftListView, SideBySideLeftTextSelectionOverlay,
-                item => GetSideBySideRowText(item, isLeftPane: true), GetSideBySideSelectableStart, IsSideBySideRowSelectable);
+                item => GetSideBySideRowText(item, isLeftPane: true), item => GetSideBySideSelectableStart(item, isLeftPane: true), IsSideBySideRowSelectable);
             _sideBySideRightTextSelection = new DiffTextSelectionController(SideBySideRightListView, SideBySideRightTextSelectionOverlay,
-                item => GetSideBySideRowText(item, isLeftPane: false), GetSideBySideSelectableStart, IsSideBySideRowSelectable);
+                item => GetSideBySideRowText(item, isLeftPane: false), item => GetSideBySideSelectableStart(item, isLeftPane: false), IsSideBySideRowSelectable);
 
             // Selector's own class handler for KeyDown marks Ctrl+A Handled before a plain XAML-attached
             // instance handler (KeyDown="...") ever gets a turn — WPF skips ordinary handlers once
@@ -66,8 +66,18 @@ namespace PickleGit.Views
         private static int GetUnifiedSelectableStart(object item) =>
             (item as DiffItem)?.Kind == DiffItemKind.HunkHeader ? 0 : 1;
 
-        private static int GetSideBySideSelectableStart(object item) =>
-            (item as SideBySideItem)?.Kind == DiffItemKind.HunkHeader ? 0 : 1;
+        // A pane's padding row (a pure addition/deletion has nothing on the OTHER side — Left or
+        // Right is null there, per SideBySideItem) has no marker character to skip on that pane's
+        // side either, since GetSideBySideRowText returns empty/null text for it: without the
+        // isLeftPane check here, this returned 1 unconditionally, i.e. even for a row whose
+        // this-pane text was empty — DrawOccurrenceHighlights' rowText.IndexOf(query, 1, ...) then
+        // threw ArgumentOutOfRangeException against that zero-length string.
+        private static int GetSideBySideSelectableStart(object item, bool isLeftPane)
+        {
+            var sbi = item as SideBySideItem;
+            if (sbi == null || sbi.Kind == DiffItemKind.HunkHeader) return 0;
+            return (isLeftPane ? sbi.Left : sbi.Right) == null ? 0 : 1;
+        }
 
         // Hunk headers ("@@ -12,3 +12,4 @@ ...") are metadata about the diff, not file content — a
         // user selecting/copying code doesn't want them anchoring a drag or showing up mid-paste.

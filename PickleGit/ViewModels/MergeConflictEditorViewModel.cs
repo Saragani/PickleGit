@@ -263,7 +263,14 @@ namespace PickleGit.ViewModels
                 o.PickOrder = include ? ++_nextPickOrder : (int?)null;
             }
             UseBaseVerbatim = false;
-            SettleTouched();
+            // A block whose Ours side is empty (a pure Theirs addition) has no lines for this loop
+            // to touch, so SettleTouched's anyIncluded check would leave Touched exactly as it was
+            // — the checkbox visibly did nothing. Checking "Select All Mine" here is still a real,
+            // deliberate resolution (mine IS empty), matching this class's own "intentionally-empty
+            // result is a valid resolution" rule (see the class doc comment) — force Touched rather
+            // than deriving it from a side that has nothing to include.
+            if (OursOptions.Count == 0 && include) Touched = true;
+            else SettleTouched();
             Commit();
         }
 
@@ -275,7 +282,11 @@ namespace PickleGit.ViewModels
                 o.PickOrder = include ? ++_nextPickOrder : (int?)null;
             }
             UseBaseVerbatim = false;
-            SettleTouched();
+            // Symmetric case: a block whose Theirs side is empty (a pure Ours addition/deletion the
+            // other side never touched) — see SetAllOurs above for why this can't rely on
+            // SettleTouched alone.
+            if (TheirsOptions.Count == 0 && include) Touched = true;
+            else SettleTouched();
             Commit();
         }
 
