@@ -1272,7 +1272,7 @@
                 <StackPanel>
                     <TextBox Style="{StaticResource DarkTextBox}"
                              Text="{Binding CommitMessage, UpdateSourceTrigger=PropertyChanged}"
-                             AcceptsReturn="True" Height="60"
+                             AcceptsReturn="True" Height="100"
                              VerticalScrollBarVisibility="Auto"
                              TextWrapping="Wrap"
                              Margin="0,0,0,4"

@@ -284,10 +284,26 @@ namespace PickleGit.ViewModels
                 DialogService.ShowError("Continue", "Resolve all conflicted files before continuing.");
                 return;
             }
+            if (op == ConflictOperation.Merge)
+            {
+                if (string.IsNullOrWhiteSpace(CommitMessage))
+                {
+                    var conflictedPaths = await _git.Executor.RunAsync(() => _git.GetMergeConflictedFilePaths());
+                    var sourceDesc = ConflictInfo.SourceDescription;
+                    var sb = new StringBuilder(string.IsNullOrEmpty(sourceDesc) ? "Merge" : sourceDesc);
+                    if (conflictedPaths.Count > 0)
+                    {
+                        sb.Append("\n\nResolved conflicts in:\n");
+                        foreach (var path in conflictedPaths) sb.Append("  ").Append(path).Append('\n');
+                    }
+                    CommitMessage = sb.ToString().TrimEnd('\n');
+                }
+                return;
+            }
+
             string args;
             switch (op)
             {
-                case ConflictOperation.Merge: args = "merge --continue"; break;
                 case ConflictOperation.CherryPick: args = "cherry-pick --continue"; break;
                 case ConflictOperation.Revert: args = "revert --continue"; break;
                 case ConflictOperation.Rebase: args = "rebase --continue"; break;

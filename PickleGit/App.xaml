@@ -11,6 +11,7 @@
             <!-- Converters — defined here so all UserControls can resolve them via StaticResource -->
             <conv:BoolToVisibilityConverter x:Key="BoolToVis"/>
             <conv:BoolToVisibilityConverter x:Key="InvertBoolToVis" Invert="True"/>
+            <conv:BoolToVisibilityConverter x:Key="BoolToVisHidden" FalseValue="Hidden"/>
             <conv:InverseBooleanConverter x:Key="InverseBool"/>
             <conv:ResolutionToVisibilityConverter x:Key="UnresolvedVis"/>
             <conv:ResolutionToVisibilityConverter x:Key="ResolvedVis" Invert="True"/>

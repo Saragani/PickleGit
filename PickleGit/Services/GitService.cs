@@ -1975,6 +1975,37 @@ namespace PickleGit.Services
             return ShortShaOrNull(ReadFirstLine(Path.Combine(gitDir, "MERGE_HEAD")));
         }
 
+        /// <summary>Reads the file paths listed under MERGE_MSG's "# Conflicts:" block, written by
+        /// git the moment a merge first conflicts and left untouched as files are resolved/staged —
+        /// unlike ConflictState.ConflictedFiles (a live re-read of the index), this still has the
+        /// full original list right up until the merge actually concludes. Returns an empty list if
+        /// there's no in-progress merge or no such block.</summary>
+        public List<string> GetMergeConflictedFilePaths()
+        {
+            EnsureOpen();
+            var path = Path.Combine(GitDirectory, "MERGE_MSG");
+            var result = new List<string>();
+            try
+            {
+                if (!File.Exists(path)) return result;
+
+                bool inConflictsBlock = false;
+                foreach (var line in File.ReadLines(path))
+                {
+                    if (!inConflictsBlock)
+                    {
+                        if (line.TrimEnd() == "# Conflicts:") inConflictsBlock = true;
+                        continue;
+                    }
+                    if (!line.StartsWith("#")) break;
+                    var p = line.TrimStart('#').Trim();
+                    if (!string.IsNullOrEmpty(p)) result.Add(p);
+                }
+                return result;
+            }
+            catch { return result; }
+        }
+
         // ── Commit detail ─────────────────────────────────────────────────────
 
         public List<FileChange> GetCommitChangedFiles(string sha)

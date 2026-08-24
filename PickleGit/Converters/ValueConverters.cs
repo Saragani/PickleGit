@@ -47,11 +47,15 @@ namespace PickleGit.Converters
     public class BoolToVisibilityConverter : IValueConverter
     {
         public bool Invert { get; set; }
+        /// <summary>Visibility used for the false case — Collapsed by default. Set to Hidden for a
+        /// binding whose layout space must stay reserved (e.g. a tab's busy spinner, so the tab
+        /// doesn't resize/shift its other content when the spinner appears and disappears).</summary>
+        public Visibility FalseValue { get; set; } = Visibility.Collapsed;
         public object Convert(object value, Type t, object p, CultureInfo c)
         {
             bool b = value is bool bv && bv;
             if (Invert) b = !b;
-            return b ? Visibility.Visible : Visibility.Collapsed;
+            return b ? Visibility.Visible : FalseValue;
         }
         public object ConvertBack(object value, Type t, object p, CultureInfo c) =>
             value is Visibility v && v == Visibility.Visible;
