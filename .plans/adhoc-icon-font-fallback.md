@@ -78,5 +78,12 @@ None.
 ## Deviation Register
 <!-- Entries added at checkpoints. Format: [Step N → affects Step M] <what changed and why> → Step M: <what to do differently>. Append ✓ to entry when Step M completes. Approved deviations only. -->
 
+## Retro
+<!-- Written: 2026-08-24 21:05 -->
+
+**Deviations:** Step 3's visual regression pass covered 8 of 13 icon codepoints rather than all 13 — the remaining 4 (Pull Requests header, tab-scroll chevrons, folder icon, delete icon) needed app state (hosting config, tab overflow, a nested file tree, the working-dir view) that wasn't quickly reachable. Approved by the user given Risk=None on every step and the identical, already-proven fallback mechanism.
+**Steps planned vs. actual:** 3 planned / 3 actual — matched exactly, no steps added, dropped, or merged.
+**Process improvement:** Before driving a desktop-GUI app with simulated mouse input (`SetCursorPos`/`mouse_event`) for verification, first confirm the target window's bounds match the full virtual screen (single-monitor, isolated session) — this session only discovered mid-test, via a screenshot, that the clicks were landing on the user's real multi-monitor desktop (their live Visual Studio window and this very terminal were visible on the second monitor) rather than an isolated test environment.
+
 ## Handoff
 <!-- Run `pkl:handoff` to fill this section. Paste the block below into a new conversation to resume. -->
