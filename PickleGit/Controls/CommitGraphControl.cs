@@ -253,7 +253,7 @@ namespace PickleGit.Controls
         private static readonly Typeface Tf = new Typeface(
             new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
         private static readonly Typeface IconTf = new Typeface(
-            new FontFamily("Segoe Fluent Icons"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+            new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
 
         private static readonly SolidColorBrush s_brushHead;
         private static readonly SolidColorBrush s_brushTag;

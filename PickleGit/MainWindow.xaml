@@ -180,7 +180,7 @@
                                             Command="ScrollBar.LineLeftCommand"
                                             CommandTarget="{Binding ElementName=PART_TabScroller}"
                                             ToolTip="Scroll tabs left">
-                                        <TextBlock Text="&#xE76B;" FontFamily="Segoe Fluent Icons" FontSize="12"/>
+                                        <TextBlock Text="&#xE76B;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"/>
                                     </Button>
                                     <ScrollViewer x:Name="PART_TabScroller" Grid.Column="1"
                                                   HorizontalScrollBarVisibility="Hidden"
@@ -196,7 +196,7 @@
                                             Command="ScrollBar.LineRightCommand"
                                             CommandTarget="{Binding ElementName=PART_TabScroller}"
                                             ToolTip="Scroll tabs right">
-                                        <TextBlock Text="&#xE76C;" FontFamily="Segoe Fluent Icons" FontSize="12"/>
+                                        <TextBlock Text="&#xE76C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"/>
                                     </Button>
                                     <Button Grid.Column="3" Style="{StaticResource ToolbarButton}"
                                             Padding="8,4" Margin="4,0,6,0" FontSize="14"

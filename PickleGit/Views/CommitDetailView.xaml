@@ -29,7 +29,7 @@
                                 <Path Data="M 1 1 L 7 1 L 4 7 Z" Fill="{DynamicResource TextSecondaryBrush}"
                                       Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}"/>
                             </Grid>
-                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="12"
+                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="{Binding DisplayName}" FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
@@ -126,7 +126,7 @@
                                 <Path Data="M 1 1 L 7 1 L 4 7 Z" Fill="{DynamicResource TextSecondaryBrush}"
                                       Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}"/>
                             </Grid>
-                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="12"
+                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="{Binding DisplayName}" FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
@@ -265,7 +265,7 @@
                                 <Path Data="M 1 1 L 7 1 L 4 7 Z" Fill="{DynamicResource TextSecondaryBrush}"
                                       Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}"/>
                             </Grid>
-                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="12"
+                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="{Binding DisplayName}" FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
@@ -347,7 +347,7 @@
                                 <Path Data="M 1 1 L 7 1 L 4 7 Z" Fill="{DynamicResource TextSecondaryBrush}"
                                       Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}"/>
                             </Grid>
-                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="12"
+                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="{Binding DisplayName}" FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
@@ -523,7 +523,7 @@
                                 Command="{Binding SetFileViewModeCommand}" CommandParameter="Flat"
                                 ToolTip="Flat list, sorted by path">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE8FD;" FontFamily="Segoe Fluent Icons" FontSize="12" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE8FD;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center"/>
                                 <TextBlock Text="Path" FontSize="11" Margin="5,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                             <Button.Style>
@@ -691,7 +691,7 @@
                                 Command="{Binding SetFileViewModeCommand}" CommandParameter="Flat"
                                 ToolTip="Flat list, sorted by path">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE8FD;" FontFamily="Segoe Fluent Icons" FontSize="12" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE8FD;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center"/>
                                 <TextBlock Text="Path" FontSize="11" Margin="5,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                             <Button.Style>
@@ -885,7 +885,7 @@
                             Command="{Binding SetFileViewModeCommand}" CommandParameter="Flat"
                             ToolTip="Flat list, sorted by path">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE8FD;" FontFamily="Segoe Fluent Icons" FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Text="&#xE8FD;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center"/>
                             <TextBlock Text="Path" FontSize="11" Margin="5,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                         <Button.Style>
@@ -1082,7 +1082,7 @@
                                              emoji whose glyph availability can vary by font/OS
                                              version (an earlier attempt with the 🗑 emoji rendered
                                              as nothing, collapsing the button to a sliver). -->
-                                        <TextBlock Text="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="14"
+                                        <TextBlock Text="&#xE74D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14"
                                                    VerticalAlignment="Center" HorizontalAlignment="Center"
                                                    Foreground="{DynamicResource DangerBrush}"/>
                                         <Border Background="{DynamicResource DangerBrush}" CornerRadius="8"
