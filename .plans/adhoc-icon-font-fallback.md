@@ -3,9 +3,9 @@ issue: adhoc-icon-font-fallback
 title: Missing icon glyphs on Windows Server (no Segoe Fluent Icons font)
 type: bug
 component: UI / Icon rendering
-phase: BUILD
-step: 3
-next: BUILD complete — SHIP when ready
+phase: SHIP
+step: done
+next: done
 run_mode: auto
 updated: 2026-08-24 20:47
 ---
