@@ -1558,7 +1558,9 @@ namespace PickleGit.ViewModels
                 AuthorName = string.Empty,
                 AuthorEmail = string.Empty,
                 AuthorDate = DateTimeOffset.Now,
-                ParentShas = new List<string> { commits[0].Sha },
+                // No ParentShas: this is a pseudo-commit, not actually on top of commits[0] yet —
+                // GraphLayout.Compute must not draw a connecting edge down into the real history.
+                ParentShas = new List<string>(),
                 IsUncommitted = true
             });
             list.AddRange(commits);

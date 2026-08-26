@@ -412,8 +412,8 @@
 
                         <!-- DATE / TIME -->
                         <TextBlock Grid.Column="4"
-                                   Text="{Binding Commit.AuthorDate, Converter={StaticResource DateFmt}}"
-                                   ToolTip="{Binding Commit.AuthorDate, Converter={StaticResource DateFmt}, ConverterParameter=abs}"
+                                   Text="{Binding Commit.CommitterDate, Converter={StaticResource DateFmt}}"
+                                   ToolTip="{Binding Commit.CommitterDate, Converter={StaticResource DateFmt}, ConverterParameter=abs}"
                                    ToolTipService.InitialShowDelay="600"
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource TextSecondaryBrush}"

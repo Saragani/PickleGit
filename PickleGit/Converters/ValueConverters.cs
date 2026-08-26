@@ -25,7 +25,7 @@ namespace PickleGit.Converters
         {
             bool forceAbsolute = (p as string) == "abs";
             if (value is DateTimeOffset dto)
-                return UseRelative && !forceAbsolute ? ToRelative(dto) : dto.ToString(CurrentFormat, c);
+                return UseRelative && !forceAbsolute ? ToRelative(dto) : dto.ToLocalTime().ToString(CurrentFormat, c);
             if (value is DateTime dt)
                 return UseRelative && !forceAbsolute ? ToRelative(dt) : dt.ToString(CurrentFormat, c);
             return value?.ToString() ?? string.Empty;

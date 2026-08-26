@@ -234,11 +234,17 @@ namespace PickleGit.Services
         {
             reachedLimit = false;
             const string Format = "%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%ce%x1f%cI%x1f%B";
-            // --date-order (not --topo-order): both keep parents after children, but --topo-order
-            // otherwise groups commits by lineage (all of one branch, then all of another) while
-            // --date-order interleaves them by commit timestamp as much as the parent/child
-            // constraint allows — matching the LibGit2Sharp fallback below's
-            // Topological | Time sort strategy, and what "ordered by date" means to a user.
+            // --date-order (not --topo-order or --author-date-order): all three keep parents after
+            // children, but --topo-order groups commits by lineage (all of one branch, then all of
+            // another), while --date-order/--author-date-order interleave by committer/author
+            // timestamp respectively. The UI's DATE/TIME column (CommitListView) shows
+            // CommitInfo.CommitterDate — matching SourceTree's and Bitbucket's list views, which
+            // both show committer date rather than author date — so the walk must sort by that same
+            // field. AuthorDate is preserved verbatim across a rebase/cherry-pick/amend while
+            // CommitterDate updates to when the commit actually landed on this branch; sorting by
+            // AuthorDate instead let a rebased commit's stale author date land far from its actual
+            // position in branch history, looking "out of order" even though the walk itself was
+            // topologically correct.
             var args = $"log --branches --remotes HEAD --date-order -z -n {maxCount + 1} --format={Format}";
             var result = Cli.RunAsync(args).GetAwaiter().GetResult();
             if (!result.Success) throw new InvalidOperationException(result.ErrorText);
