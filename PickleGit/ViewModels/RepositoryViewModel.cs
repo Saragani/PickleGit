@@ -1932,8 +1932,29 @@ namespace PickleGit.ViewModels
         public bool CanCancel => _opCts != null || _credentialWaitCts != null;
         public ICommand CancelOperationCommand { get; private set; }
 
+        /// <summary>Set by RunWorkAsync, only for the duration its own `work` delegate is actually
+        /// executing on the dedicated executor thread (see GitExecutor — a single dedicated OS
+        /// thread that runs one queued item at a time). [ThreadStatic] so it's scoped per-thread
+        /// rather than shared: reads from the executor thread while a work item is running see
+        /// that item's own token; reads from anywhere else (or between items) see null and OpToken
+        /// falls back to _opCts.
+        ///
+        /// This exists because RunWorkAsync can run reentrantly while IsBusy is already true (e.g.
+        /// CommitCommand's CanExecute doesn't check IsBusy, so it can fire while a Push is still
+        /// mid-flight) — the reentrant call overwrites the shared _opCts field with its own CTS on
+        /// the UI thread, possibly before the FIRST operation's queued work item has even started
+        /// executing on the executor thread. Without this, OpToken (read from deep inside that
+        /// first operation's own work — e.g. RunCliAsync's `_git.Cli.RunAsync(args, options,
+        /// OpToken)`) could silently resolve to the SECOND operation's token instead of its own:
+        /// Cancel would then target the wrong git.exe process, and the first operation's own Cancel
+        /// button would be a no-op. Since the executor only ever runs one work item at a time, this
+        /// thread-static gives each item's OpToken reads the correct token for its own lifetime,
+        /// independent of whatever _opCts is reassigned to afterward.</summary>
+        [ThreadStatic] private static System.Threading.CancellationToken? t_executingOpToken;
+
         /// <summary>The running operation's token ('None' when idle). Safe to capture inside work lambdas.</summary>
-        private System.Threading.CancellationToken OpToken => _opCts?.Token ?? System.Threading.CancellationToken.None;
+        private System.Threading.CancellationToken OpToken =>
+            t_executingOpToken ?? _opCts?.Token ?? System.Threading.CancellationToken.None;
 
         private void CancelOperation()
         {
@@ -2038,8 +2059,20 @@ namespace PickleGit.ViewModels
             RaisePropertyChanged(nameof(CanCancel));
             try
             {
-                // All git work runs on the dedicated executor thread — never the UI thread
-                await _git.Executor.RunAsync(work);
+                // All git work runs on the dedicated executor thread — never the UI thread.
+                // Wrapping `work` to set/clear t_executingOpToken around its actual invocation
+                // (rather than relying on the shared _opCts field) is what makes OpToken reads
+                // inside `work` — however deep, e.g. RunCliAsync's own nested lambdas — resolve to
+                // THIS call's token specifically, even if a reentrant call has since overwritten
+                // _opCts on the UI thread (see t_executingOpToken's remarks).
+                var token = cts.Token;
+                await _git.Executor.RunAsync(() =>
+                {
+                    var previous = t_executingOpToken;
+                    t_executingOpToken = token;
+                    try { work(); }
+                    finally { t_executingOpToken = previous; }
+                });
                 StatusMessage = "Ready";
                 return true;
             }

@@ -526,17 +526,39 @@ namespace PickleGit.ViewModels
                 }
             }
             catch { }
-            try
+            // Up to 3 attempts with a short blocking backoff: right after
+            // PurgeRejectedCredentialForRetry's `git credential reject` call, the credential
+            // helper (GCM) can take a brief moment to actually rotate/refresh its cached value —
+            // a single immediate re-ask can still see the stale one. This runs synchronously on
+            // the dedicated executor thread (see architecture.md's Threading Model), so a plain
+            // blocking Thread.Sleep is correct here, not Task.Delay. Deliberately NOT applied to
+            // the LoadFromGitCredentialManager fallback below (an instant static-store read —
+            // retrying it changes nothing) or to EnsureCredentialsAsync's own long-timeout
+            // interactive wait (a single real sign-in attempt per operation is correct; silently
+            // replaying a slow browser flow multiple times would be a UX regression).
+            var backoffMs = new[] { 0, 500, 1000 };
+            for (var attempt = 0; attempt < backoffMs.Length; attempt++)
             {
-                var (gitUser, gitPass) = Services.CredentialStore.LoadViaGitCredentialHelper(remoteUrl);
-                if (!string.IsNullOrEmpty(gitUser) && !string.IsNullOrEmpty(gitPass))
+                if (attempt > 0) System.Threading.Thread.Sleep(backoffMs[attempt]);
+                try
                 {
-                    RemoteUsername = gitUser;
-                    RemotePassword = gitPass;
-                    return true;
+                    var (gitUser, gitPass) = Services.CredentialStore.LoadViaGitCredentialHelper(remoteUrl);
+                    if (!string.IsNullOrEmpty(gitUser) && !string.IsNullOrEmpty(gitPass))
+                    {
+                        RemoteUsername = gitUser;
+                        RemotePassword = gitPass;
+                        return true;
+                    }
+                    // Never log the credential values themselves — only that this attempt came up
+                    // empty, which is exactly the signal needed if this hard-to-reproduce,
+                    // timing-sensitive post-rejection recovery path ever needs debugging again.
+                    Services.AppLog.Warn($"TryAutoResolveCredential: credential helper attempt {attempt + 1}/{backoffMs.Length} returned no credential.");
+                }
+                catch (Exception ex)
+                {
+                    Services.AppLog.Warn($"TryAutoResolveCredential: credential helper attempt {attempt + 1}/{backoffMs.Length} threw.", ex);
                 }
             }
-            catch { }
             try
             {
                 var (gcmUser, gcmPass) = Services.CredentialStore.LoadFromGitCredentialManager(remoteUrl);
@@ -559,15 +581,23 @@ namespace PickleGit.ViewModels
             if (!string.IsNullOrEmpty(RemoteUsername) && !string.IsNullOrEmpty(RemotePassword))
                 return true;
 
-            // Previous attempt failed — skip auto-lookup and go straight to the dialog so the
-            // user can correct credentials instead of replaying the same bad ones from GCM/store
-            var skipAutoLookup = _forceCredentialDialog;
+            // A previous attempt's credential was rejected and already purged (from both
+            // PickleGit's own store and the system credential helper, via
+            // PurgeRejectedCredentialForRetry / RunWorkAsync's catch) — skip re-reading those
+            // two now-stale shortcuts (steps 2 and 4 below), which would otherwise just find
+            // nothing (or replay the same rejected value if the purge raced with something
+            // else). Step 3 (the OAuth-capable git credential helper wait) is NOT skipped by
+            // this flag — see its own remarks below for why: it's the only path that can
+            // actually obtain a fresh credential, and skipping it here used to drop straight to
+            // PickleGit's own plain username/password dialog, which can never satisfy a host
+            // that has retired password auth in favor of OAuth/tokens (e.g. Bitbucket).
+            var skipCachedLookup = _forceCredentialDialog;
             _forceCredentialDialog = false;
 
-            if (!skipAutoLookup)
+            var remoteUrl = Remotes.FirstOrDefault()?.Url;
+            if (!string.IsNullOrEmpty(remoteUrl))
             {
-                var remoteUrl = Remotes.FirstOrDefault()?.Url;
-                if (!string.IsNullOrEmpty(remoteUrl))
+                if (!skipCachedLookup)
                 {
                     try
                     {
@@ -584,60 +614,70 @@ namespace PickleGit.ViewModels
                         }
                     }
                     catch { }
+                }
 
-                    // 3. Ask git's own configured credential helper (GCM, wincred, store, ...) — the
-                    // exact same resolution git.exe itself performs, including any per-host/per-path
-                    // username config. Tried before the raw Credential Manager read below because
-                    // that raw read just grabs whatever's cached under one fixed generic key and
-                    // can't disambiguate between multiple accounts stored for the same host (e.g. a
-                    // shared machine where a build service has also authenticated) the way the
-                    // helper's own credential matching can.
-                    //
-                    // A long timeout here (not LoadViaGitCredentialHelper's short default) matters:
-                    // with nothing cached yet, a helper like GCM runs its own interactive sign-in for
-                    // this host — for Bitbucket/GitHub that's a real browser tab for OAuth, same as
-                    // plain `git push` from a terminal. Only this primary lookup should wait that
-                    // long; TryAutoResolveCredential's silent post-rejection retry deliberately keeps
-                    // the short default so it never shows a surprise browser tab of its own.
-                    //
-                    // CanCancel (the status-bar Cancel button) also watches _credentialWaitCts
-                    // (see its declaration) specifically so this wait — which can now run for
-                    // minutes — has an escape besides closing the app. Deliberately its own field,
-                    // never _opCts: RunWorkAsync can run reentrantly while IsBusy is already true
-                    // (e.g. CommitCommand's CanExecute doesn't check IsBusy), which would overwrite
-                    // _opCts with that unrelated call's own token; nulling _opCts back out here
-                    // afterward would then null out THAT still-running operation's token instead.
-                    _credentialWaitCts = new System.Threading.CancellationTokenSource();
+                // 3. Ask git's own configured credential helper (GCM, wincred, store, ...) — the
+                // exact same resolution git.exe itself performs, including any per-host/per-path
+                // username config. Tried before the raw Credential Manager read below because
+                // that raw read just grabs whatever's cached under one fixed generic key and
+                // can't disambiguate between multiple accounts stored for the same host (e.g. a
+                // shared machine where a build service has also authenticated) the way the
+                // helper's own credential matching can.
+                //
+                // Always runs, even when skipCachedLookup is true (a credential was just
+                // rejected and purged) — this is the OAuth-capable path (GCM does real browser
+                // sign-in for hosts like Bitbucket/GitHub here), so a rejection is exactly when
+                // re-running it matters most: the purge already told the helper the old value
+                // was bad (RejectViaGitCredentialHelper), so this re-ask can return a genuinely
+                // different/refreshed credential instead of replaying the rejected one.
+                //
+                // A long timeout here (not LoadViaGitCredentialHelper's short default) matters:
+                // with nothing cached yet, a helper like GCM runs its own interactive sign-in for
+                // this host — for Bitbucket/GitHub that's a real browser tab for OAuth, same as
+                // plain `git push` from a terminal. Only this primary lookup should wait that
+                // long; TryAutoResolveCredential's silent post-rejection retry deliberately keeps
+                // the short default so it never shows a surprise browser tab of its own.
+                //
+                // CanCancel (the status-bar Cancel button) also watches _credentialWaitCts
+                // (see its declaration) specifically so this wait — which can now run for
+                // minutes — has an escape besides closing the app. Deliberately its own field,
+                // never _opCts: RunWorkAsync can run reentrantly while IsBusy is already true
+                // (e.g. CommitCommand's CanExecute doesn't check IsBusy), which would overwrite
+                // _opCts with that unrelated call's own token; nulling _opCts back out here
+                // afterward would then null out THAT still-running operation's token instead.
+                _credentialWaitCts = new System.Threading.CancellationTokenSource();
+                RaisePropertyChanged(nameof(CanCancel));
+                var credentialHelperToken = _credentialWaitCts.Token;
+                var previousStatusMessage = StatusMessage;
+                StatusMessage = "Waiting for sign-in… (check your browser)";
+                try
+                {
+                    var (gitUser, gitPass) = await Task.Run(
+                        () => Services.CredentialStore.LoadViaGitCredentialHelper(remoteUrl, timeoutMs: 300_000, ct: credentialHelperToken));
+                    if (!string.IsNullOrEmpty(gitUser) && !string.IsNullOrEmpty(gitPass))
+                    {
+                        RemoteUsername = gitUser;
+                        RemotePassword = gitPass;
+                        return true;
+                    }
+                }
+                catch { }
+                finally
+                {
+                    _credentialWaitCts = null;
                     RaisePropertyChanged(nameof(CanCancel));
-                    var credentialHelperToken = _credentialWaitCts.Token;
-                    var previousStatusMessage = StatusMessage;
-                    StatusMessage = "Waiting for sign-in… (check your browser)";
-                    try
-                    {
-                        var (gitUser, gitPass) = await Task.Run(
-                            () => Services.CredentialStore.LoadViaGitCredentialHelper(remoteUrl, timeoutMs: 300_000, ct: credentialHelperToken));
-                        if (!string.IsNullOrEmpty(gitUser) && !string.IsNullOrEmpty(gitPass))
-                        {
-                            RemoteUsername = gitUser;
-                            RemotePassword = gitPass;
-                            return true;
-                        }
-                    }
-                    catch { }
-                    finally
-                    {
-                        _credentialWaitCts = null;
-                        RaisePropertyChanged(nameof(CanCancel));
-                    }
-                    // Cancelling this wait means "stop trying to sign in", not "fall through to
-                    // PickleGit's own dialog instead" — abort the whole Push/Pull/Fetch here.
-                    if (credentialHelperToken.IsCancellationRequested)
-                    {
-                        StatusMessage = "Sign-in cancelled";
-                        return false;
-                    }
-                    StatusMessage = previousStatusMessage;
+                }
+                // Cancelling this wait means "stop trying to sign in", not "fall through to
+                // PickleGit's own dialog instead" — abort the whole Push/Pull/Fetch here.
+                if (credentialHelperToken.IsCancellationRequested)
+                {
+                    StatusMessage = "Sign-in cancelled";
+                    return false;
+                }
+                StatusMessage = previousStatusMessage;
 
+                if (!skipCachedLookup)
+                {
                     // 4. Fall back to a raw Windows Credential Manager read — only reachable when
                     // git.exe isn't on PATH, since step 3 already covers this same store when it is.
                     try
