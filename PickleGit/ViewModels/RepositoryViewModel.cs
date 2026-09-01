@@ -2024,7 +2024,17 @@ namespace PickleGit.ViewModels
         {
             StatusMessage = status;
             var suppression = _watcher?.Suppress();
-            _opCts = new System.Threading.CancellationTokenSource();
+            // Captured locally (not just read back off _opCts) because RunWorkAsync can run
+            // reentrantly while IsBusy is already true (e.g. CommitCommand's CanExecute doesn't
+            // check IsBusy, so it can run while a Push is still mid-flight) — a nested call
+            // overwrites the shared _opCts field with its own CTS before this call's work even
+            // starts. Reading _opCts back here/in finally, instead of this local, used to check
+            // (or dispose/null out) whichever operation's CTS happened to be current at that
+            // moment — including nulling out an unrelated, still-running operation's CTS out from
+            // under it, which crashed ITS catch block with a NullReferenceException on
+            // `_opCts.IsCancellationRequested` (mirrors the _credentialWaitCts remarks above).
+            var cts = new System.Threading.CancellationTokenSource();
+            _opCts = cts;
             RaisePropertyChanged(nameof(CanCancel));
             try
             {
@@ -2035,7 +2045,7 @@ namespace PickleGit.ViewModels
             }
             catch (Exception ex)
             {
-                if (_opCts.IsCancellationRequested)
+                if (cts.IsCancellationRequested)
                 {
                     StatusMessage = "Operation cancelled";
                     return false;
@@ -2171,10 +2181,14 @@ namespace PickleGit.ViewModels
             finally
             {
                 suppression?.Dispose();
-                var cts = _opCts;
-                _opCts = null;
-                cts?.Dispose();
-                RaisePropertyChanged(nameof(CanCancel));
+                // Only clear/dispose _opCts if it's still ours — a reentrant nested call may have
+                // already overwritten it with its own, still-running CTS (see remarks above).
+                if (ReferenceEquals(_opCts, cts))
+                {
+                    _opCts = null;
+                    RaisePropertyChanged(nameof(CanCancel));
+                }
+                cts.Dispose();
                 ProgressPercent = -1;
             }
         }
