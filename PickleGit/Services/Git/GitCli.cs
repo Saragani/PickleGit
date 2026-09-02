@@ -60,6 +60,66 @@ namespace PickleGit.Services.Git
             return url.StartsWith("ssh://", StringComparison.OrdinalIgnoreCase) || ScpLikeUrl.IsMatch(url);
         }
 
+        /// <summary>Resolves the EFFECTIVE credential helper configured for a given remote URL —
+        /// via <c>git config --get-urlmatch credential.helper &lt;url&gt;</c>, which honors git's
+        /// general/hostname/urlmatch config precedence (the same mechanism
+        /// <see cref="CliGitService.BuildHttpAuthEnv"/>'s own remarks reference) —
+        /// and returns whether it resolves to anything at all.
+        ///
+        /// Used to decide whether PickleGit can let git.exe's own credential-helper protocol
+        /// negotiate HTTPS auth natively (correctly choosing Basic vs. an authtype=Bearer
+        /// capability) instead of PickleGit manually resolving a credential and forcing it into a
+        /// hand-built Basic header via BuildHttpAuthEnv — the latter breaks OAuth access tokens
+        /// Bitbucket requires as Bearer (confirmed live: the same freshly-refreshed OAuth token
+        /// that Bitbucket's API accepts as `Authorization: Bearer <token>` gets a 401 when sent as
+        /// `Authorization: Basic base64(user:token)`).
+        ///
+        /// No caching — a local `git config` read is cheap and this must reflect the current
+        /// config on every call. Never throws: returns false for any failure, including git.exe
+        /// being unavailable.</summary>
+        public static async Task<bool> HasConfiguredCredentialHelperAsync(string workDir, string remoteUrl)
+        {
+            if (string.IsNullOrEmpty(remoteUrl)) return false;
+            try
+            {
+                // SECURITY: RunAsync logs its full `args` string verbatim via AppLog.Info — strip
+                // any embedded userinfo (a remote configured as https://user:token@host/... is a
+                // common way to store exactly the kind of Bitbucket/GitHub token this method exists
+                // to avoid mishandling) before it ever reaches args/the log. git's urlmatch
+                // credential-helper resolution doesn't consider the password component anyway, so
+                // this can't change the result.
+                var result = await RunAsync(workDir,
+                    $"config --get-urlmatch credential.helper {CliGitService.Quote(StripUserInfo(remoteUrl))}")
+                    .ConfigureAwait(false);
+                return result.Success && !string.IsNullOrWhiteSpace(result.StdOut);
+            }
+            catch (Exception ex)
+            {
+                Services.AppLog.Warn("HasConfiguredCredentialHelperAsync failed; falling back to manual auth.", ex);
+                return false;
+            }
+        }
+
+        /// <summary>Strips any embedded userinfo (<c>user:pass@</c>/<c>user:token@</c>) from a URL
+        /// before it's ever used in a logged command line. Returns the original string unchanged if
+        /// it isn't a well-formed absolute URI (git config will simply fail to match it, a safe
+        /// default) or carries no userinfo to begin with.</summary>
+        private static string StripUserInfo(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return url;
+            try
+            {
+                var uri = new Uri(url);
+                if (string.IsNullOrEmpty(uri.UserInfo)) return url;
+                var builder = new UriBuilder(uri) { UserName = "", Password = "" };
+                return builder.Uri.ToString();
+            }
+            catch (UriFormatException)
+            {
+                return url;
+            }
+        }
+
         public static string ResolveGitPath()
         {
             lock (_lock)

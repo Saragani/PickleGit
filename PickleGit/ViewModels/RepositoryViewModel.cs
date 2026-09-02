@@ -2134,11 +2134,19 @@ namespace PickleGit.ViewModels
                         if (!string.IsNullOrEmpty(failedUrl))
                             Services.CredentialStore.RejectViaGitCredentialHelper(failedUrl, failedUser, failedPassword);
                     }
+                    // Doesn't promise "you'll be prompted to re-enter credentials" — for a remote
+                    // whose credential.helper git.exe can resolve natively (see
+                    // GitCli.HasConfiguredCredentialHelperAsync's remarks), the retry is git/the
+                    // credential helper renegotiating on their own, not a PickleGit dialog; only the
+                    // fallback path (no working credential.helper) actually reopens PickleGit's own
+                    // dialog. Wording covers both without overpromising either.
                     msg = isRejectedAuthStatus
                         ? "Authentication failed (the server rejected the request). If this remote no " +
                           "longer accepts a plain username/password — e.g. Bitbucket has retired app " +
-                          "passwords — use a personal access token as the password instead. " +
-                          "You'll be prompted to re-enter credentials next attempt."
+                          "passwords — use a personal access token as the password instead, or make " +
+                          "sure a credential helper (e.g. Git Credential Manager) is configured so git " +
+                          "can sign in with OAuth automatically. The credential will be re-resolved on " +
+                          "your next attempt."
                         : "Authentication failed. Check that your username and password (or app password) are correct.";
                 }
                 // "Too many redirects" on its own (not paired with "authentication replays") is

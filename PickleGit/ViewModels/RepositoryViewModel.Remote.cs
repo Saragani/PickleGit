@@ -82,13 +82,46 @@ namespace PickleGit.ViewModels
             {
                 if (allRemotes && Remotes.Count > 1)
                 {
+                    // Reset explicitly (not just relying on EnsureCredentialsAsync's own top-of-method
+                    // reset below) -- when every HTTPS remote here resolves to native auth,
+                    // EnsureCredentialsAsync is never called at all for this operation, so a stale
+                    // `true` left over from a completely unrelated earlier manual-path operation would
+                    // otherwise survive and wrongly trigger a redundant SaveCredentials() below.
+                    _credentialsFromDialog = false;
                     var remotes = Remotes.ToList();
-                    if (remotes.Any(r => !GitCli.IsSshUrl(r.Url)) && !await EnsureCredentialsAsync()) return;
+                    // Resolve, once per remote and up front (before the synchronous work delegate
+                    // below), whether git.exe's own credential.helper can handle this remote's HTTPS
+                    // auth natively -- see GitCli.HasConfiguredCredentialHelperAsync's remarks for why
+                    // that's preferred over PickleGit manually resolving+forcing a Basic header (which
+                    // breaks OAuth tokens Bitbucket requires as Bearer).
+                    var useNativeAuth = new Dictionary<string, bool>();
+                    foreach (var r in remotes)
+                    {
+                        if (!GitCli.IsSshUrl(r.Url) && _git.Cli != null && _git.Cli.IsAvailable)
+                            useNativeAuth[r.Name] = await GitCli.HasConfiguredCredentialHelperAsync(_git.Cli.WorkingDirectory, r.Url);
+                    }
+                    var needsManualCredential = remotes.Any(r =>
+                        !GitCli.IsSshUrl(r.Url) && !(useNativeAuth.TryGetValue(r.Name, out var native) && native));
+                    if (needsManualCredential && !await EnsureCredentialsAsync()) return;
+                    if (!needsManualCredential)
+                    {
+                        // No remote in THIS call needs a manually-resolved credential -- safe to clear
+                        // any stale value left over from an earlier, unrelated operation so a
+                        // native-path failure's RunWorkAsync catch doesn't purge a credential that had
+                        // nothing to do with this call. (Deliberately NOT done per-remote inside the
+                        // loop below: when needsManualCredential is true, a manual remote later in
+                        // iteration order still needs the single credential EnsureCredentialsAsync
+                        // resolved once, upfront, for this whole call.)
+                        RemoteUsername = null;
+                        RemotePassword = null;
+                    }
                     var allOk = await RunAsync("Fetching all remotes…", () =>
                     {
                         foreach (var r in remotes)
                         {
-                            if (GitCli.IsSshUrl(r.Url))
+                            if (GitCli.IsSshUrl(r.Url) ||
+                                (_git.Cli != null && _git.Cli.IsAvailable &&
+                                 useNativeAuth.TryGetValue(r.Name, out var isNative) && isNative))
                             {
                                 var args = $"fetch {(prune ? "--prune " : "")}{CliGitService.Quote(r.Name)}";
                                 var result = _git.Cli.RunAsync(args, new GitCliOptions { Progress = progress }).GetAwaiter().GetResult();
@@ -126,8 +159,17 @@ namespace PickleGit.ViewModels
                 var remote = Remotes.FirstOrDefault();
                 var remoteName = remote?.Name ?? "origin";
                 var status = prune ? $"Fetching from {remoteName} (prune)…" : $"Fetching from {remoteName}…";
-                if (GitCli.IsSshUrl(remote?.Url))
+                if (GitCli.IsSshUrl(remote?.Url) ||
+                    (_git.Cli != null && _git.Cli.IsAvailable &&
+                     await GitCli.HasConfiguredCredentialHelperAsync(_git.Cli.WorkingDirectory, remote?.Url)))
                 {
+                    // SSH auth is handled by the OS SSH agent; HTTPS auth (when a credential helper
+                    // is configured) is negotiated natively by git.exe itself (see
+                    // GitCli.HasConfiguredCredentialHelperAsync's remarks) -- neither path uses
+                    // RemoteUsername/RemotePassword, so clear them so a later, unrelated operation's
+                    // RunWorkAsync catch can't purge a stale credential this call never touched.
+                    RemoteUsername = null;
+                    RemotePassword = null;
                     await RunCliAsync(status, $"fetch {(prune ? "--prune " : "")}{CliGitService.Quote(remoteName)}", "Fetch");
                     await RefreshAsync(false, FetchRefreshScope);
                     return;
@@ -328,17 +370,30 @@ namespace PickleGit.ViewModels
             var remoteUrl = Remotes.FirstOrDefault()?.Url;
             var isSsh = GitCli.IsSshUrl(remoteUrl);
             var cliAvailable = _git.Cli != null && _git.Cli.IsAvailable;
+            // Native path: let git.exe's own credential.helper negotiate HTTPS auth itself (see
+            // GitCli.HasConfiguredCredentialHelperAsync's remarks) instead of PickleGit manually
+            // resolving a credential and forcing it into a Basic header.
+            var useNativeAuth = !isSsh && cliAvailable &&
+                await GitCli.HasConfiguredCredentialHelperAsync(_git.Cli.WorkingDirectory, remoteUrl);
             if (isSsh || cliAvailable)
             {
                 IDictionary<string, string> env = null;
-                if (!isSsh)
+                if (!isSsh && !useNativeAuth)
                 {
                     if (!await EnsureCredentialsAsync()) return;
                     env = CliGitService.BuildHttpAuthEnv(RemoteUsername, RemotePassword, remoteUrl);
                 }
+                else
+                {
+                    // Neither SSH nor the native-credential.helper path uses
+                    // RemoteUsername/RemotePassword -- clear them so a later, unrelated operation's
+                    // RunWorkAsync catch can't purge a stale credential this call never touched.
+                    RemoteUsername = null;
+                    RemotePassword = null;
+                }
                 var preHead = await _git.Executor.RunAsync(() => _git.GetHeadSha());
                 var ok = await RunCliAllowingConflictAsync("Pulling…", "pull --autostash", "Pull", env,
-                    authRetryRemoteUrl: isSsh ? null : remoteUrl);
+                    authRetryRemoteUrl: (isSsh || useNativeAuth) ? null : remoteUrl);
                 if (ok)
                 {
                     var conflict = await _git.Executor.RunAsync(() => _git.GetConflictState());
@@ -347,7 +402,7 @@ namespace PickleGit.ViewModels
                     await LoadWorkingDirAsync();
                     await RefreshLfsStatusAsync();
                 }
-                if (ok && !isSsh && _credentialsFromDialog) SaveCredentials();
+                if (ok && !isSsh && !useNativeAuth && _credentialsFromDialog) SaveCredentials();
                 await RefreshAsync();
                 return;
             }
@@ -373,8 +428,17 @@ namespace PickleGit.ViewModels
             if (!TryEnterBusyScope()) return false;
             try
             {
-                if (GitCli.IsSshUrl(remoteUrl))
+                if (GitCli.IsSshUrl(remoteUrl) ||
+                    (_git.Cli != null && _git.Cli.IsAvailable &&
+                     await GitCli.HasConfiguredCredentialHelperAsync(_git.Cli.WorkingDirectory, remoteUrl)))
                 {
+                    // SSH auth is handled by the OS SSH agent; HTTPS auth (when a credential helper
+                    // is configured) is negotiated natively by git.exe itself (see
+                    // GitCli.HasConfiguredCredentialHelperAsync's remarks) -- neither path uses
+                    // RemoteUsername/RemotePassword, so clear them so a later, unrelated operation's
+                    // RunWorkAsync catch can't purge a stale credential this call never touched.
+                    RemoteUsername = null;
+                    RemotePassword = null;
                     var cliOk = await RunCliAsync($"Pushing to {remoteName}…",
                         $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(branch)}", "Push");
                     if (cliOk) await RefreshAsync(false, PushRefreshScope);
@@ -416,8 +480,17 @@ namespace PickleGit.ViewModels
             if (!TryEnterBusyScope()) return false;
             try
             {
-                if (GitCli.IsSshUrl(remoteUrl))
+                if (GitCli.IsSshUrl(remoteUrl) ||
+                    (_git.Cli != null && _git.Cli.IsAvailable &&
+                     await GitCli.HasConfiguredCredentialHelperAsync(_git.Cli.WorkingDirectory, remoteUrl)))
                 {
+                    // SSH auth is handled by the OS SSH agent; HTTPS auth (when a credential helper
+                    // is configured) is negotiated natively by git.exe itself (see
+                    // GitCli.HasConfiguredCredentialHelperAsync's remarks) -- neither path uses
+                    // RemoteUsername/RemotePassword, so clear them so a later, unrelated operation's
+                    // RunWorkAsync catch can't purge a stale credential this call never touched.
+                    RemoteUsername = null;
+                    RemotePassword = null;
                     var cliOk = await RunCliAsync($"Pushing {bi.Name} to {remoteName}…",
                         $"push -u {CliGitService.Quote(remoteName)} {CliGitService.Quote(bi.Name)}", "Push");
                     if (cliOk) await RefreshAsync(false, PushRefreshScope);
