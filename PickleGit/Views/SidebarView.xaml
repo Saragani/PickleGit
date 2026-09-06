@@ -577,13 +577,6 @@
                         <Grid DataContext="{Binding Payload}"
                               Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}"
                               Background="Transparent">
-                            <Grid.InputBindings>
-                                <!-- Click a stash → preview its files in the detail panel -->
-                                <MouseBinding MouseAction="LeftClick"
-                                              Command="{Binding DataContext.SelectStashCommand,
-                                                        RelativeSource={RelativeSource AncestorType=ListView}}"
-                                              CommandParameter="{Binding}"/>
-                            </Grid.InputBindings>
                             <TextBlock Text="{Binding Message}" Margin="4,3"
                                        TextTrimming="CharacterEllipsis"
                                        Foreground="{DynamicResource TextSecondaryBrush}"/>

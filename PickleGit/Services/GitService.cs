@@ -1692,11 +1692,20 @@ namespace PickleGit.Services
         {
             EnsureOpen();
             return _repo.Stashes
-                .Select((s, i) => new StashInfo
+                .Select((s, i) =>
                 {
-                    Index = i,
-                    Message = string.IsNullOrWhiteSpace(s.Message) ? s.FriendlyName : s.Message,
-                    Sha = s.WorkTree?.Sha
+                    // libgit2's git_stash_save leaves a literal trailing "\n\n" embedded in the
+                    // stash commit's own message whenever a custom message is passed (confirmed
+                    // against native git2); WPF's TextBlock renders each embedded '\n' as a hard
+                    // line break, so the untrimmed message shows as extra blank lines in the
+                    // sidebar row title.
+                    var message = s.Message?.TrimEnd();
+                    return new StashInfo
+                    {
+                        Index = i,
+                        Message = string.IsNullOrWhiteSpace(message) ? s.FriendlyName : message,
+                        Sha = s.WorkTree?.Sha
+                    };
                 }).ToList();
         }
 

@@ -364,6 +364,10 @@ namespace PickleGit.Views
             {
                 _repo?.SelectTagCommand.Execute(tag);
             }
+            else if (row?.Kind == SidebarRowKind.Stash && row.Payload is StashInfo stash)
+            {
+                _repo?.SelectStashCommand.Execute(stash);
+            }
         }
 
         private static T FindParent<T>(DependencyObject d) where T : DependencyObject
