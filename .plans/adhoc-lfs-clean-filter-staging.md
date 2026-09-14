@@ -3,9 +3,9 @@ issue: adhoc-lfs-clean-filter-staging
 title: Route staging through git.exe so the LFS clean filter runs
 type: bug
 component: GitService (staging)
-phase: BUILD
-step: 1
-next: BUILD complete — SHIP when ready
+phase: SHIP
+step: done
+next: done
 run_mode: auto
 updated: 2026-09-14 15:16
 ---
@@ -128,6 +128,19 @@ None.
 
 ## Deviation Register
 <!-- Entries added at checkpoints. Format: [Step N → affects Step M] <what changed and why> → Step M: <what to do differently>. Append ✓ to entry when Step M completes. Approved deviations only. -->
+
+## Retro
+<!-- Written: 2026-09-14 17:50 -->
+
+**Deviations:** Step 1's stubs had been checked GREEN with no actual test run behind them; live UI-Automation
+testing this session caught a real bug (`git add -- -A` reading `-A` as a literal pathspec), which was fixed
+and re-verified. At SHIP, the commit unexpectedly picked up an unstaged `Version.props` build-number bump
+from a concurrent process — amended out at the user's request before anything was pushed.
+**Steps planned vs. actual:** 1 planned / 1 actual — matched, no steps added or dropped.
+**Process improvement:** Never mark a `(manual)` verification stub GREEN without live evidence produced in
+that same session (screenshot + a real assertion, e.g. `git cat-file`/`git status` output) — a checkmark
+carried over from an earlier/compacted session state is indistinguishable from never having tested, and
+this session only caught a real bug because the user asked "did you run the tests?" and forced an actual run.
 
 ## Handoff
 <!-- Run `pkl:handoff` to fill this section. Paste the block below into a new conversation to resume. -->
