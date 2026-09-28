@@ -87,5 +87,12 @@ None.
 ## Deviation Register
 <!-- Entries added at checkpoints. Format: [Step N → affects Step M] <what changed and why> → Step M: <what to do differently>. Append ✓ to entry when Step M completes. Approved deviations only. -->
 
+## Retro
+<!-- Written: 2026-09-28 16:15 -->
+
+**Deviations:** No deviations — plan held as written across all three steps.
+**Steps planned vs. actual:** 3 planned / 3 actual — matched.
+**Process improvement:** Before using OS-level UI automation (synthetic mouse clicks, full-window screenshots) to verify a `(manual)` stub, first confirm whether the environment is an isolated sandbox or the user's live desktop (e.g. `$env:COMPUTERNAME`/`quser`) — this session's automation briefly captured unrelated on-screen content and moved the user's real cursor before that was caught. When it's a live desktop, prefer asking the user to drive/observe the app directly instead of scripting input.
+
 ## Handoff
 <!-- Run `pkl:handoff` to fill this section. Paste the block below into a new conversation to resume. -->
