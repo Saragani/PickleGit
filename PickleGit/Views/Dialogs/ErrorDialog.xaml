@@ -3,7 +3,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="{Binding DialogTitle}" MinHeight="190" Width="480"
         SizeToContent="Height"
-        MaxHeight="560"
         WindowStartupLocation="CenterOwner"
         Icon="pack://application:,,,/Resources/pickle.ico"
         ResizeMode="NoResize"
@@ -22,7 +21,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="14"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*" MinHeight="60"/>
             <RowDefinition Height="10"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -37,8 +36,10 @@
                        VerticalAlignment="Center"/>
         </StackPanel>
 
-        <TextBlock Grid.Row="2" Text="{Binding MessageText}" FontSize="12.5"
-                   Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <TextBlock Text="{Binding MessageText}" FontSize="12.5"
+                       Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+        </ScrollViewer>
 
         <ToggleButton Grid.Row="4" x:Name="DetailsToggle"
                       Visibility="{Binding DetailsVisibility}"

@@ -21,7 +21,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="16"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
             <RowDefinition Height="8"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -30,8 +30,10 @@
 
         <TextBlock Grid.Row="0" Text="{Binding HeaderText}" FontSize="15" FontWeight="SemiBold"/>
 
-        <TextBlock Grid.Row="2" Text="{Binding PromptText}" FontSize="12"
-                   Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <TextBlock Text="{Binding PromptText}" FontSize="12"
+                       Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+        </ScrollViewer>
         <TextBox Grid.Row="4" Name="InputBox" Style="{StaticResource DarkTextBox}"
                  Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"/>
 

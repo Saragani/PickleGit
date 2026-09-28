@@ -1,4 +1,5 @@
 using System.Windows;
+using PickleGit.Services;
 
 namespace PickleGit.Views.Dialogs
 {
@@ -16,6 +17,11 @@ namespace PickleGit.Views.Dialogs
         {
             InitializeComponent();
             DataContext = this;
+            // Cap growth to the actual monitor's usable work area so a long MessageText scrolls
+            // internally instead of pushing the Copy/OK row past the window's own bounds.
+            // Deferred to SourceInitialized since Owner is only assigned (by DialogService's
+            // object initializer) after this constructor returns.
+            SourceInitialized += (s, e) => MaxHeight = DialogSizing.ForOwner(Owner);
         }
 
         private void Ok_Click(object sender, RoutedEventArgs e) => DialogResult = true;

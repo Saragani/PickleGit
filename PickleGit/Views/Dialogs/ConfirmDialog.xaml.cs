@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using PickleGit.Services;
 
 namespace PickleGit.Views.Dialogs
 {
@@ -18,6 +19,11 @@ namespace PickleGit.Views.Dialogs
         {
             InitializeComponent();
             DataContext = this;
+            // Cap growth to the actual monitor's usable work area so a long MessageText scrolls
+            // internally instead of pushing the OK/Cancel row off-screen. Deferred to
+            // SourceInitialized since Owner is only assigned (by DialogService's object
+            // initializer) after this constructor returns.
+            SourceInitialized += (s, e) => MaxHeight = DialogSizing.ForOwner(Owner);
             Loaded += (s, e) =>
             {
                 var styleKey = IsDanger ? "DangerButton" : "AccentButton";

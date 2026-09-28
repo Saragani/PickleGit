@@ -21,15 +21,17 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="14"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
             <RowDefinition Height="20"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="{Binding HeaderText}" FontSize="15" FontWeight="SemiBold"/>
 
-        <TextBlock Grid.Row="2" Text="{Binding MessageText}" FontSize="12.5"
-                   Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <TextBlock Text="{Binding MessageText}" FontSize="12.5"
+                       Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+        </ScrollViewer>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="{Binding CancelText}" Style="{StaticResource ToolbarButton}" Margin="0,0,8,0"
