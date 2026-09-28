@@ -1366,6 +1366,12 @@ namespace PickleGit.ViewModels
                 // regardless of the signature-skip below, so neither banner ever goes stale.
                 Application.Current.Dispatcher.Invoke(() =>
                 {
+                    // Force the Staged/Unstaged view only on a conflict *transition* (none -> some),
+                    // not on every refresh tick while a conflict remains outstanding — otherwise an
+                    // ordinary WorkingDir-classified tick (e.g. re-editing a conflicting file again)
+                    // keeps yanking the user back to Staged/Unstaged even if they deliberately
+                    // navigated elsewhere (a past commit's diff, etc.) while resolving the conflict.
+                    bool conflictJustStarted = conflict.HasConflicts && !HasConflict;
                     ConflictInfo = conflict;
                     // GetBisectState() can't recover RevisionsLeft/StepsRemaining/Found from files
                     // (git only prints them on the triggering step's own stdout) — if HEAD hasn't
@@ -1380,7 +1386,7 @@ namespace PickleGit.ViewModels
                         bisect.FirstBadSummary = _bisectInfo.FirstBadSummary;
                     }
                     BisectInfo = bisect;
-                    if (conflict.HasConflicts) ShowWorkingDir = true;
+                    if (conflictJustStarted) ShowWorkingDir = true;
                     // Always resync from this same status snapshot, not just during conflicts —
                     // otherwise the "Uncommitted changes" node (driven by `hasChanges` below, from
                     // this same `status`) and the Staged/Unstaged file lists (otherwise only kept
@@ -1443,7 +1449,7 @@ namespace PickleGit.ViewModels
                         var restored = nodes.FirstOrDefault(n => n.Commit?.Sha == savedSha);
                         if (restored != null)
                         {
-                            SelectedNode = restored;
+                            ReselectSameCommit(restored);
                             // Rebuilding GraphNodes resets the ListView scroll — bring the
                             // restored selection back into view (no-op if already visible)
                             ScrollToNodeRequested?.Invoke(this, restored);
@@ -1629,7 +1635,7 @@ namespace PickleGit.ViewModels
                         var restored = nodes.FirstOrDefault(n => n.Commit?.Sha == savedSha);
                         if (restored != null)
                         {
-                            SelectedNode = restored;
+                            ReselectSameCommit(restored);
                             ScrollToNodeRequested?.Invoke(this, restored);
                         }
                         else
@@ -1643,6 +1649,25 @@ namespace PickleGit.ViewModels
                     }
                 });
             });
+        }
+
+        /// <summary>Repoints _selectedNode/_selectedNodes to a freshly-rebuilt GraphNode for the
+        /// SAME commit (the caller already matched it by sha) after a GraphNodes rebuild — used by
+        /// both RefreshOnceAsync and ApplyFilter, which each replace GraphNodes wholesale (dropping
+        /// the old GraphNode instance out of the ListView's selection) while the logically selected
+        /// commit hasn't actually changed. Going through the normal SelectedNode setter here would
+        /// still re-trigger OnSelectedNodesChanged -> LoadCommitDetail(sha), which unconditionally
+        /// clears SelectedFile/CommitFiles at its top even though nothing about the selection
+        /// actually changed — silently hiding whatever diff/file was already open on every unrelated
+        /// refresh (an external working-dir change, a conflicting file being re-edited, etc.).</summary>
+        private void ReselectSameCommit(GraphNode restored)
+        {
+            _selectedNode = restored;
+            _syncingFromSelectedNode = true;
+            _selectedNodes.Clear();
+            _selectedNodes.Add(restored);
+            _syncingFromSelectedNode = false;
+            RaisePropertyChanged(nameof(SelectedNode));
         }
 
         // ── Cache ─────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using PickleGit.Controls;
 using PickleGit.Models;
+using PickleGit.Services;
 using PickleGit.ViewModels;
 
 namespace PickleGit.Views
@@ -585,6 +586,39 @@ namespace PickleGit.Views
                 : ReferenceEquals(lv, SideBySideLeftListView) ? _leftScroll
                 : _rightScroll;
 
+        /// <summary>Scrolls the target hunk header (or line) so it lands at the TOP of the
+        /// viewport, for whichever of this view's ListViews holds items of the same type as
+        /// <paramref name="item"/> — used by hunk navigation (MainWindow's OnScrollToDiffItemRequested)
+        /// instead of ListView.ScrollIntoView, which only scrolls the minimum distance needed and so
+        /// lands the target at whichever edge it was approached from (moving forward through hunks,
+        /// that's the bottom). Every row here (hunk header and line, both Unified and side-by-side
+        /// templates) is a fixed 24px (see DiffView.xaml), so the offset is computed directly.
+        /// Reuses this view's own cached ScrollViewer fields (_unifiedScroll/_leftScroll/_rightScroll)
+        /// rather than re-walking the visual tree — a fresh VisualTreeHelper search isn't guaranteed
+        /// to find anything before ApplyTemplate() has run (see PickleGit/CLAUDE.md).</summary>
+        internal void ScrollDiffItemToTop(object item)
+        {
+            if (item == null) return;
+            foreach (var lv in new[] { UnifiedListView, SideBySideLeftListView, SideBySideRightListView })
+            {
+                if (lv.Items.Count == 0 || lv.Items[0]?.GetType() != item.GetType()) continue;
+                int index = lv.Items.IndexOf(item);
+                if (index < 0) continue;
+
+                var scrollViewer = ResolveScrollViewerFor(lv);
+                if (scrollViewer != null)
+                {
+                    const double RowHeight = 24;
+                    double offset = Math.Max(0, Math.Min(index * RowHeight, scrollViewer.ScrollableHeight));
+                    scrollViewer.ScrollToVerticalOffset(offset);
+                }
+                else
+                {
+                    lv.ScrollIntoView(item);
+                }
+            }
+        }
+
         private void DiffTextSelection_KeyDown(object sender, KeyEventArgs e)
         {
             var lv = (ListView)sender;
@@ -628,6 +662,11 @@ namespace PickleGit.Views
                 OpenFind(lv);
                 e.Handled = true;
             }
+            else if (e.Key == Key.G && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                GoToLine(lv);
+                e.Handled = true;
+            }
         }
 
         private void BlameListView_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -637,6 +676,52 @@ namespace PickleGit.Views
                 OpenFind(BlameListView);
                 e.Handled = true;
             }
+            else if (e.Key == Key.G && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                GoToLine(BlameListView);
+                e.Handled = true;
+            }
+        }
+
+        // ── Go to Line (Ctrl+G) — shared across the diff view, blame view, and (see
+        // MergeConflictEditorWindow.xaml.cs) the merge-conflict window's panes. No existing Ctrl+G
+        // convention exists anywhere in this codebase to follow — implemented as the standard
+        // cross-editor "jump to a line number" behavior via DialogService's themed prompt.
+        private void GoToLine(ListView lv)
+        {
+            var lineNumber = DialogService.PromptForLineNumber();
+            if (lineNumber == null) return;
+
+            object target;
+            if (ReferenceEquals(lv, UnifiedListView))
+            {
+                target = UnifiedListView.Items.Cast<object>().FirstOrDefault(i =>
+                {
+                    var line = (i as DiffItem)?.Line;
+                    return line != null && (line.NewLineNumber == lineNumber || line.OldLineNumber == lineNumber);
+                });
+            }
+            else if (ReferenceEquals(lv, SideBySideLeftListView) || ReferenceEquals(lv, SideBySideRightListView))
+            {
+                target = lv.Items.Cast<object>().FirstOrDefault(i =>
+                {
+                    var sbi = i as SideBySideItem;
+                    return sbi != null && (sbi.Left?.OldLineNumber == lineNumber || sbi.Right?.NewLineNumber == lineNumber);
+                });
+            }
+            else
+            {
+                target = BlameListView.Items.Cast<object>().FirstOrDefault(i => (i as BlameLine)?.LineNumber == lineNumber);
+            }
+
+            if (target == null) return;
+            // Focus (and any implicit bring-into-view WPF does for whichever item last held
+            // keyboard focus within this ListView) must happen BEFORE ScrollIntoView, not after —
+            // calling Focus() on the ListView after ScrollIntoView can restore focus to the
+            // previously-focused container and silently re-scroll back to it, undoing our own scroll.
+            lv.Focus();
+            lv.SelectedItem = target;
+            lv.ScrollIntoView(target);
         }
 
         private void UnifiedCopySelection_Click(object sender, RoutedEventArgs e) => _unifiedTextSelection.TryCopySelection();
