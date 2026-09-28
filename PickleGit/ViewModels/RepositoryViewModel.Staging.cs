@@ -87,8 +87,13 @@ namespace PickleGit.ViewModels
         private async Task RefreshConflictStateAsync()
         {
             var conflict = await _git.Executor.RunAsync(() => _git.GetConflictState());
+            // Same conflict-transition guard as RefreshOnceAsync (RepositoryViewModel.cs) — force
+            // the Staged/Unstaged view only when the conflict is newly starting, not on every
+            // WorkingDir-classified tick while it remains outstanding (e.g. re-editing the same
+            // conflicting file again shouldn't yank the user back if they navigated elsewhere).
+            bool conflictJustStarted = conflict.HasConflicts && !HasConflict;
             ConflictInfo = conflict;
-            if (conflict.HasConflicts) ShowWorkingDir = true;
+            if (conflictJustStarted) ShowWorkingDir = true;
         }
 
         private static string BuildFileChangeKey(FileChange f) =>

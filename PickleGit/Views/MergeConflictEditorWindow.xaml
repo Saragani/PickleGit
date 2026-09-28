@@ -863,7 +863,8 @@
                                              FontFamily="Cascadia Code, Consolas" FontSize="12"
                                              ShowLineNumbers="True" WordWrap="False"
                                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                                             IsVisibleChanged="ConflictResultEditBox_IsVisibleChanged">
+                                             IsVisibleChanged="ConflictResultEditBox_IsVisibleChanged"
+                                             PreviewKeyDown="ConflictResultEditBox_PreviewKeyDown">
                                         <avalonEdit:TextEditor.Options>
                                             <avalonEdit:TextEditorOptions ConvertTabsToSpaces="False" HighlightCurrentLine="True"/>
                                         </avalonEdit:TextEditor.Options>

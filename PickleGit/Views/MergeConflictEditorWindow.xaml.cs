@@ -8,9 +8,13 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ICSharpCode.AvalonEdit.Document;
 using ICSharpCode.AvalonEdit.Highlighting;
+using ICSharpCode.AvalonEdit.Rendering;
+using ICSharpCode.AvalonEdit.Search;
 using PickleGit.Controls;
 using PickleGit.Models;
+using PickleGit.Services;
 using PickleGit.ViewModels;
 
 namespace PickleGit.Views
@@ -49,6 +53,104 @@ namespace PickleGit.Views
                 item => (item as ConflictPaneItem)?.Kind != ConflictPaneRowKind.BlockToolbar);
             _resultTextSelection = new DiffTextSelectionController(ConflictResultListView, ConflictResultTextSelectionOverlay, ResultRowText, _ => 0,
                 IsResultRowSelectable);
+
+            // AvalonEdit's default TextRunProperties.TypographyProperties is null (no override), so
+            // WPF falls back to the font's own default OpenType features — Cascadia Code enables
+            // ligatures by default, rendering e.g. "!=" as a single "≠" glyph, unlike the read-only
+            // ListView panes' RowText TextBlocks (which set Typography.StandardLigatures/
+            // ContextualAlternates="False" directly). Setting those same WPF Typography attached
+            // properties on the TextEditor element itself has no effect — AvalonEdit's rendering
+            // pipeline never reads them — so a per-run colorizing transformer is the only way to
+            // actually suppress ligatures here.
+            ConflictResultEditBox.TextArea.TextView.LineTransformers.Add(new LigatureSuppressingColorizer());
+
+            // Gives the manual-edit pane Ctrl+F for free, matching the find capability the three
+            // read-only panes already have via their own floating find bar (OpenFind below).
+            SearchPanel.Install(ConflictResultEditBox);
+        }
+
+        // Ctrl+G (Go to Line) for the manual-edit AvalonEdit pane — the fourth of this window's
+        // four Ctrl+G surfaces (see GoToLine(ListView) above for the other three). AvalonEdit has no
+        // "go to line" of its own to reuse, but it does have the primitives (ScrollToLine + Select
+        // over a DocumentLine's offset/length) needed to implement the same behavior directly.
+        private void ConflictResultEditBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.G || Keyboard.Modifiers != ModifierKeys.Control) return;
+            e.Handled = true;
+
+            var lineNumber = DialogService.PromptForLineNumber();
+            if (lineNumber == null) return;
+            var doc = ConflictResultEditBox.Document;
+            if (lineNumber < 1 || lineNumber > doc.LineCount) return;
+
+            var line = doc.GetLineByNumber(lineNumber.Value);
+            ConflictResultEditBox.Focus();
+            ConflictResultEditBox.Select(line.Offset, line.Length);
+            ConflictResultEditBox.ScrollToLine(lineNumber.Value);
+        }
+
+        private sealed class LigatureSuppressingColorizer : DocumentColorizingTransformer
+        {
+            private static readonly NoLigaturesTypographyProperties NoLigatures = new NoLigaturesTypographyProperties();
+
+            protected override void ColorizeLine(DocumentLine line)
+            {
+                ChangeLinePart(line.Offset, line.EndOffset,
+                    element => element.TextRunProperties.SetTypographyProperties(NoLigatures));
+            }
+        }
+
+        // AvalonEdit's own DefaultTextRunTypographyProperties is a fixed, non-settable
+        // implementation whose StandardLigatures/ContextualAlternates both default to true —
+        // constructing one changes nothing vs. AvalonEdit's normal null (font-default) behavior.
+        // Mirrors exactly what Typography.StandardLigatures="False" Typography.ContextualAlternates
+        // ="False" on a TextBlock does elsewhere in this app (see RowText in this same window's
+        // XAML) — those two flipped, every other feature left at WPF's own Typography.* default.
+        private sealed class NoLigaturesTypographyProperties : System.Windows.Media.TextFormatting.TextRunTypographyProperties
+        {
+            public override bool StandardLigatures => false;
+            public override bool ContextualLigatures => true;
+            public override bool DiscretionaryLigatures => false;
+            public override bool HistoricalLigatures => false;
+            public override bool ContextualAlternates => false;
+            public override bool HistoricalForms => false;
+            public override bool Kerning => true;
+            public override bool CapitalSpacing => false;
+            public override bool CaseSensitiveForms => false;
+            public override bool StylisticSet1 => false;
+            public override bool StylisticSet2 => false;
+            public override bool StylisticSet3 => false;
+            public override bool StylisticSet4 => false;
+            public override bool StylisticSet5 => false;
+            public override bool StylisticSet6 => false;
+            public override bool StylisticSet7 => false;
+            public override bool StylisticSet8 => false;
+            public override bool StylisticSet9 => false;
+            public override bool StylisticSet10 => false;
+            public override bool StylisticSet11 => false;
+            public override bool StylisticSet12 => false;
+            public override bool StylisticSet13 => false;
+            public override bool StylisticSet14 => false;
+            public override bool StylisticSet15 => false;
+            public override bool StylisticSet16 => false;
+            public override bool StylisticSet17 => false;
+            public override bool StylisticSet18 => false;
+            public override bool StylisticSet19 => false;
+            public override bool StylisticSet20 => false;
+            public override bool SlashedZero => false;
+            public override bool MathematicalGreek => false;
+            public override bool EastAsianExpertForms => false;
+            public override FontVariants Variants => FontVariants.Normal;
+            public override FontCapitals Capitals => FontCapitals.Normal;
+            public override FontFraction Fraction => FontFraction.Normal;
+            public override FontNumeralStyle NumeralStyle => FontNumeralStyle.Normal;
+            public override FontNumeralAlignment NumeralAlignment => FontNumeralAlignment.Normal;
+            public override FontEastAsianWidths EastAsianWidths => FontEastAsianWidths.Normal;
+            public override FontEastAsianLanguage EastAsianLanguage => FontEastAsianLanguage.Normal;
+            public override int StandardSwashes => 0;
+            public override int ContextualSwashes => 0;
+            public override int StylisticAlternates => 0;
+            public override int AnnotationAlternates => 0;
         }
 
         private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -543,6 +645,42 @@ namespace PickleGit.Views
                 OpenFind((ListView)sender);
                 e.Handled = true;
             }
+            else if (e.Key == Key.G && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                GoToLine((ListView)sender);
+                e.Handled = true;
+            }
+        }
+
+        // ── Go to Line (Ctrl+G) — same shared DialogService.PromptForLineNumber prompt as
+        // DiffView.xaml.cs, applied to this window's three read-only panes. See
+        // ConflictResultEditBox_PreviewKeyDown below for the fourth surface (manual-edit AvalonEdit).
+        private void GoToLine(ListView lv)
+        {
+            var lineNumber = DialogService.PromptForLineNumber();
+            if (lineNumber == null) return;
+
+            object target;
+            if (ReferenceEquals(lv, ConflictResultListView))
+            {
+                target = ConflictResultListView.Items.Cast<object>()
+                    .FirstOrDefault(i => (i as ConflictResultItem)?.LineNumber == lineNumber);
+            }
+            else
+            {
+                target = lv.Items.Cast<object>().FirstOrDefault(i =>
+                {
+                    var item = i as ConflictPaneItem;
+                    if (item == null) return false;
+                    return item.ContextOldLineNumber == lineNumber || item.ContextNewLineNumber == lineNumber ||
+                           item.LeftLine?.Display?.OldLineNumber == lineNumber || item.RightLine?.Display?.NewLineNumber == lineNumber;
+                });
+            }
+
+            if (target == null) return;
+            lv.Focus();
+            lv.SelectedItem = target;
+            lv.ScrollIntoView(target);
         }
 
         // ── Find — one independent PaneFindState per pane (Left/Right/Result — see

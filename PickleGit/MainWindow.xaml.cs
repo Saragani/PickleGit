@@ -452,15 +452,13 @@ namespace PickleGit
         private void OnScrollToDiffItemRequested(object sender, object item)
         {
             if (item == null) return;
-            // The unified list and the side-by-side pair hold different item types; scroll every
-            // ListView whose items match the requested item's type — for side-by-side that's both
-            // the left and right panes (same underlying SideBySideItems collection), keeping them
-            // aligned even before the scroll-sync ScrollChanged handlers would otherwise catch up.
-            foreach (var lv in FindVisualChildren<ListView>(MainTabControl))
-            {
-                if (lv.Items.Count > 0 && lv.Items[0]?.GetType() == item.GetType())
-                    lv.ScrollIntoView(item);
-            }
+            // DiffView already caches reliable ScrollViewer references for its three ListViews
+            // (see its _unifiedScroll/_leftScroll/_rightScroll, established via ApplyTemplate() +
+            // a visual-tree search deferred to Loaded) — reuse those via ScrollDiffItemToTop rather
+            // than re-searching the visual tree here, which isn't guaranteed to find the real
+            // ScrollViewer if called before the ListView's ControlTemplate has been applied.
+            foreach (var diffView in FindVisualChildren<Views.DiffView>(MainTabControl))
+                diffView.ScrollDiffItemToTop(item);
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────

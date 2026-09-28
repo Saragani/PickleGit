@@ -32,6 +32,17 @@ namespace PickleGit.Services
             return dlg.ShowDialog() == true ? dlg.InputText : null;
         }
 
+        /// <summary>Prompts for a 1-based line number via the standard themed prompt dialog.
+        /// Shared by every "Go to Line" (Ctrl+G) surface — the diff view, blame view, and the
+        /// merge-conflict window's panes. Returns null when cancelled or the input isn't a valid
+        /// positive integer.</summary>
+        public static int? PromptForLineNumber(string title = "Go to Line")
+        {
+            var text = Prompt(title, "Line number:", okText: "Go");
+            if (text == null) return null;
+            return int.TryParse(text.Trim(), out int line) && line > 0 ? line : (int?)null;
+        }
+
         public static bool Confirm(string title, string message,
             string okText = "OK", bool danger = false, string cancelText = "Cancel")
         {
