@@ -3,9 +3,9 @@ issue: adhoc-diff-conflict-blame-ui-fixes
 title: Diff/Conflict/Blame UI fixes — tooltips, font, Ctrl+G/Ctrl+F, hunk scroll, refresh clobbering selection
 type: bug
 component: Views/CommitDetailView, Views/MergeConflictEditorWindow, Views/DiffView, RepositoryViewModel
-phase: BUILD
-step: 8
-next: BUILD complete — SHIP when ready
+phase: SHIP
+step: done
+next: done
 run_mode: auto
 updated: 2026-09-28 11:07
 ---
@@ -155,6 +155,13 @@ A batch of seven UI/UX defects reported against the diff, merge-conflict, and bl
 
 ## Deviation Register
 <!-- Entries added at checkpoints. Format: [Step N → affects Step M] <what changed and why> → Step M: <what to do differently>. Append ✓ to entry when Step M completes. Approved deviations only. -->
+
+## Retro
+<!-- Written: 2026-09-28 12:00 -->
+
+**Deviations:** Step 2's Typography-attached-property approach had no effect on AvalonEdit (root-caused to a hand-written `TextRunTypographyProperties` subclass + colorizer instead — anticipated in the step's own Risk/Mitigation, not a scope change). Step 6 moved the scroll-offset computation from `MainWindow.xaml.cs` into a new `DiffView.ScrollDiffItemToTop` method after a fresh `VisualTreeHelper` search returned a stale `ScrollViewer`. Steps 7 and 8 each turned out to have a **second, independent occurrence of the identical bug** (`RepositoryViewModel.Staging.cs`'s `RefreshConflictStateAsync` for Step 7; `ApplyFilter()` for Step 8) that the original investigation missed — both found only by reproducing the reported scenario end-to-end after the first fix looked complete on code review alone.
+**Steps planned vs. actual:** 8 planned / 8 actual — matched, no steps added/dropped/merged.
+**Process improvement:** When a step's fix targets "an unconditional bad pattern in method X," grep the whole codebase for other occurrences of that same pattern before writing the step's Touches list — two of eight steps here had a second independent occurrence that only surfaced through live end-to-end reproduction after the single-occurrence fix already looked done.
 
 ## Handoff
 <!-- Run `pkl:handoff` to fill this section. Paste the block below into a new conversation to resume. -->
