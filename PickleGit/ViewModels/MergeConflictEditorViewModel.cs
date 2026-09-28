@@ -1151,6 +1151,29 @@ namespace PickleGit.ViewModels
             var result = new List<(object, int, int)>();
             var file = CurrentFile;
             if (file == null) return result;
+
+            if (file.IsManuallyEdited)
+            {
+                // Once manually edited, ResultItems is frozen at whatever it held right before the
+                // switch — the live content is ResultText (kept in sync with the AvalonEdit document
+                // by ConflictResultEditBox_TextChanged). Match per line, using a boxed 1-based line
+                // number as the match Item: AvalonEdit has no per-row object to key off like the
+                // ListView panes do, and StringReader.ReadLine() splits on \r\n/\r/\n exactly like
+                // AvalonEdit's own TextDocument line numbering, so line numbers here line up with
+                // TextDocument.GetLineByNumber for the highlighter/scroll code in the view.
+                using (var reader = new System.IO.StringReader(file.ResultText ?? string.Empty))
+                {
+                    int lineNumber = 0;
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        lineNumber++;
+                        AddOccurrences(result, lineNumber, line, term);
+                    }
+                }
+                return result;
+            }
+
             foreach (var item in file.ResultItems)
                 AddOccurrences(result, item, item.SourceLine?.Display?.Content ?? item.Display?.Content, term);
             return result;
@@ -1233,7 +1256,9 @@ namespace PickleGit.ViewModels
                 LeftFind.Invalidate();
                 RightFind.Invalidate();
             }
-            else if (e.PropertyName == nameof(MergeConflictFileViewModel.ResultItems))
+            else if (e.PropertyName == nameof(MergeConflictFileViewModel.ResultItems)
+                     || e.PropertyName == nameof(MergeConflictFileViewModel.ResultText)
+                     || e.PropertyName == nameof(MergeConflictFileViewModel.IsManuallyEdited))
             {
                 ResultFind.Invalidate();
             }

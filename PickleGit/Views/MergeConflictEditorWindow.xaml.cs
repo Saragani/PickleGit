@@ -11,7 +11,6 @@ using System.Windows.Threading;
 using ICSharpCode.AvalonEdit.Document;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Rendering;
-using ICSharpCode.AvalonEdit.Search;
 using PickleGit.Controls;
 using PickleGit.Models;
 using PickleGit.Services;
@@ -63,30 +62,89 @@ namespace PickleGit.Views
             // pipeline never reads them — so a per-run colorizing transformer is the only way to
             // actually suppress ligatures here.
             ConflictResultEditBox.TextArea.TextView.LineTransformers.Add(new LigatureSuppressingColorizer());
-
-            // Gives the manual-edit pane Ctrl+F for free, matching the find capability the three
-            // read-only panes already have via their own floating find bar (OpenFind below).
-            SearchPanel.Install(ConflictResultEditBox);
+            ConflictResultEditBox.TextArea.TextView.LineTransformers.Add(new ResultFindHighlightColorizer(this));
         }
 
-        // Ctrl+G (Go to Line) for the manual-edit AvalonEdit pane — the fourth of this window's
-        // four Ctrl+G surfaces (see GoToLine(ListView) above for the other three). AvalonEdit has no
-        // "go to line" of its own to reuse, but it does have the primitives (ScrollToLine + Select
-        // over a DocumentLine's offset/length) needed to implement the same behavior directly.
+        /// <summary>Paints the one line-span that is <see cref="PaneFindState.CurrentMatch"/> (a
+        /// boxed 1-based line number — see FindMatchesInResult) / <see cref="PaneFindState.CurrentMatchRange"/>
+        /// with the same search-match color the ListView panes use (WordDiffHighlighter/
+        /// BlameSearchHighlighter's "DiffSearchMatchBrush") — AvalonEdit has no built-in per-span
+        /// "current match" highlight to reuse, so this follows the same LineTransformer pattern as
+        /// LigatureSuppressingColorizer above.</summary>
+        private sealed class ResultFindHighlightColorizer : DocumentColorizingTransformer
+        {
+            private static readonly Brush HighlightBrush = Converters.ThemeBrushes.Get(
+                "DiffSearchMatchBrush", Color.FromArgb(0x66, 0xE0, 0xB0, 0x00));
+
+            private readonly MergeConflictEditorWindow _owner;
+            public ResultFindHighlightColorizer(MergeConflictEditorWindow owner) => _owner = owner;
+
+            protected override void ColorizeLine(DocumentLine line)
+            {
+                var find = _owner._sessionVm?.ResultFind;
+                if (find == null || !find.IsOpen) return;
+                if (!(find.CurrentMatch is int matchLine) || matchLine != line.LineNumber) return;
+                var range = find.CurrentMatchRange;
+                if (range == null) return;
+
+                int start = line.Offset + range.Value.Start;
+                int end = start + range.Value.Length;
+                // Clamp to the line's own bounds — a stale range from just before a same-line edit
+                // (Recompute hasn't run yet for the Delay=150 SearchText binding) must never ask
+                // ChangeLinePart for an offset outside this line.
+                if (start < line.Offset || end > line.EndOffset || start >= end) return;
+
+                ChangeLinePart(start, end, element => element.TextRunProperties.SetBackgroundBrush(HighlightBrush));
+            }
+        }
+
+        // Ctrl+G (Go to Line) / Ctrl+F (Find) / Esc for the manual-edit AvalonEdit pane — the fourth
+        // of this window's four Ctrl+G/Ctrl+F surfaces (see GoToLine(ListView) and OpenFind(ListView)
+        // above for the other three). AvalonEdit has no "go to line" of its own to reuse, but it does
+        // have the primitives (ScrollToLine + Select over a DocumentLine's offset/length) needed to
+        // implement the same behavior directly. Find used to be AvalonEdit's own built-in SearchPanel
+        // (installed here for free) — replaced with the same themed ResultFind-backed bar the other
+        // three panes use, so all four panes look and behave identically instead of this one pane
+        // popping up AvalonEdit's own unthemed search UI.
         private void ConflictResultEditBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key != Key.G || Keyboard.Modifiers != ModifierKeys.Control) return;
-            e.Handled = true;
+            if (e.Key == Key.G && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                e.Handled = true;
+                var lineNumber = DialogService.PromptForLineNumber();
+                if (lineNumber == null) return;
+                var doc = ConflictResultEditBox.Document;
+                if (lineNumber < 1 || lineNumber > doc.LineCount) return;
 
-            var lineNumber = DialogService.PromptForLineNumber();
-            if (lineNumber == null) return;
-            var doc = ConflictResultEditBox.Document;
-            if (lineNumber < 1 || lineNumber > doc.LineCount) return;
+                var line = doc.GetLineByNumber(lineNumber.Value);
+                ConflictResultEditBox.Focus();
+                ConflictResultEditBox.Select(line.Offset, line.Length);
+                ConflictResultEditBox.ScrollToLine(lineNumber.Value);
+            }
+            else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                OpenResultFind();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape && _sessionVm?.ResultFind.IsOpen == true)
+            {
+                _sessionVm.ResultFind.IsOpen = false;
+                e.Handled = true;
+            }
+        }
 
-            var line = doc.GetLineByNumber(lineNumber.Value);
-            ConflictResultEditBox.Focus();
-            ConflictResultEditBox.Select(line.Offset, line.Length);
-            ConflictResultEditBox.ScrollToLine(lineNumber.Value);
+        /// <summary>Opens the themed ResultFind bar from the manual-edit AvalonEdit pane — the
+        /// AvalonEdit-side counterpart to <see cref="OpenFind"/>, which only takes a ListView since
+        /// the other three panes are ListViews and this one isn't.</summary>
+        private void OpenResultFind()
+        {
+            if (_sessionVm == null) return;
+            _sessionVm.ResultFind.IsOpen = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                ResultFindBox.Focus();
+                ResultFindBox.SelectAll();
+            }), DispatcherPriority.Render);
         }
 
         private sealed class LigatureSuppressingColorizer : DocumentColorizingTransformer
@@ -162,6 +220,7 @@ namespace PickleGit.Views
                 oldVm.LeftFind.ScrollToMatchRequested -= OnLeftFindScrollRequested;
                 oldVm.RightFind.ScrollToMatchRequested -= OnRightFindScrollRequested;
                 oldVm.ResultFind.ScrollToMatchRequested -= OnResultFindScrollRequested;
+                oldVm.ResultFind.PropertyChanged -= OnResultFindPropertyChanged;
             }
             _sessionVm = e.NewValue as MergeConflictSessionViewModel;
             if (_sessionVm != null)
@@ -171,8 +230,33 @@ namespace PickleGit.Views
                 _sessionVm.LeftFind.ScrollToMatchRequested += OnLeftFindScrollRequested;
                 _sessionVm.RightFind.ScrollToMatchRequested += OnRightFindScrollRequested;
                 _sessionVm.ResultFind.ScrollToMatchRequested += OnResultFindScrollRequested;
+                _sessionVm.ResultFind.PropertyChanged += OnResultFindPropertyChanged;
             }
             RewireFileVm(_sessionVm?.CurrentFile);
+        }
+
+        // Tracks the previously-highlighted line so it can be redrawn (clearing its highlight) when
+        // the current match moves to a different line — ResultFindHighlightColorizer only paints
+        // whichever line IS the current match, but AvalonEdit won't know to un-paint the old one
+        // without an explicit Redraw of that line too.
+        private int _lastHighlightedResultLine = -1;
+
+        private void OnResultFindPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(PaneFindState.CurrentMatch)
+                && e.PropertyName != nameof(PaneFindState.CurrentMatchRange)
+                && e.PropertyName != nameof(PaneFindState.IsOpen)) return;
+            if (_currentFileVm?.IsManuallyEdited != true) return;
+
+            var textView = ConflictResultEditBox.TextArea.TextView;
+            var doc = ConflictResultEditBox.Document;
+            if (_lastHighlightedResultLine >= 1 && _lastHighlightedResultLine <= doc.LineCount)
+                textView.Redraw(doc.GetLineByNumber(_lastHighlightedResultLine));
+
+            var newLine = _sessionVm?.ResultFind.CurrentMatch as int?;
+            if (newLine != null && newLine >= 1 && newLine <= doc.LineCount)
+                textView.Redraw(doc.GetLineByNumber(newLine.Value));
+            _lastHighlightedResultLine = newLine ?? -1;
         }
 
         private void OnLeftFindScrollRequested(object item)
@@ -189,6 +273,24 @@ namespace PickleGit.Views
 
         private void OnResultFindScrollRequested(object item)
         {
+            if (_currentFileVm?.IsManuallyEdited == true)
+            {
+                // item is a boxed 1-based line number here (see FindMatchesInResult) — there's no
+                // ListView row to ScrollIntoView, so move the AvalonEdit caret to the match itself
+                // and let BringCaretToView scroll both directions at once.
+                if (!(item is int lineNumber)) return;
+                var doc = ConflictResultEditBox.Document;
+                if (lineNumber < 1 || lineNumber > doc.LineCount) return;
+                var range = _sessionVm?.ResultFind.CurrentMatchRange;
+                if (range == null) return;
+
+                var line = doc.GetLineByNumber(lineNumber);
+                int offset = line.Offset + Math.Min(range.Value.Start, line.Length);
+                ConflictResultEditBox.TextArea.Caret.Offset = offset;
+                ConflictResultEditBox.TextArea.Caret.BringCaretToView();
+                return;
+            }
+
             ConflictResultListView.ScrollIntoView(item);
             DiffTextSelectionController.ScrollToHighlightRangeHorizontally(ConflictResultListView, item, _sessionVm?.ResultFind.CurrentMatchRange);
         }
