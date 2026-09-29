@@ -37,8 +37,9 @@ namespace PickleGit.Services
                 var dpiScaleY = VisualTreeHelper.GetDpi(owner).DpiScaleY;
                 return workAreaPx.Height / dpiScaleY - BottomMargin;
             }
-            catch
+            catch (Exception ex)
             {
+                AppLog.Warn("DialogSizing.ForOwner failed to resolve the owner's monitor work area; falling back to the primary monitor's.", ex);
                 return SystemParameters.WorkArea.Height - BottomMargin;
             }
         }

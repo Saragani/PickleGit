@@ -162,10 +162,7 @@ namespace PickleGit.ViewModels
                 if (!Set(ref _selectedNode, value)) return;
                 // Sync SelectedNodes to this single item without re-running the full
                 // detail-loading logic (OnSelectedNodesChanged handles that via CollectionChanged).
-                _syncingFromSelectedNode = true;
-                _selectedNodes.Clear();
-                if (value != null) _selectedNodes.Add(value);
-                _syncingFromSelectedNode = false;
+                SyncSelectedNodesTo(value);
                 OnSelectedNodesChanged();
             }
         }
@@ -174,6 +171,20 @@ namespace PickleGit.ViewModels
         private bool _syncingFromSelectedNode;
         private readonly ObservableCollection<GraphNode> _selectedNodes = new ObservableCollection<GraphNode>();
         public ObservableCollection<GraphNode> SelectedNodes => _selectedNodes;
+
+        /// <summary>Replaces <see cref="_selectedNodes"/>'s contents with just <paramref name="node"/>
+        /// (or empties it for null), guarded by <see cref="_syncingFromSelectedNode"/> so the
+        /// collection's own CollectionChanged handler doesn't re-run <see cref="OnSelectedNodesChanged"/>
+        /// for a change this method's own caller is already about to handle explicitly. Shared by the
+        /// <see cref="SelectedNode"/> setter and <see cref="ReselectSameCommit"/> so there is exactly
+        /// one place that knows how to keep SelectedNodes in sync with a single selection.</summary>
+        private void SyncSelectedNodesTo(GraphNode node)
+        {
+            _syncingFromSelectedNode = true;
+            _selectedNodes.Clear();
+            if (node != null) _selectedNodes.Add(node);
+            _syncingFromSelectedNode = false;
+        }
 
         private bool _isMultiSelection;
         public bool IsMultiSelection
@@ -1663,10 +1674,7 @@ namespace PickleGit.ViewModels
         private void ReselectSameCommit(GraphNode restored)
         {
             _selectedNode = restored;
-            _syncingFromSelectedNode = true;
-            _selectedNodes.Clear();
-            _selectedNodes.Add(restored);
-            _syncingFromSelectedNode = false;
+            SyncSelectedNodesTo(restored);
             RaisePropertyChanged(nameof(SelectedNode));
         }
 

@@ -116,6 +116,9 @@ namespace PickleGit.Services.Git
             }
             catch (UriFormatException)
             {
+                // Expected and frequent, not worth log noise: SCP-style SSH remotes
+                // (git@host:path) are not well-formed absolute URIs and hit this on every call —
+                // see the doc comment above, this is already the documented "safe default" path.
                 return url;
             }
         }

@@ -2018,7 +2018,7 @@ namespace PickleGit.Services
                 }
                 return result;
             }
-            catch { return result; }
+            catch (Exception ex) { AppLog.Warn("GetMergeConflictedFilePaths failed to read MERGE_MSG.", ex); return result; }
         }
 
         // ── Commit detail ─────────────────────────────────────────────────────

@@ -94,12 +94,10 @@ namespace PickleGit.ViewModels
                     // auth natively -- see GitCli.HasConfiguredCredentialHelperAsync's remarks for why
                     // that's preferred over PickleGit manually resolving+forcing a Basic header (which
                     // breaks OAuth tokens Bitbucket requires as Bearer).
-                    var useNativeAuth = new Dictionary<string, bool>();
-                    foreach (var r in remotes)
-                    {
-                        if (!GitCli.IsSshUrl(r.Url) && _git.Cli != null && _git.Cli.IsAvailable)
-                            useNativeAuth[r.Name] = await GitCli.HasConfiguredCredentialHelperAsync(_git.Cli.WorkingDirectory, r.Url);
-                    }
+                    var httpsRemotes = remotes.Where(r => !GitCli.IsSshUrl(r.Url) && _git.Cli != null && _git.Cli.IsAvailable).ToList();
+                    var nativeAuthResults = await Task.WhenAll(httpsRemotes.Select(async r =>
+                        (r.Name, Native: await GitCli.HasConfiguredCredentialHelperAsync(_git.Cli.WorkingDirectory, r.Url))));
+                    var useNativeAuth = nativeAuthResults.ToDictionary(x => x.Name, x => x.Native);
                     var needsManualCredential = remotes.Any(r =>
                         !GitCli.IsSshUrl(r.Url) && !(useNativeAuth.TryGetValue(r.Name, out var native) && native));
                     if (needsManualCredential && !await EnsureCredentialsAsync()) return;
