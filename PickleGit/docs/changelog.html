@@ -455,6 +455,7 @@
         <li><a href="#phase-10"><span class="num mono">10</span>Native Git Backend &amp; Conflict Rewrite</a></li>
         <li><a href="#phase-11"><span class="num mono">11</span>Background Refresh, Decoupled</a></li>
         <li><a href="#phase-12"><span class="num mono">12</span>Pane Resizing, Rebuilt</a></li>
+        <li><a href="#phase-13"><span class="num mono">13</span>Stability &amp; Auth Hardening</a></li>
       </ol>
       <ol class="rail-extra">
         <li><a href="#architecture"><span class="num mono">—</span>Architecture</a></li>
@@ -473,8 +474,8 @@
          and a fair number of things that broke along the way and got fixed before they shipped.</p>
 
       <div class="stats">
-        <div class="stat"><div class="n mono">13</div><div class="l">phases, 00 → 12</div></div>
-        <div class="stat"><div class="n mono">34</div><div class="l">bugs caught live, not just in review</div></div>
+        <div class="stat"><div class="n mono">14</div><div class="l">phases, 00 → 13</div></div>
+        <div class="stat"><div class="n mono">48</div><div class="l">bugs caught live, not just in review</div></div>
         <div class="stat"><div class="n mono">3</div><div class="l">hosting providers, one abstraction</div></div>
         <div class="stat"><div class="n mono">1</div><div class="l">theme — dark, start to finish</div></div>
       </div>
@@ -1250,6 +1251,84 @@
              asked to unstage. Fixed by narrowing the call to the actual staged paths (via the same status query
              the UI already uses) — and, caught in the next review pass, that narrowing itself needed both sides
              of a staged rename's path in its pathspec, or the rename only came half-undone.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ PHASE 13 ══════════════════════ -->
+    <section class="phase" id="phase-13">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 13</span>
+        <h2 class="phase-title display">Stability &amp; Auth Hardening</h2>
+      </div>
+      <p class="thesis">Since <span class="mono">PickleGit_1.0.23</span>: no new surface area — 28 commits
+         closing out two real unhandled-exception crashes, a Bitbucket OAuth bug that turned out to be two
+         independent bugs stacked on top of each other, a run of five merge-conflict-editor fixes, and a batch
+         of papercuts across the commit graph, diff view, blame view, and modal dialogs. Silent-wrong-behavior
+         bugs outnumbered actual crashes here — exactly the kind that lingers longest in a Git client, because
+         nothing ever throws to point at them.</p>
+
+      <ul class="feature-list">
+        <li><div><b>Merge commit message no longer loses its resolved-file list</b> — <span class="desc">git's
+            default <code>--cleanup=strip</code> was silently stripping the <code>&#35; Conflicts:</code> block
+            whenever Continue shelled out to <code>git merge --continue</code>; Continue now composes the
+            message itself from <code>MERGE_MSG</code> before it's gone and leaves it for the normal Commit
+            button, which already handles <code>MERGE_HEAD</code> correctly.</span></div></li>
+        <li><div><b>"Select All Mine/Theirs" and the manual-edit find bar</b> — <span class="desc">fixed a
+            conflict block with an empty target side silently reverting the checkbox with no effect, matched
+            the manual-edit pane's ligature rendering to the read-only panes, and replaced its own separate
+            unthemed find popup with the same themed find bar the other three panes already had.</span></div></li>
+        <li><div><b>An open selection can no longer be clobbered by an unrelated refresh</b> — <span class="desc">two
+            independent bugs, same symptom: <code>ShowWorkingDir</code> was forced back to the Staged/Unstaged
+            view on every refresh tick while a conflict was present, not just when one newly started; and a
+            <code>GraphNodes</code> rebuild always reassigned <code>SelectedNode</code> even when the same
+            commit was still selected, re-running detail loading and clearing whatever file/diff was
+            open.</span></div></li>
+        <li><div><b>Commit graph and list now show the correct shape and clock</b> — <span class="desc">the
+            "Uncommitted changes" pseudo-commit no longer draws a connecting edge into real history it isn't
+            actually part of yet, and the DATE/TIME column switched from author date (preserved verbatim across
+            a rebase, so it can drift far from a commit's real position) and each commit's own UTC offset to
+            committer date normalized to local time — matching SourceTree and Bitbucket's own list
+            views.</span></div></li>
+        <li><div><b>Sidebar, dialogs, and icon fallback</b> — <span class="desc">stash rows no longer show
+            libgit2's own trailing blank line under the title or ignore a left-click; long dialog content can no
+            longer push OK/Cancel off-screen on any monitor (<code>DialogSizing.ForOwner</code>, per-monitor
+            DPI-aware); and every icon glyph now falls back to <code>Segoe MDL2 Assets</code> so nothing renders
+            blank on Windows Server, which never shipped Segoe Fluent Icons.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Two crashes and a stacked auth bug, both root-caused live</p>
+          <p><b>A shared cancellation token, read and disposed from two different operations at once.</b>
+             <code>RunWorkAsync</code> can run reentrantly — Commit's <code>CanExecute</code> never checks
+             <code>IsBusy</code>, so it can fire while a Push is still mid-flight. Both invocations wrote their
+             own <code>CancellationTokenSource</code> into the same shared field before their first
+             <code>await</code>; whichever finished first disposed the CTS out from under the other, which then
+             crashed with a bare <code>NullReferenceException</code> instead of surfacing its real error. The
+             disposal side was fixed first — each call captures its own CTS locally and only clears the shared
+             field if it still owns it — but a follow-up PR review traced the <i>read</i> side too and found a
+             second half of the same race: a reentrant call could overwrite the shared field before the first
+             operation's queued work had even started on the executor thread, letting <code>OpToken</code>
+             silently resolve to the wrong operation's token inside a live <code>git.exe</code> call. Since
+             <code>GitExecutor</code> runs exactly one queued item at a time, a <code>[ThreadStatic]</code> field
+             scoped to each operation's actual execution window closed both halves with no call-site
+             changes.</p>
+          <p><b>One user report, two unrelated bugs, found by fixing the first one.</b> Bitbucket push/pull kept
+             re-prompting for a password it wouldn't accept. Bug one: after a credential rejection,
+             <code>EnsureCredentialsAsync</code> correctly skipped replaying the two PickleGit-owned cached
+             credentials, but was <i>also</i> skipping the one step that could actually produce a new, valid
+             token — <code>git credential fill</code>, Git Credential Manager's own OAuth browser flow. Fixing
+             that (plus a 3-try backoff, since a helper's cached value can take a moment to rotate right after a
+             rejection) got a confirmed-valid, freshly-refreshed OAuth token flowing again — and Bitbucket kept
+             rejecting it anyway. Bug two, found immediately after: PickleGit forced every credential, OAuth or
+             not, into a hand-built <code>Authorization: Basic</code> header. Verified directly with
+             <code>curl</code> using the exact same token: Basic gets a 401, Bearer gets a 200. Added
+             <code>GitCli.HasConfiguredCredentialHelperAsync</code> (resolves the effective
+             <code>credential.helper</code> via <code>git config --get-urlmatch</code>) so push/pull/fetch can
+             detect a configured native helper and just let <code>git.exe</code> negotiate the scheme itself —
+             the same thing a plain terminal <code>git push</code> was doing correctly the whole time.</p>
         </div>
       </div>
     </section>
