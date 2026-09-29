@@ -307,6 +307,12 @@ namespace PickleGit.Views
             _currentFileVm = vm;
             if (_currentFileVm != null) _currentFileVm.ScrollToBlockRequested += OnScrollToBlockRequested;
 
+            // The find-highlight-redraw tracking in OnResultFindPropertyChanged is only meaningful
+            // within one file's own AvalonEdit document — a line number left over from the previous
+            // file could otherwise be handed to the new file's GetLineByNumber on the next find-state
+            // change (bounds-checked there, so harmless beyond one spurious redraw, but pointless).
+            _lastHighlightedResultLine = -1;
+
             // If the newly-current file is ALSO already in manual-edit mode, the edit box's
             // Visibility binding never flips (stays Visible across the switch), so
             // ConflictResultEditBox_IsVisibleChanged never fires to reseed it — do that here instead.

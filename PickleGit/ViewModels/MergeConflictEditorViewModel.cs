@@ -1158,9 +1158,11 @@ namespace PickleGit.ViewModels
                 // switch — the live content is ResultText (kept in sync with the AvalonEdit document
                 // by ConflictResultEditBox_TextChanged). Match per line, using a boxed 1-based line
                 // number as the match Item: AvalonEdit has no per-row object to key off like the
-                // ListView panes do, and StringReader.ReadLine() splits on \r\n/\r/\n exactly like
-                // AvalonEdit's own TextDocument line numbering, so line numbers here line up with
-                // TextDocument.GetLineByNumber for the highlighter/scroll code in the view.
+                // ListView panes do, and StringReader.ReadLine() splits on \r\n/\r/\n the same way
+                // AvalonEdit's own TextDocument line numbering does, for every line that can actually
+                // contain a match — a trailing line terminator makes TextDocument report one further
+                // (always-empty) final line that ReadLine() doesn't emit, but an empty line can never
+                // be a match, so that discrepancy never affects a real lookup here.
                 using (var reader = new System.IO.StringReader(file.ResultText ?? string.Empty))
                 {
                     int lineNumber = 0;
