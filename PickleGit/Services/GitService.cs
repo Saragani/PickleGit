@@ -905,9 +905,14 @@ namespace PickleGit.Services
             };
         }
 
+        /// <summary>Routes staging through git.exe so git-lfs's real clean filter runs on the staged
+        /// content, instead of libgit2's Commands.Stage — which never invokes external filter.*.clean
+        /// commands — leaving LFS-tracked files staged (and later committed) as raw content. Mirrors
+        /// CheckoutRefCli's pattern for the opposite (smudge) direction.</summary>
         public void StageFile(string filePath)
         {
             EnsureOpen();
+            if (Cli != null && Cli.IsAvailable) { StageCli("-- " + Git.CliGitService.Quote(filePath)); return; }
             Commands.Stage(_repo, filePath);
         }
 
@@ -920,6 +925,13 @@ namespace PickleGit.Services
         public void StageFiles(IEnumerable<string> filePaths)
         {
             EnsureOpen();
+            if (Cli != null && Cli.IsAvailable)
+            {
+                var paths = filePaths as IReadOnlyCollection<string> ?? filePaths.ToList();
+                foreach (var batch in ChunkPathsByLength(paths))
+                    StageCli("-- " + string.Join(" ", batch.Select(Git.CliGitService.Quote)));
+                return;
+            }
             Commands.Stage(_repo, filePaths);
         }
 
@@ -938,7 +950,24 @@ namespace PickleGit.Services
         public void StageAll()
         {
             EnsureOpen();
+            if (Cli != null && Cli.IsAvailable) { StageCli("-A"); return; }
             Commands.Stage(_repo, "*");
+        }
+
+        /// <summary>Runs `git add &lt;args&gt;` via git.exe — see StageFile's remarks. Callers pass a
+        /// flag (e.g. `-A`) or a `-- &lt;pathspec&gt;` suffix themselves: `--` must precede pathspecs,
+        /// not flags — `git add -- -A` treats `-A` as a literal (nonexistent) filename instead of the
+        /// all-files flag, rather than a global prefix applied here. Reopen() unconditionally, even on
+        /// failure, matching DiscardPathsCli: a partially-applied `git add` still mutates the index,
+        /// so the cached libgit2 handle must not keep serving pre-stage state.</summary>
+        private void StageCli(string args)
+        {
+            try
+            {
+                var result = Cli.RunAsync("add " + args).GetAwaiter().GetResult();
+                if (!result.Success) throw new InvalidOperationException(result.ErrorText);
+            }
+            finally { Reopen(); }
         }
 
         public void UnstageAll()
