@@ -291,7 +291,7 @@ namespace PickleGit.ViewModels
         private async void DeleteTagOnRemote(object param)
         {
             if (!(param is TagInfo ti)) return;
-            var remoteName = Remotes.FirstOrDefault()?.Name ?? "origin";
+            var remoteName = PrimaryRemote?.Name ?? "origin";
             if (!DialogService.Confirm("Delete Tag on Remote",
                     $"Delete tag '{ti.Name}' from '{remoteName}'?\n(The local tag is kept.)",
                     "Delete", danger: true))
@@ -336,8 +336,8 @@ namespace PickleGit.ViewModels
         private async Task PushTagAsync(object param)
         {
             if (!(param is TagInfo ti)) return;
-            var remoteName = Remotes.FirstOrDefault()?.Name ?? "origin";
-            var remoteUrl = Remotes.FirstOrDefault()?.Url;
+            var remoteName = PrimaryRemote?.Name ?? "origin";
+            var remoteUrl = PrimaryRemote?.Url;
             if (GitCli.IsSshUrl(remoteUrl))
             {
                 await RunCliAsync($"Pushing tag {ti.Name} to {remoteName}…",

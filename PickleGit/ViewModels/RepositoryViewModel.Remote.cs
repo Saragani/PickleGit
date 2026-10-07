@@ -154,7 +154,7 @@ namespace PickleGit.ViewModels
                     return;
                 }
 
-                var remote = Remotes.FirstOrDefault();
+                var remote = PrimaryRemote;
                 var remoteName = remote?.Name ?? "origin";
                 var status = prune ? $"Fetching from {remoteName} (prune)…" : $"Fetching from {remoteName}…";
                 if (GitCli.IsSshUrl(remote?.Url) ||
@@ -343,7 +343,7 @@ namespace PickleGit.ViewModels
                     "The lease check aborts if someone else pushed in the meantime.",
                     "Force Push", danger: true))
                 return;
-            var remote = Remotes.FirstOrDefault()?.Name ?? "origin";
+            var remote = PrimaryRemote?.Name ?? "origin";
             // Qualified lease: pin the expected remote tip so the push only succeeds if the
             // remote still points where our tracking ref says. An unqualified --force-with-lease
             // silently trusts whatever the last fetch brought in.
@@ -365,7 +365,7 @@ namespace PickleGit.ViewModels
         private async Task PullAsync()
         {
             await RefreshCurrentBranchAsync();
-            var remoteUrl = Remotes.FirstOrDefault()?.Url;
+            var remoteUrl = PrimaryRemote?.Url;
             var isSsh = GitCli.IsSshUrl(remoteUrl);
             var cliAvailable = _git.Cli != null && _git.Cli.IsAvailable;
             // Native path: let git.exe's own credential.helper negotiate HTTPS auth itself (see
@@ -421,8 +421,8 @@ namespace PickleGit.ViewModels
         public async Task<bool> PushAsync()
         {
             var branch = await RefreshCurrentBranchAsync();
-            var remoteName = Remotes.FirstOrDefault()?.Name ?? "origin";
-            var remoteUrl = Remotes.FirstOrDefault()?.Url;
+            var remoteName = PrimaryRemote?.Name ?? "origin";
+            var remoteUrl = PrimaryRemote?.Url;
             if (!TryEnterBusyScope()) return false;
             try
             {
@@ -473,8 +473,8 @@ namespace PickleGit.ViewModels
         public async Task<bool> PushBranchAsync(object param)
         {
             if (!(param is BranchInfo bi) || bi.IsRemote) return false;
-            var remoteName = Remotes.FirstOrDefault()?.Name ?? "origin";
-            var remoteUrl = Remotes.FirstOrDefault()?.Url;
+            var remoteName = PrimaryRemote?.Name ?? "origin";
+            var remoteUrl = PrimaryRemote?.Url;
             if (!TryEnterBusyScope()) return false;
             try
             {
@@ -665,7 +665,7 @@ namespace PickleGit.ViewModels
             var skipCachedLookup = _forceCredentialDialog;
             _forceCredentialDialog = false;
 
-            var remoteUrl = Remotes.FirstOrDefault()?.Url;
+            var remoteUrl = PrimaryRemote?.Url;
             if (!string.IsNullOrEmpty(remoteUrl))
             {
                 if (!skipCachedLookup)
@@ -781,7 +781,7 @@ namespace PickleGit.ViewModels
         private void SaveCredentials()
         {
             if (string.IsNullOrEmpty(RemoteUsername) || string.IsNullOrEmpty(RemotePassword)) return;
-            var remoteUrl = Remotes.FirstOrDefault()?.Url;
+            var remoteUrl = PrimaryRemote?.Url;
             if (string.IsNullOrEmpty(remoteUrl)) return;
             try
             {

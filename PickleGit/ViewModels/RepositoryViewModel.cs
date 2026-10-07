@@ -217,6 +217,12 @@ namespace PickleGit.ViewModels
         public ObservableCollection<TagInfo> Tags { get => _tags; private set => Set(ref _tags, value); }
         public ObservableCollection<StashInfo> Stashes { get => _stashes; private set => Set(ref _stashes, value); }
         public ObservableCollection<RemoteInfo> Remotes { get => _remotes; private set => Set(ref _remotes, value); }
+
+        /// <summary>The remote single-remote operations (fetch/pull/push) target: "origin" when
+        /// present, otherwise the first remote. Never plain <c>Remotes.First()</c> — remotes sort
+        /// alphabetically, so an auxiliary remote (e.g. a braid cache) can precede origin.</summary>
+        private RemoteInfo PrimaryRemote =>
+            Remotes?.FirstOrDefault(r => r.Name == "origin") ?? Remotes?.FirstOrDefault();
         public ObservableCollection<BranchNodeViewModel> LocalBranchTree  { get => _localBranchTree;  private set => Set(ref _localBranchTree,  value); }
         public ObservableCollection<BranchNodeViewModel> RemoteBranchTree { get => _remoteBranchTree; private set => Set(ref _remoteBranchTree, value); }
 
@@ -2143,7 +2149,7 @@ namespace PickleGit.ViewModels
                     // Purge the stale PickleGit entry so it won't shadow a fresh credential
                     var failedUser = RemoteUsername;
                     var failedPassword = RemotePassword;
-                    var failedUrl = Remotes.FirstOrDefault()?.Url;
+                    var failedUrl = PrimaryRemote?.Url;
                     RemoteUsername = null;
                     RemotePassword = null;
                     // Force the dialog on the next attempt — skip GCM/git-credential-fill which
