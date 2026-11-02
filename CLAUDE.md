@@ -82,3 +82,20 @@ Other domain agents (`quality-engineer`, `refactoring-expert`, `root-cause-analy
 PickleGit has no database/compiler domain model — it's a thin MVVM shell over `Services/GitService.cs` (LibGit2Sharp) and `Services/Git/CliGitService.cs` (git.exe for operations LibGit2Sharp can't do). One `RepositoryViewModel` per open tab holds that repo's commits, branches, diff, and staging state.
 
 See [architecture.md](.claude/rules/architecture.md) for the solution layout, the hybrid git backend, and the threading model. See [PickleGit/CLAUDE.md](PickleGit/CLAUDE.md) for implementation-level conventions and known WPF pitfalls.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+Setup after cloning — `graphify-out/graph.json` is committed, so `query`/`path`/`explain` and the PreToolUse hook work with no extra step. Local state and caches are git-ignored and rebuilt on demand:
+1. Install graphify: `uv tool install graphifyy` (or `pipx install graphifyy`). Without it, `.claude/hooks/graphify-guard.sh` silently does nothing.
+2. Optional — rebuild the AST cache and local state (free, no LLM): `graphify update .`
+3. Optional — keep the graph current automatically: `graphify hook install` (post-commit/post-checkout rebuild hooks, plus a union merge driver for `graph.json` so branches that both touch it don't conflict).
+
+The semantic cache for docs and screenshots (`graphify-out/cache/semantic`) is not rebuilt by any of these. Only a full `/graphify .` run in Claude Code recreates it (~1.1M tokens for this corpus). It isn't needed for normal use: doc/image nodes are already in the committed `graph.json`; it only matters when re-running full extraction after docs change.

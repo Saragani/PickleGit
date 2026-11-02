@@ -1,0 +1,1622 @@
+{
+  ".claude/scripts/checkpoint.sh": {
+    "mtime": 1787229368.10858,
+    "seen": 1793624239.8246808,
+    "ast_hash": "5bd20d2c5ee46682e865404420707b46",
+    "semantic_hash": "5bd20d2c5ee46682e865404420707b46"
+  },
+  ".claude/scripts/detect-base-branch.sh": {
+    "mtime": 1787229115.0806668,
+    "seen": 1793624239.8246853,
+    "ast_hash": "ba1f4e296e7e3ade1f83285f574430d8",
+    "semantic_hash": "ba1f4e296e7e3ade1f83285f574430d8"
+  },
+  ".claude/scripts/diff-profile.sh": {
+    "mtime": 1787222317.789796,
+    "seen": 1793624239.824687,
+    "ast_hash": "9dfdc60a8038430f45f0ef5fd279d53e",
+    "semantic_hash": "9dfdc60a8038430f45f0ef5fd279d53e"
+  },
+  ".claude/scripts/github.sh": {
+    "mtime": 1787230666.325919,
+    "seen": 1793624239.8246882,
+    "ast_hash": "eb2a4ad39274b2039ea4628a9f3f9d2f",
+    "semantic_hash": "eb2a4ad39274b2039ea4628a9f3f9d2f"
+  },
+  ".claude/scripts/plan-drift-check.sh": {
+    "mtime": 1787222317.8107882,
+    "seen": 1793624239.824689,
+    "ast_hash": "77c30fbb1d7aac26d02de67cb4be0b85",
+    "semantic_hash": "77c30fbb1d7aac26d02de67cb4be0b85"
+  },
+  ".claude/scripts/plan-frontmatter.sh": {
+    "mtime": 1786562811.089999,
+    "seen": 1793624239.8246899,
+    "ast_hash": "8fe3ac4722a86200ea71de81d18dd867",
+    "semantic_hash": "8fe3ac4722a86200ea71de81d18dd867"
+  },
+  ".claude/settings.json": {
+    "mtime": 1783064014.1276064,
+    "seen": 1793624239.824691,
+    "ast_hash": "3a05f16c58298c1dfb537415be1ca5dd",
+    "semantic_hash": "3a05f16c58298c1dfb537415be1ca5dd"
+  },
+  ".claude/settings.local.json": {
+    "mtime": 1787169219.9199872,
+    "seen": 1793624239.8246918,
+    "ast_hash": "305745f2a28e1cde2b3e0051bc4019bc",
+    "semantic_hash": "305745f2a28e1cde2b3e0051bc4019bc"
+  },
+  ".claude/skills/diagnose/scripts/hitl-loop.template.sh": {
+    "mtime": 1785351232.058751,
+    "seen": 1793624239.8246925,
+    "ast_hash": "27d758d3557409fbb17bc3cced9367cf",
+    "semantic_hash": "27d758d3557409fbb17bc3cced9367cf"
+  },
+  "Installer/build-installer.ps1": {
+    "mtime": 1784646663.9432733,
+    "seen": 1793624239.824693,
+    "ast_hash": "f48050dc5dcad779525763f5369a982f",
+    "semantic_hash": "f48050dc5dcad779525763f5369a982f"
+  },
+  "PickleGit.sln": {
+    "mtime": 1784646660.758017,
+    "seen": 1793624239.8246937,
+    "ast_hash": "bcde093d9110a960c8e4f11840720919",
+    "semantic_hash": "bcde093d9110a960c8e4f11840720919"
+  },
+  "PickleGit/App.xaml": {
+    "mtime": 1787593910.6406312,
+    "seen": 1793624239.8246946,
+    "ast_hash": "a92eb4218f15c6638189cac87cdfcc17",
+    "semantic_hash": "a92eb4218f15c6638189cac87cdfcc17"
+  },
+  "PickleGit/App.xaml.cs": {
+    "mtime": 1784646660.774123,
+    "seen": 1793624239.8246953,
+    "ast_hash": "e3312e3287a4eb8f5b7d8b05a2a95f5a",
+    "semantic_hash": "e3312e3287a4eb8f5b7d8b05a2a95f5a"
+  },
+  "PickleGit/Behaviors/BlameSearchHighlighter.cs": {
+    "mtime": 1786885177.0166113,
+    "seen": 1793624239.824696,
+    "ast_hash": "96cb6fbb7fcdd5c7c3006feec348ba5d",
+    "semantic_hash": "96cb6fbb7fcdd5c7c3006feec348ba5d"
+  },
+  "PickleGit/Behaviors/DragDropFormats.cs": {
+    "mtime": 1784646660.7791233,
+    "seen": 1793624239.8246968,
+    "ast_hash": "a5c8e7e42836b95a4288aa96b7d04131",
+    "semantic_hash": "a5c8e7e42836b95a4288aa96b7d04131"
+  },
+  "PickleGit/Behaviors/ListViewMultiSelectBehavior.cs": {
+    "mtime": 1793618198.925055,
+    "seen": 1793624239.8246975,
+    "ast_hash": "c07da0e233e14509b62b28c51f9e2ac1",
+    "semantic_hash": "c07da0e233e14509b62b28c51f9e2ac1"
+  },
+  "PickleGit/Behaviors/WordDiffHighlighter.cs": {
+    "mtime": 1786885158.447203,
+    "seen": 1793624239.8246984,
+    "ast_hash": "22098d550c57073ac58418548a6258a8",
+    "semantic_hash": "22098d550c57073ac58418548a6258a8"
+  },
+  "PickleGit/Controls/ButtonChrome.cs": {
+    "mtime": 1784646660.806145,
+    "seen": 1793624239.824699,
+    "ast_hash": "180967a2810f50d08a4cd22a40bfd174",
+    "semantic_hash": "180967a2810f50d08a4cd22a40bfd174"
+  },
+  "PickleGit/Controls/CommitGraphControl.cs": {
+    "mtime": 1787593902.0482283,
+    "seen": 1793624239.8246996,
+    "ast_hash": "10338c9b9f1629866e669015db43d3a9",
+    "semantic_hash": "10338c9b9f1629866e669015db43d3a9"
+  },
+  "PickleGit/Controls/DiffChangeMapControl.cs": {
+    "mtime": 1784646660.8131666,
+    "seen": 1793624239.8247004,
+    "ast_hash": "cceebb7533068fe98d0a34c465dd3401",
+    "semantic_hash": "cceebb7533068fe98d0a34c465dd3401"
+  },
+  "PickleGit/Controls/DiffTextSelectionController.cs": {
+    "mtime": 1786997495.225465,
+    "seen": 1793624239.824701,
+    "ast_hash": "c5b413ad12ac807ae1dd7867e00a1bd5",
+    "semantic_hash": "c5b413ad12ac807ae1dd7867e00a1bd5"
+  },
+  "PickleGit/Converters/ValueConverters.cs": {
+    "mtime": 1787760686.0016427,
+    "seen": 1793624239.8247018,
+    "ast_hash": "c359ad7836886362d53c4ea9606dc69c",
+    "semantic_hash": "c359ad7836886362d53c4ea9606dc69c"
+  },
+  "PickleGit/MainWindow.xaml": {
+    "mtime": 1787593910.6512246,
+    "seen": 1793624239.8247027,
+    "ast_hash": "90898b96b8b824e7aacb8228db8a9a6d",
+    "semantic_hash": "90898b96b8b824e7aacb8228db8a9a6d"
+  },
+  "PickleGit/MainWindow.xaml.cs": {
+    "mtime": 1790581277.847879,
+    "seen": 1793624239.8247035,
+    "ast_hash": "efbdf48128e152b916024d3aa5002ffa",
+    "semantic_hash": "efbdf48128e152b916024d3aa5002ffa"
+  },
+  "PickleGit/Models/BisectState.cs": {
+    "mtime": 1784646660.835736,
+    "seen": 1793624239.824704,
+    "ast_hash": "74fa0c2611db348e44a1d0616917b4c8",
+    "semantic_hash": "74fa0c2611db348e44a1d0616917b4c8"
+  },
+  "PickleGit/Models/BlameLine.cs": {
+    "mtime": 1784646660.8377526,
+    "seen": 1793624239.8247051,
+    "ast_hash": "bc06d307d6f983b214a8cb254de1af2e",
+    "semantic_hash": "bc06d307d6f983b214a8cb254de1af2e"
+  },
+  "PickleGit/Models/BranchInfo.cs": {
+    "mtime": 1785733369.8551395,
+    "seen": 1793624239.8247056,
+    "ast_hash": "00238a02d02a499b852ba894beb73fef",
+    "semantic_hash": "00238a02d02a499b852ba894beb73fef"
+  },
+  "PickleGit/Models/CommitInfo.cs": {
+    "mtime": 1787486115.179997,
+    "seen": 1793624239.8247063,
+    "ast_hash": "f974a9e95a9df5d50938baee904fee01",
+    "semantic_hash": "f974a9e95a9df5d50938baee904fee01"
+  },
+  "PickleGit/Models/ConflictState.cs": {
+    "mtime": 1787593910.6653447,
+    "seen": 1793624239.824707,
+    "ast_hash": "bfd6519bd67e6af1cd1d32670f8995dd",
+    "semantic_hash": "bfd6519bd67e6af1cd1d32670f8995dd"
+  },
+  "PickleGit/Models/GraphNode.cs": {
+    "mtime": 1786884701.8554473,
+    "seen": 1793624239.8247075,
+    "ast_hash": "eabff70efed803867c0298456b54f1e9",
+    "semantic_hash": "eabff70efed803867c0298456b54f1e9"
+  },
+  "PickleGit/Models/MergeConflictBlock.cs": {
+    "mtime": 1786276946.342541,
+    "seen": 1793624239.8247085,
+    "ast_hash": "e5ea4fda8a25025a3be2ed77bae4db77",
+    "semantic_hash": "e5ea4fda8a25025a3be2ed77bae4db77"
+  },
+  "PickleGit/Models/RebaseTodoItem.cs": {
+    "mtime": 1784646660.8583367,
+    "seen": 1793624239.8247092,
+    "ast_hash": "77965ef61b4f8b0146e5d55cdf14508c",
+    "semantic_hash": "77965ef61b4f8b0146e5d55cdf14508c"
+  },
+  "PickleGit/Models/ReflogEntry.cs": {
+    "mtime": 1784646660.8623366,
+    "seen": 1793624239.8247097,
+    "ast_hash": "6278475be950ba2304ab1350ad4474e2",
+    "semantic_hash": "6278475be950ba2304ab1350ad4474e2"
+  },
+  "PickleGit/Models/RepositoryAccount.cs": {
+    "mtime": 1793614392.4902618,
+    "seen": 1793624239.8247104,
+    "ast_hash": "602b1ac8a7692c05dc216121d1cdf1c4",
+    "semantic_hash": "602b1ac8a7692c05dc216121d1cdf1c4"
+  },
+  "PickleGit/Models/SidebarRow.cs": {
+    "mtime": 1784880256.3018806,
+    "seen": 1793624239.8247108,
+    "ast_hash": "0d1e79b9d5469bb85ea725314e0909db",
+    "semantic_hash": "0d1e79b9d5469bb85ea725314e0909db"
+  },
+  "PickleGit/Models/SyntaxSpan.cs": {
+    "mtime": 1784646660.874766,
+    "seen": 1793624239.8247116,
+    "ast_hash": "481373f86fd980e0d5fd325b8970be27",
+    "semantic_hash": "481373f86fd980e0d5fd325b8970be27"
+  },
+  "PickleGit/Models/UndoEntry.cs": {
+    "mtime": 1784646660.8779166,
+    "seen": 1793624239.8247125,
+    "ast_hash": "65db1e98798af9e6c0e2324db690e0c5",
+    "semantic_hash": "65db1e98798af9e6c0e2324db690e0c5"
+  },
+  "PickleGit/PickleGit.csproj": {
+    "mtime": 1786394263.7921782,
+    "seen": 1793624239.824713,
+    "ast_hash": "cd582a174961d6a743a2601bc556a55b",
+    "semantic_hash": "cd582a174961d6a743a2601bc556a55b"
+  },
+  "PickleGit/Services/AppCommandRegistry.cs": {
+    "mtime": 1784646661.0401912,
+    "seen": 1793624239.8247137,
+    "ast_hash": "0c7407ed654fc5aa408a55c614f9d76c",
+    "semantic_hash": "0c7407ed654fc5aa408a55c614f9d76c"
+  },
+  "PickleGit/Services/AppLog.cs": {
+    "mtime": 1784646661.0464187,
+    "seen": 1793624239.8247144,
+    "ast_hash": "8e96b8933d3513b51cd1756774b99af3",
+    "semantic_hash": "8e96b8933d3513b51cd1756774b99af3"
+  },
+  "PickleGit/Services/AppSettings.cs": {
+    "mtime": 1787486115.1827755,
+    "seen": 1793624239.824715,
+    "ast_hash": "5a36f0154edac66aaef5b76412f1425b",
+    "semantic_hash": "5a36f0154edac66aaef5b76412f1425b"
+  },
+  "PickleGit/Services/AvatarService.cs": {
+    "mtime": 1784646661.0556939,
+    "seen": 1793624239.8247159,
+    "ast_hash": "944b6fc928dcca1dc3315563fb9e7e78",
+    "semantic_hash": "944b6fc928dcca1dc3315563fb9e7e78"
+  },
+  "PickleGit/Services/CredentialStore.cs": {
+    "mtime": 1785946124.9274282,
+    "seen": 1793624239.8247166,
+    "ast_hash": "0f7369c98161f74fb8efa93a0a3e551c",
+    "semantic_hash": "0f7369c98161f74fb8efa93a0a3e551c"
+  },
+  "PickleGit/Services/DialogService.cs": {
+    "mtime": 1790578896.8438857,
+    "seen": 1793624239.8247175,
+    "ast_hash": "7caf5bac450b84f95e95007191c59b8f",
+    "semantic_hash": "7caf5bac450b84f95e95007191c59b8f"
+  },
+  "PickleGit/Services/DialogSizing.cs": {
+    "mtime": 1790685734.7027864,
+    "seen": 1793624239.824718,
+    "ast_hash": "f334abbc468a024853c01ddcae0e9323",
+    "semantic_hash": "f334abbc468a024853c01ddcae0e9323"
+  },
+  "PickleGit/Services/FileTreeBuilder.cs": {
+    "mtime": 1793612670.3500571,
+    "seen": 1793624239.824719,
+    "ast_hash": "fa3747417150dd3e51980f1968863390",
+    "semantic_hash": "fa3747417150dd3e51980f1968863390"
+  },
+  "PickleGit/Services/GitService.cs": {
+    "mtime": 1793618690.704196,
+    "seen": 1793624239.8247197,
+    "ast_hash": "23f618418bd76fd435bd974e2191376e",
+    "semantic_hash": "23f618418bd76fd435bd974e2191376e"
+  },
+  "PickleGit/Services/Git/CliGitService.cs": {
+    "mtime": 1786297365.682732,
+    "seen": 1793624239.8247201,
+    "ast_hash": "911506b2f2ed34453cefbe0c061026ae",
+    "semantic_hash": "911506b2f2ed34453cefbe0c061026ae"
+  },
+  "PickleGit/Services/Git/DecodedStagingService.cs": {
+    "mtime": 1793614413.3927362,
+    "seen": 1793624239.8247209,
+    "ast_hash": "43c7b5cd17ba172f55c0c86e3aaff048",
+    "semantic_hash": "43c7b5cd17ba172f55c0c86e3aaff048"
+  },
+  "PickleGit/Services/Git/GitCli.cs": {
+    "mtime": 1790685723.257612,
+    "seen": 1793624239.8247213,
+    "ast_hash": "c102e5725742d124dc89ce9ca7d2b076",
+    "semantic_hash": "c102e5725742d124dc89ce9ca7d2b076"
+  },
+  "PickleGit/Services/Git/GitExecutor.cs": {
+    "mtime": 1786881017.1637888,
+    "seen": 1793624239.8247223,
+    "ast_hash": "a88f92b6684b7a4749953b632448aae3",
+    "semantic_hash": "a88f92b6684b7a4749953b632448aae3"
+  },
+  "PickleGit/Services/Git/PatchBuilder.cs": {
+    "mtime": 1784646661.0826569,
+    "seen": 1793624239.824723,
+    "ast_hash": "88b840bbe647494d8c2846dfdfbb5260",
+    "semantic_hash": "88b840bbe647494d8c2846dfdfbb5260"
+  },
+  "PickleGit/Services/Git/RebaseTodoBuilder.cs": {
+    "mtime": 1784646661.0900438,
+    "seen": 1793624239.8247237,
+    "ast_hash": "d79b92eca86395dfff12d7af472d6104",
+    "semantic_hash": "d79b92eca86395dfff12d7af472d6104"
+  },
+  "PickleGit/Services/Git/StagingService.cs": {
+    "mtime": 1793612670.9699087,
+    "seen": 1793624239.8247242,
+    "ast_hash": "062a987ead4381b263379a4d6bd62745",
+    "semantic_hash": "062a987ead4381b263379a4d6bd62745"
+  },
+  "PickleGit/Services/Git/WorktreeService.cs": {
+    "mtime": 1784646661.1021335,
+    "seen": 1793624239.824725,
+    "ast_hash": "6881ab9586763b97d508f125fc7e01b3",
+    "semantic_hash": "6881ab9586763b97d508f125fc7e01b3"
+  },
+  "PickleGit/Services/Highlighting/SyntaxHighlighter.cs": {
+    "mtime": 1786369012.696743,
+    "seen": 1793624239.8247259,
+    "ast_hash": "1747e41968b2a780ca5bf3773c207adf",
+    "semantic_hash": "1747e41968b2a780ca5bf3773c207adf"
+  },
+  "PickleGit/Services/Hosting/BitbucketCloudProvider.cs": {
+    "mtime": 1785093179.104383,
+    "seen": 1793624239.8247263,
+    "ast_hash": "83bd44e1ddec603b9561bd0c3776dcb3",
+    "semantic_hash": "83bd44e1ddec603b9561bd0c3776dcb3"
+  },
+  "PickleGit/Services/Hosting/GitHubProvider.cs": {
+    "mtime": 1785093185.6959555,
+    "seen": 1793624239.824727,
+    "ast_hash": "50d41d3b67f6985d955ad73671ac7872",
+    "semantic_hash": "50d41d3b67f6985d955ad73671ac7872"
+  },
+  "PickleGit/Services/Hosting/GitLabProvider.cs": {
+    "mtime": 1785093191.208506,
+    "seen": 1793624239.8247278,
+    "ast_hash": "5e0d44a4e4f377409baf7c16e3ed1744",
+    "semantic_hash": "5e0d44a4e4f377409baf7c16e3ed1744"
+  },
+  "PickleGit/Services/Hosting/GitRemoteUrlParser.cs": {
+    "mtime": 1784646661.156879,
+    "seen": 1793624239.8247283,
+    "ast_hash": "18c4d1028f71ad017b9426c6f4e8fd8c",
+    "semantic_hash": "18c4d1028f71ad017b9426c6f4e8fd8c"
+  },
+  "PickleGit/Services/Hosting/HostingCredentials.cs": {
+    "mtime": 1784646661.1622496,
+    "seen": 1793624239.8247292,
+    "ast_hash": "75db74c2f758c803ea087c93ec19a9c3",
+    "semantic_hash": "75db74c2f758c803ea087c93ec19a9c3"
+  },
+  "PickleGit/Services/Hosting/HostingProviderFactory.cs": {
+    "mtime": 1784646661.1652503,
+    "seen": 1793624239.8247297,
+    "ast_hash": "b01513e9cf59f82050eb4ab66c4abb99",
+    "semantic_hash": "b01513e9cf59f82050eb4ab66c4abb99"
+  },
+  "PickleGit/Services/Hosting/IHostingProvider.cs": {
+    "mtime": 1784646661.1688156,
+    "seen": 1793624239.8247304,
+    "ast_hash": "fce4f19c56eacf941614feb6dcae8f0a",
+    "semantic_hash": "fce4f19c56eacf941614feb6dcae8f0a"
+  },
+  "PickleGit/Services/Hosting/PullRequestInfo.cs": {
+    "mtime": 1784646661.1730049,
+    "seen": 1793624239.8247309,
+    "ast_hash": "f15f29ba5db0da1fc64a13637dcf442c",
+    "semantic_hash": "f15f29ba5db0da1fc64a13637dcf442c"
+  },
+  "PickleGit/Services/LcsAligner.cs": {
+    "mtime": 1786369263.676253,
+    "seen": 1793624239.8247316,
+    "ast_hash": "ff66544f1070a206255238632612b913",
+    "semantic_hash": "ff66544f1070a206255238632612b913"
+  },
+  "PickleGit/Services/LineDiff.cs": {
+    "mtime": 1793615173.6168275,
+    "seen": 1793624239.8247323,
+    "ast_hash": "3bd9b2ff11dff5994677b9017e7d56f4",
+    "semantic_hash": "3bd9b2ff11dff5994677b9017e7d56f4"
+  },
+  "PickleGit/Services/MergeConflictParser.cs": {
+    "mtime": 1786277259.0020278,
+    "seen": 1793624239.824733,
+    "ast_hash": "bf98d6a8af11022e8c96a88fb961cb8b",
+    "semantic_hash": "bf98d6a8af11022e8c96a88fb961cb8b"
+  },
+  "PickleGit/Services/RepositoryWatcher.cs": {
+    "mtime": 1786999013.2342627,
+    "seen": 1793624239.8247337,
+    "ast_hash": "d04b8f0bc2c5c5af4f5caa282cbae0e6",
+    "semantic_hash": "d04b8f0bc2c5c5af4f5caa282cbae0e6"
+  },
+  "PickleGit/Services/ShellFolderPicker.cs": {
+    "mtime": 1784646661.1865704,
+    "seen": 1793624239.8247344,
+    "ast_hash": "429f98cb455f3fddbbd8d07970d2f311",
+    "semantic_hash": "429f98cb455f3fddbbd8d07970d2f311"
+  },
+  "PickleGit/Services/ShortcutManager.cs": {
+    "mtime": 1784646661.1935756,
+    "seen": 1793624239.824735,
+    "ast_hash": "2f75d9f9e250aa1a426e76b20e7a6f77",
+    "semantic_hash": "2f75d9f9e250aa1a426e76b20e7a6f77"
+  },
+  "PickleGit/Services/TextDecoding.cs": {
+    "mtime": 1793617992.5040057,
+    "seen": 1793624239.8247356,
+    "ast_hash": "c6cc3ba76a2446e6b264b79db8fd0189",
+    "semantic_hash": "c6cc3ba76a2446e6b264b79db8fd0189"
+  },
+  "PickleGit/Services/ThreeWayMerge.cs": {
+    "mtime": 1793618044.374885,
+    "seen": 1793624239.8247366,
+    "ast_hash": "1d64f4a074f244e880d406e3e9bcc40a",
+    "semantic_hash": "1d64f4a074f244e880d406e3e9bcc40a"
+  },
+  "PickleGit/Services/TitleBarTheme.cs": {
+    "mtime": 1784646661.1996932,
+    "seen": 1793624239.824737,
+    "ast_hash": "54ac3a5efc66666bbc110dbe10eb5ba9",
+    "semantic_hash": "54ac3a5efc66666bbc110dbe10eb5ba9"
+  },
+  "PickleGit/Services/UndoService.cs": {
+    "mtime": 1784646661.2047188,
+    "seen": 1793624239.8247378,
+    "ast_hash": "bcc1dc189f9348e48aafb53a0e7ce9fc",
+    "semantic_hash": "bcc1dc189f9348e48aafb53a0e7ce9fc"
+  },
+  "PickleGit/Themes/DarkTheme.xaml": {
+    "mtime": 1784646661.2100315,
+    "seen": 1793624239.8247383,
+    "ast_hash": "ab17c74d9422b6d5f3d7775030d59a5b",
+    "semantic_hash": "ab17c74d9422b6d5f3d7775030d59a5b"
+  },
+  "PickleGit/Themes/HelpMarkdownStyles.xaml": {
+    "mtime": 1784646661.225179,
+    "seen": 1793624239.824739,
+    "ast_hash": "4c2d5fc2b13c01b6f7072abd6024d908",
+    "semantic_hash": "4c2d5fc2b13c01b6f7072abd6024d908"
+  },
+  "PickleGit/Themes/PaletteDark.xaml": {
+    "mtime": 1786874952.631258,
+    "seen": 1793624239.8247397,
+    "ast_hash": "f3eb1d61acd2ed735384feffb6b62f61",
+    "semantic_hash": "f3eb1d61acd2ed735384feffb6b62f61"
+  },
+  "PickleGit/Themes/PaletteLight.xaml": {
+    "mtime": 1786874952.645573,
+    "seen": 1793624239.8247406,
+    "ast_hash": "5ed13f4d9ad8d773109b2b47ad65c02a",
+    "semantic_hash": "5ed13f4d9ad8d773109b2b47ad65c02a"
+  },
+  "PickleGit/ViewModels/AppViewModel.cs": {
+    "mtime": 1787486115.1889596,
+    "seen": 1793624239.8247414,
+    "ast_hash": "4edefc2f22b5474b2e73de18c1489f7a",
+    "semantic_hash": "4edefc2f22b5474b2e73de18c1489f7a"
+  },
+  "PickleGit/ViewModels/BaseViewModel.cs": {
+    "mtime": 1784646661.2610903,
+    "seen": 1793624239.824742,
+    "ast_hash": "7df254fa68649c3df825a541d6243c3e",
+    "semantic_hash": "7df254fa68649c3df825a541d6243c3e"
+  },
+  "PickleGit/ViewModels/BranchNodeViewModel.cs": {
+    "mtime": 1785733390.2553542,
+    "seen": 1793624239.8247426,
+    "ast_hash": "c5d39fff26b4647a8ff87cdc014db257",
+    "semantic_hash": "c5d39fff26b4647a8ff87cdc014db257"
+  },
+  "PickleGit/ViewModels/BulkObservableCollection.cs": {
+    "mtime": 1793618690.9324336,
+    "seen": 1793624239.8247435,
+    "ast_hash": "d985aa44f52dd191d1e8f5b09ebefaad",
+    "semantic_hash": "d985aa44f52dd191d1e8f5b09ebefaad"
+  },
+  "PickleGit/ViewModels/FindNavigationHelper.cs": {
+    "mtime": 1786881392.3437402,
+    "seen": 1793624239.824744,
+    "ast_hash": "3017597148ac9122281c78c4bc5350ce",
+    "semantic_hash": "3017597148ac9122281c78c4bc5350ce"
+  },
+  "PickleGit/ViewModels/HostingViewModel.cs": {
+    "mtime": 1786881301.6591516,
+    "seen": 1793624239.8247447,
+    "ast_hash": "2a34d50ca2743f1ddd7eb098d06166ea",
+    "semantic_hash": "2a34d50ca2743f1ddd7eb098d06166ea"
+  },
+  "PickleGit/ViewModels/InteractiveRebaseViewModel.cs": {
+    "mtime": 1784646661.2731822,
+    "seen": 1793624239.8247454,
+    "ast_hash": "fd403e447675b8f2b92fbbd3281cea76",
+    "semantic_hash": "fd403e447675b8f2b92fbbd3281cea76"
+  },
+  "PickleGit/ViewModels/MergeConflictEditorViewModel.cs": {
+    "mtime": 1793618063.8065104,
+    "seen": 1793624239.824746,
+    "ast_hash": "afe9a04fd777362814b1b668a7c2bd7a",
+    "semantic_hash": "afe9a04fd777362814b1b668a7c2bd7a"
+  },
+  "PickleGit/ViewModels/PaneFindState.cs": {
+    "mtime": 1793612253.6726866,
+    "seen": 1793624239.8247476,
+    "ast_hash": "322a0d311a2b567a2d7c4a18a1ad98c8",
+    "semantic_hash": "322a0d311a2b567a2d7c4a18a1ad98c8"
+  },
+  "PickleGit/ViewModels/RepositoryViewModel.Bisect.cs": {
+    "mtime": 1784646661.2845707,
+    "seen": 1793624239.8247483,
+    "ast_hash": "70cfbb02573883d17e780096dc943aa1",
+    "semantic_hash": "70cfbb02573883d17e780096dc943aa1"
+  },
+  "PickleGit/ViewModels/RepositoryViewModel.Blame.cs": {
+    "mtime": 1793616795.2697222,
+    "seen": 1793624239.8247488,
+    "ast_hash": "034ce92182236febf0a20a5df37a3970",
+    "semantic_hash": "034ce92182236febf0a20a5df37a3970"
+  },
+  "PickleGit/ViewModels/RepositoryViewModel.Branches.cs": {
+    "mtime": 1791392448.0006502,
+    "seen": 1793624239.8247495,
+    "ast_hash": "59a7992c2cde2033c74a6f323bdcf581",
+    "semantic_hash": "59a7992c2cde2033c74a6f323bdcf581"
+  },
+  "PickleGit/ViewModels/RepositoryViewModel.Compare.cs": {
+    "mtime": 1793616795.2722306,
+    "seen": 1793624239.8247502,
+    "ast_hash": "89e65cc4dfe63e7125b1730bb8083e24",
+    "semantic_hash": "89e65cc4dfe63e7125b1730bb8083e24"
+  },
+  "PickleGit/ViewModels/RepositoryViewModel.Detail.cs": {
+    "mtime": 1786385653.8861594,
+    "seen": 1793624239.824751,
+    "ast_hash": "4ec0fd94ae31f96b7346b4fcf5eafce9",
+    "semantic_hash": "4ec0fd94ae31f96b7346b4fcf5eafce9"
+  },
+  "PickleGit/ViewModels/RepositoryViewModel.Diff.cs": {
+    "mtime": 1793618063.809115,
+    "seen": 1793624239.8247516,
+    "ast_hash": "bd7c2e4b8ecc62454aea97fac6f34003",
+    "semantic_hash": "bd7c2e4b8ecc62454aea97fac6f34003"
+  },
+  "PickleGit/ViewModels/RepositoryViewModel.Integrations.cs": {
+    "mtime": 1785780925.354128,
+    "seen": 1793624239.824752,
+    "ast_hash": "f8f6f72d3114bcdd240481008d0e366f",
+    "semantic_hash": "f8f6f72d3114bcdd240481008d0e366f"
+  },
+  "PickleGit/ViewModels/RepositoryViewModel.Rebase.cs": {
+    "mtime": 1793618501.3638637,
+    "seen": 1793624239.8247528,
+    "ast_hash": "9592e8ba87bba38bea9117fff96cb23e",
+    "semantic_hash": "9592e8ba87bba38bea9117fff96cb23e"
+  },
+  "PickleGit/ViewModels/RepositoryViewModel.Remote.cs": {
+    "mtime": 1791392448.005195,
+    "seen": 1793624239.8247538,
+    "ast_hash": "7549660b394b22a8d2e1b8f2f9f0052d",
+    "semantic_hash": "7549660b394b22a8d2e1b8f2f9f0052d"
+  },
+  "PickleGit/ViewModels/RepositoryViewModel.Staging.cs": {
+    "mtime": 1793618355.3243659,
+    "seen": 1793624239.8247542,
+    "ast_hash": "34ef4a99b5dfa1c6ea7837aa00c545e4",
+    "semantic_hash": "34ef4a99b5dfa1c6ea7837aa00c545e4"
+  },
+  "PickleGit/ViewModels/RepositoryViewModel.cs": {
+    "mtime": 1793617894.9349015,
+    "seen": 1793624239.824755,
+    "ast_hash": "8b521370d96bc88aaf4915ee6c84191b",
+    "semantic_hash": "8b521370d96bc88aaf4915ee6c84191b"
+  },
+  "PickleGit/Views/CloneDialog.xaml": {
+    "mtime": 1784880256.3605266,
+    "seen": 1793624239.8247557,
+    "ast_hash": "4be9e44b7892e362b75b077ac92214f1",
+    "semantic_hash": "4be9e44b7892e362b75b077ac92214f1"
+  },
+  "PickleGit/Views/CloneDialog.xaml.cs": {
+    "mtime": 1784880256.3660734,
+    "seen": 1793624239.8247564,
+    "ast_hash": "09d86631cb4a7333d1a6f29ea3eb697c",
+    "semantic_hash": "09d86631cb4a7333d1a6f29ea3eb697c"
+  },
+  "PickleGit/Views/CommandPaletteWindow.xaml": {
+    "mtime": 1784646661.351003,
+    "seen": 1793624239.824757,
+    "ast_hash": "e8ff46e502186574957022c020c4b32a",
+    "semantic_hash": "e8ff46e502186574957022c020c4b32a"
+  },
+  "PickleGit/Views/CommandPaletteWindow.xaml.cs": {
+    "mtime": 1784646661.362057,
+    "seen": 1793624239.8247578,
+    "ast_hash": "9bda31e5bfd6558682650c8e612972c1",
+    "semantic_hash": "9bda31e5bfd6558682650c8e612972c1"
+  },
+  "PickleGit/Views/CommitDetailView.xaml": {
+    "mtime": 1793612787.697917,
+    "seen": 1793624239.8247583,
+    "ast_hash": "887959312aa6b0bafee4ea9b11ea86c6",
+    "semantic_hash": "887959312aa6b0bafee4ea9b11ea86c6"
+  },
+  "PickleGit/Views/CommitDetailView.xaml.cs": {
+    "mtime": 1784646661.383022,
+    "seen": 1793624239.824759,
+    "ast_hash": "55749df41c225b63b59d2f7d75c2ad99",
+    "semantic_hash": "55749df41c225b63b59d2f7d75c2ad99"
+  },
+  "PickleGit/Views/CommitListView.xaml": {
+    "mtime": 1787762023.0578918,
+    "seen": 1793624239.8247597,
+    "ast_hash": "0e1801ef8bfaf94090ae8dd96677d33f",
+    "semantic_hash": "0e1801ef8bfaf94090ae8dd96677d33f"
+  },
+  "PickleGit/Views/CommitListView.xaml.cs": {
+    "mtime": 1787171213.8935716,
+    "seen": 1793624239.8247607,
+    "ast_hash": "2c1e162fb98192766fb06189278dc971",
+    "semantic_hash": "2c1e162fb98192766fb06189278dc971"
+  },
+  "PickleGit/Views/CredentialsDialog.xaml": {
+    "mtime": 1788275771.6162558,
+    "seen": 1793624239.8247612,
+    "ast_hash": "2d2a64f0ae065845b59df8ed5dc69a07",
+    "semantic_hash": "2d2a64f0ae065845b59df8ed5dc69a07"
+  },
+  "PickleGit/Views/CredentialsDialog.xaml.cs": {
+    "mtime": 1784646661.414529,
+    "seen": 1793624239.8247619,
+    "ast_hash": "88f98dd9a95868d597b0ed5596ef91e8",
+    "semantic_hash": "88f98dd9a95868d597b0ed5596ef91e8"
+  },
+  "PickleGit/Views/Dialogs/ConfirmDialog.xaml": {
+    "mtime": 1790594394.8649013,
+    "seen": 1793624239.8247626,
+    "ast_hash": "9d959f1a494e2dcf95d96a192eca5a63",
+    "semantic_hash": "9d959f1a494e2dcf95d96a192eca5a63"
+  },
+  "PickleGit/Views/Dialogs/ConfirmDialog.xaml.cs": {
+    "mtime": 1790594394.870445,
+    "seen": 1793624239.824763,
+    "ast_hash": "29b9a3c1166964d50ef1c2666b3dd47f",
+    "semantic_hash": "29b9a3c1166964d50ef1c2666b3dd47f"
+  },
+  "PickleGit/Views/Dialogs/CreatePullRequestDialog.xaml": {
+    "mtime": 1784646661.4385593,
+    "seen": 1793624239.824764,
+    "ast_hash": "11fd9772c9953142c9ce3b0846c298ab",
+    "semantic_hash": "11fd9772c9953142c9ce3b0846c298ab"
+  },
+  "PickleGit/Views/Dialogs/CreatePullRequestDialog.xaml.cs": {
+    "mtime": 1784646661.4465985,
+    "seen": 1793624239.8247645,
+    "ast_hash": "b52280bd7a1623d8a47c8f9b6a43603c",
+    "semantic_hash": "b52280bd7a1623d8a47c8f9b6a43603c"
+  },
+  "PickleGit/Views/Dialogs/ErrorDialog.xaml": {
+    "mtime": 1790594394.8727295,
+    "seen": 1793624239.8247652,
+    "ast_hash": "d86448f834c2ff55e076f5f86aafc724",
+    "semantic_hash": "d86448f834c2ff55e076f5f86aafc724"
+  },
+  "PickleGit/Views/Dialogs/ErrorDialog.xaml.cs": {
+    "mtime": 1790594394.8776314,
+    "seen": 1793624239.8247657,
+    "ast_hash": "e6233ac070e8eb9c3c13283833cbf007",
+    "semantic_hash": "e6233ac070e8eb9c3c13283833cbf007"
+  },
+  "PickleGit/Views/Dialogs/RemoteDialog.xaml": {
+    "mtime": 1784646661.4644496,
+    "seen": 1793624239.8247664,
+    "ast_hash": "57a2d0ea0ac7b958449ec574386cf75b",
+    "semantic_hash": "57a2d0ea0ac7b958449ec574386cf75b"
+  },
+  "PickleGit/Views/Dialogs/RemoteDialog.xaml.cs": {
+    "mtime": 1784646661.4720466,
+    "seen": 1793624239.8247674,
+    "ast_hash": "336512368eba684f1a5b11faee047670",
+    "semantic_hash": "336512368eba684f1a5b11faee047670"
+  },
+  "PickleGit/Views/Dialogs/TextPromptDialog.xaml": {
+    "mtime": 1790594394.8805275,
+    "seen": 1793624239.8247678,
+    "ast_hash": "eb1eb5fd414fc6b469a3b395e14b83d8",
+    "semantic_hash": "eb1eb5fd414fc6b469a3b395e14b83d8"
+  },
+  "PickleGit/Views/Dialogs/TextPromptDialog.xaml.cs": {
+    "mtime": 1790594394.8877068,
+    "seen": 1793624239.8247685,
+    "ast_hash": "83264ccf903d9a5eee80fde88132bfb5",
+    "semantic_hash": "83264ccf903d9a5eee80fde88132bfb5"
+  },
+  "PickleGit/Views/DiffView.xaml": {
+    "mtime": 1786980517.8195815,
+    "seen": 1793624239.824769,
+    "ast_hash": "36d04d50adba526ed669a9eb57a5a573",
+    "semantic_hash": "36d04d50adba526ed669a9eb57a5a573"
+  },
+  "PickleGit/Views/DiffView.xaml.cs": {
+    "mtime": 1790581565.3532517,
+    "seen": 1793624239.8247697,
+    "ast_hash": "cb105ae05e548067aa2345bdcc8a664a",
+    "semantic_hash": "cb105ae05e548067aa2345bdcc8a664a"
+  },
+  "PickleGit/Views/HelpWindow.xaml": {
+    "mtime": 1784646661.512323,
+    "seen": 1793624239.8247705,
+    "ast_hash": "3b888b94d2e37e78ca9c57f5e2d6b9b6",
+    "semantic_hash": "3b888b94d2e37e78ca9c57f5e2d6b9b6"
+  },
+  "PickleGit/Views/HelpWindow.xaml.cs": {
+    "mtime": 1784646661.5229385,
+    "seen": 1793624239.8247712,
+    "ast_hash": "247969d5985c1fa03ce28298ea4955ae",
+    "semantic_hash": "247969d5985c1fa03ce28298ea4955ae"
+  },
+  "PickleGit/Views/InteractiveRebaseDialog.xaml": {
+    "mtime": 1784646661.5279377,
+    "seen": 1793624239.824772,
+    "ast_hash": "715aae9e1099f6980f62d354a9dcb30e",
+    "semantic_hash": "715aae9e1099f6980f62d354a9dcb30e"
+  },
+  "PickleGit/Views/InteractiveRebaseDialog.xaml.cs": {
+    "mtime": 1784646661.5368118,
+    "seen": 1793624239.8247726,
+    "ast_hash": "666dd2f4ac091de2eb0bffb6d5b76f50",
+    "semantic_hash": "666dd2f4ac091de2eb0bffb6d5b76f50"
+  },
+  "PickleGit/Views/MergeConflictEditorWindow.xaml": {
+    "mtime": 1793615341.185851,
+    "seen": 1793624239.8247733,
+    "ast_hash": "df8f5e98e6b186d85abe226ac7303b71",
+    "semantic_hash": "df8f5e98e6b186d85abe226ac7303b71"
+  },
+  "PickleGit/Views/MergeConflictEditorWindow.xaml.cs": {
+    "mtime": 1793610979.4290676,
+    "seen": 1793624239.8247738,
+    "ast_hash": "7ad5bc7860cef699de201e5dc88c386e",
+    "semantic_hash": "7ad5bc7860cef699de201e5dc88c386e"
+  },
+  "PickleGit/Views/NewBranchDialog.xaml": {
+    "mtime": 1784646661.5659406,
+    "seen": 1793624239.8247747,
+    "ast_hash": "588fee353201b64c192440265631bfe6",
+    "semantic_hash": "588fee353201b64c192440265631bfe6"
+  },
+  "PickleGit/Views/NewBranchDialog.xaml.cs": {
+    "mtime": 1784646661.6605773,
+    "seen": 1793624239.8247755,
+    "ast_hash": "efbc8f83694d487c71f50d489b3ab8c1",
+    "semantic_hash": "efbc8f83694d487c71f50d489b3ab8c1"
+  },
+  "PickleGit/Views/NewTabPlaceholderView.xaml": {
+    "mtime": 1785252472.741604,
+    "seen": 1793624239.824776,
+    "ast_hash": "81b3109fd68c2e78cb859ac3664056f3",
+    "semantic_hash": "81b3109fd68c2e78cb859ac3664056f3"
+  },
+  "PickleGit/Views/NewTabPlaceholderView.xaml.cs": {
+    "mtime": 1785252482.2002008,
+    "seen": 1793624239.8247766,
+    "ast_hash": "82d1fdc736be6ae88d87e34f0f63f441",
+    "semantic_hash": "82d1fdc736be6ae88d87e34f0f63f441"
+  },
+  "PickleGit/Views/SettingsWindow.xaml": {
+    "mtime": 1784646661.66607,
+    "seen": 1793624239.8247774,
+    "ast_hash": "7c0791ca55087453d51d09cef706bb5c",
+    "semantic_hash": "7c0791ca55087453d51d09cef706bb5c"
+  },
+  "PickleGit/Views/SettingsWindow.xaml.cs": {
+    "mtime": 1784646661.6814344,
+    "seen": 1793624239.824778,
+    "ast_hash": "7644a8cbaa24c3e55850b4267c127eb3",
+    "semantic_hash": "7644a8cbaa24c3e55850b4267c127eb3"
+  },
+  "PickleGit/Views/SidebarView.xaml": {
+    "mtime": 1788695948.336027,
+    "seen": 1793624239.8247788,
+    "ast_hash": "879c18b804048e5227f22680e988d823",
+    "semantic_hash": "879c18b804048e5227f22680e988d823"
+  },
+  "PickleGit/Views/SidebarView.xaml.cs": {
+    "mtime": 1788695953.4156425,
+    "seen": 1793624239.8247795,
+    "ast_hash": "4de803706953501290541cfb8bdfeee8",
+    "semantic_hash": "4de803706953501290541cfb8bdfeee8"
+  },
+  "PickleGit/Views/SplashWindow.xaml": {
+    "mtime": 1784646661.7440684,
+    "seen": 1793624239.8247802,
+    "ast_hash": "8991f87d01d118882382daef82c924bc",
+    "semantic_hash": "8991f87d01d118882382daef82c924bc"
+  },
+  "PickleGit/Views/SplashWindow.xaml.cs": {
+    "mtime": 1784646661.7566833,
+    "seen": 1793624239.8247807,
+    "ast_hash": "b8ef31054d3ebc33b573ba3bf83de616",
+    "semantic_hash": "b8ef31054d3ebc33b573ba3bf83de616"
+  },
+  ".claude/agents/frontend-architect.md": {
+    "mtime": 1787229164.2697196,
+    "seen": 1793624239.8247817,
+    "ast_hash": "f88409057b2770ec41471bc2ddb8f6a2",
+    "semantic_hash": "f88409057b2770ec41471bc2ddb8f6a2"
+  },
+  ".claude/agents/learning-guide.md": {
+    "mtime": 1785351231.63541,
+    "seen": 1793624239.8247821,
+    "ast_hash": "2683c3c123863a18c18b315859897685",
+    "semantic_hash": "2683c3c123863a18c18b315859897685"
+  },
+  ".claude/agents/performance-engineer.md": {
+    "mtime": 1785351231.6453424,
+    "seen": 1793624239.8247828,
+    "ast_hash": "378bf8f717fb1b1122ff01acb2259821",
+    "semantic_hash": "378bf8f717fb1b1122ff01acb2259821"
+  },
+  ".claude/agents/quality-engineer.md": {
+    "mtime": 1785351231.651554,
+    "seen": 1793624239.8247836,
+    "ast_hash": "48d513e2e966568849898c8770d0a124",
+    "semantic_hash": "48d513e2e966568849898c8770d0a124"
+  },
+  ".claude/agents/refactoring-expert.md": {
+    "mtime": 1785351231.6555576,
+    "seen": 1793624239.824784,
+    "ast_hash": "82ee16ed770e03e47a6aaf0f5579b182",
+    "semantic_hash": "82ee16ed770e03e47a6aaf0f5579b182"
+  },
+  ".claude/agents/requirements-analyst.md": {
+    "mtime": 1785351231.6595566,
+    "seen": 1793624239.824785,
+    "ast_hash": "77510146fa85d465b645509d04c52487",
+    "semantic_hash": "77510146fa85d465b645509d04c52487"
+  },
+  ".claude/agents/root-cause-analyst.md": {
+    "mtime": 1785351231.6625552,
+    "seen": 1793624239.8247855,
+    "ast_hash": "ebc029da9dc122aeb1c8d1488cbb5621",
+    "semantic_hash": "ebc029da9dc122aeb1c8d1488cbb5621"
+  },
+  ".claude/agents/security-engineer.md": {
+    "mtime": 1785351231.6692986,
+    "seen": 1793624239.8247862,
+    "ast_hash": "56c8961984408bdfb1a1f0d578197f12",
+    "semantic_hash": "56c8961984408bdfb1a1f0d578197f12"
+  },
+  ".claude/agents/self-review.md": {
+    "mtime": 1785351231.6744754,
+    "seen": 1793624239.824787,
+    "ast_hash": "378f84b0a005090068bbc8ad217008cc",
+    "semantic_hash": "378f84b0a005090068bbc8ad217008cc"
+  },
+  ".claude/agents/system-architect.md": {
+    "mtime": 1785351231.6798067,
+    "seen": 1793624239.8247876,
+    "ast_hash": "3f1f0c507955f17d4d67d1ef163a244c",
+    "semantic_hash": "3f1f0c507955f17d4d67d1ef163a244c"
+  },
+  ".claude/agents/technical-writer.md": {
+    "mtime": 1785351231.685627,
+    "seen": 1793624239.8247886,
+    "ast_hash": "693cb19cba3eb2442e4992c1c136e353",
+    "semantic_hash": "693cb19cba3eb2442e4992c1c136e353"
+  },
+  ".claude/commands/pkl/build.md": {
+    "mtime": 1787228997.944582,
+    "seen": 1793624239.8247893,
+    "ast_hash": "0d929b43fdce5795c125eddd098d4f7d",
+    "semantic_hash": "0d929b43fdce5795c125eddd098d4f7d"
+  },
+  ".claude/commands/pkl/commit-only.md": {
+    "mtime": 1787228902.49192,
+    "seen": 1793624239.82479,
+    "ast_hash": "0f0de1cd6d8560ef8ba7b3398129cd10",
+    "semantic_hash": "0f0de1cd6d8560ef8ba7b3398129cd10"
+  },
+  ".claude/commands/pkl/commit.md": {
+    "mtime": 1787228892.5457766,
+    "seen": 1793624239.8247905,
+    "ast_hash": "10b60e66d6635a08e69a69a9a0fbd286",
+    "semantic_hash": "10b60e66d6635a08e69a69a9a0fbd286"
+  },
+  ".claude/commands/pkl/create-branch.md": {
+    "mtime": 1787228841.969564,
+    "seen": 1793624239.8247912,
+    "ast_hash": "6e47683ca6a53ec04e7334d98765d05a",
+    "semantic_hash": "6e47683ca6a53ec04e7334d98765d05a"
+  },
+  ".claude/commands/pkl/create-issue.md": {
+    "mtime": 1787230905.0197275,
+    "seen": 1793624239.824792,
+    "ast_hash": "40b3fa46239b878325fa335d33c4c37f",
+    "semantic_hash": "40b3fa46239b878325fa335d33c4c37f"
+  },
+  ".claude/commands/pkl/fetch-issue.md": {
+    "mtime": 1787230912.8365593,
+    "seen": 1793624239.8247926,
+    "ast_hash": "e0838f41c4bc6173fdb57247712465c8",
+    "semantic_hash": "e0838f41c4bc6173fdb57247712465c8"
+  },
+  ".claude/commands/pkl/handoff.md": {
+    "mtime": 1787229078.3758926,
+    "seen": 1793624239.8247933,
+    "ast_hash": "7e6b02c2d4285515db4a2d4a6542ed65",
+    "semantic_hash": "7e6b02c2d4285515db4a2d4a6542ed65"
+  },
+  ".claude/commands/pkl/issue-attach.md": {
+    "mtime": 1787228821.6083887,
+    "seen": 1793624239.8247938,
+    "ast_hash": "7dba075520ebd0e1f6a209cb6f2e8787",
+    "semantic_hash": "7dba075520ebd0e1f6a209cb6f2e8787"
+  },
+  ".claude/commands/pkl/issue-close.md": {
+    "mtime": 1787230920.5385315,
+    "seen": 1793624239.8247945,
+    "ast_hash": "de5a35dc7090f0c34c0fb213363f16d3",
+    "semantic_hash": "de5a35dc7090f0c34c0fb213363f16d3"
+  },
+  ".claude/commands/pkl/issue-comment.md": {
+    "mtime": 1787230928.6293817,
+    "seen": 1793624239.8247952,
+    "ast_hash": "26c167cb761dc860c234be7fe720d37e",
+    "semantic_hash": "26c167cb761dc860c234be7fe720d37e"
+  },
+  ".claude/commands/pkl/plan.md": {
+    "mtime": 1787228876.3853211,
+    "seen": 1793624239.824796,
+    "ast_hash": "c0f8189dc8c981a58dba621c8b8851d6",
+    "semantic_hash": "c0f8189dc8c981a58dba621c8b8851d6"
+  },
+  ".claude/commands/pkl/qa-list.md": {
+    "mtime": 1787229010.851351,
+    "seen": 1793624239.8247967,
+    "ast_hash": "e7b303579b6e520e13c154bef54479b0",
+    "semantic_hash": "e7b303579b6e520e13c154bef54479b0"
+  },
+  ".claude/commands/pkl/remove-irrelevant-comments.md": {
+    "mtime": 1787229019.4482315,
+    "seen": 1793624239.8247972,
+    "ast_hash": "5546b7a8cd8183ad8b0cf9c3b6af0a0c",
+    "semantic_hash": "5546b7a8cd8183ad8b0cf9c3b6af0a0c"
+  },
+  ".claude/commands/pkl/retro.md": {
+    "mtime": 1787229102.1297147,
+    "seen": 1793624239.8247979,
+    "ast_hash": "bb548a5a7ead87af2b85d7af0c4a1c51",
+    "semantic_hash": "bb548a5a7ead87af2b85d7af0c4a1c51"
+  },
+  ".claude/commands/pkl/review-pr.md": {
+    "mtime": 1787228927.360905,
+    "seen": 1793624239.8247988,
+    "ast_hash": "e74e08109180616bacdda087cf26eeaa",
+    "semantic_hash": "e74e08109180616bacdda087cf26eeaa"
+  },
+  ".claude/commands/pkl/security-review.md": {
+    "mtime": 1787228989.9214551,
+    "seen": 1793624239.8247995,
+    "ast_hash": "0b2c26dccfd19c772355c12dbb41e76f",
+    "semantic_hash": "0b2c26dccfd19c772355c12dbb41e76f"
+  },
+  ".claude/commands/pkl/static-analyze.md": {
+    "mtime": 1787228974.877692,
+    "seen": 1793624239.8248,
+    "ast_hash": "c09fb1e539c8029e8ae80721dc47223e",
+    "semantic_hash": "c09fb1e539c8029e8ae80721dc47223e"
+  },
+  ".claude/commands/pkl/test-plan.md": {
+    "mtime": 1787228945.3680465,
+    "seen": 1793624239.8248007,
+    "ast_hash": "e91b533949366937e32373a97d51ddce",
+    "semantic_hash": "e91b533949366937e32373a97d51ddce"
+  },
+  ".claude/commands/sc/brainstorm.md": {
+    "mtime": 1785351231.6975384,
+    "seen": 1793624239.8248012,
+    "ast_hash": "c4d997a96da1803e1bd09b71e7bade76",
+    "semantic_hash": "c4d997a96da1803e1bd09b71e7bade76"
+  },
+  ".claude/commands/sc/cleanup.md": {
+    "mtime": 1786562810.5583284,
+    "seen": 1793624239.8248024,
+    "ast_hash": "09acb16248c1148ae33ede8f9e17692f",
+    "semantic_hash": "09acb16248c1148ae33ede8f9e17692f"
+  },
+  ".claude/commands/sc/design.md": {
+    "mtime": 1785351231.708079,
+    "seen": 1793624239.824803,
+    "ast_hash": "62927cb112a20395fa25f3642d5ba133",
+    "semantic_hash": "62927cb112a20395fa25f3642d5ba133"
+  },
+  ".claude/commands/sc/document.md": {
+    "mtime": 1786562810.5693328,
+    "seen": 1793624239.8248036,
+    "ast_hash": "39e9592f46baee0e0d7ae83a2aee1444",
+    "semantic_hash": "39e9592f46baee0e0d7ae83a2aee1444"
+  },
+  ".claude/commands/sc/estimate.md": {
+    "mtime": 1786562810.579899,
+    "seen": 1793624239.8248043,
+    "ast_hash": "906db4c66bef38839f9e5d5c57c05545",
+    "semantic_hash": "906db4c66bef38839f9e5d5c57c05545"
+  },
+  ".claude/commands/sc/explain.md": {
+    "mtime": 1786562810.5877314,
+    "seen": 1793624239.824805,
+    "ast_hash": "b4729c0b3dc696013acd9d29556b4ae0",
+    "semantic_hash": "b4729c0b3dc696013acd9d29556b4ae0"
+  },
+  ".claude/commands/sc/implement.md": {
+    "mtime": 1787222207.9498441,
+    "seen": 1793624239.8248096,
+    "ast_hash": "9fb84f1e9bbc2b9975427813bbd357f6",
+    "semantic_hash": "9fb84f1e9bbc2b9975427813bbd357f6"
+  },
+  ".claude/commands/sc/improve.md": {
+    "mtime": 1785351231.736318,
+    "seen": 1793624239.8248103,
+    "ast_hash": "2250ec8c95c3b7730c332a08c2e3aa6c",
+    "semantic_hash": "2250ec8c95c3b7730c332a08c2e3aa6c"
+  },
+  ".claude/commands/sc/troubleshoot.md": {
+    "mtime": 1785351231.7413213,
+    "seen": 1793624239.824811,
+    "ast_hash": "a6a2d13f4baafe2ddc2988f99e30baa4",
+    "semantic_hash": "a6a2d13f4baafe2ddc2988f99e30baa4"
+  },
+  ".claude/docs/prd-workflow-guide.md": {
+    "mtime": 1787229239.8832233,
+    "seen": 1793624239.8248117,
+    "ast_hash": "e96c9876a38feb30be9cfa8c3e0381bf",
+    "semantic_hash": "e96c9876a38feb30be9cfa8c3e0381bf"
+  },
+  ".claude/docs/team-guide.md": {
+    "mtime": 1787230938.8780622,
+    "seen": 1793624239.8248122,
+    "ast_hash": "b1867c0b0cc503c2cb3f5ff9fbfcd065",
+    "semantic_hash": "b1867c0b0cc503c2cb3f5ff9fbfcd065"
+  },
+  ".claude/plans/lovely-kindling-conway.md": {
+    "mtime": 1781777233.725623,
+    "seen": 1793624239.8248131,
+    "ast_hash": "40484e723ff4c4caa797a6670cd12134",
+    "semantic_hash": "40484e723ff4c4caa797a6670cd12134"
+  },
+  ".claude/plans/steady-splashing-scott.md": {
+    "mtime": 1783020948.2245126,
+    "seen": 1793624239.8248138,
+    "ast_hash": "b2142c1481af393f29afbf465d19c1e2",
+    "semantic_hash": "b2142c1481af393f29afbf465d19c1e2"
+  },
+  ".claude/retro-log.md": {
+    "mtime": 1791096400.4520614,
+    "seen": 1793624239.8248146,
+    "ast_hash": "741cd4688f9e095df8f9ab0553004292",
+    "semantic_hash": "741cd4688f9e095df8f9ab0553004292"
+  },
+  ".claude/reviews/adhoc-conflict-staging-diff-fixes.md": {
+    "mtime": 1793617676.3852227,
+    "seen": 1793624239.824815,
+    "ast_hash": "1b863ee7b6c81c0e6dc4747d06f7c93f",
+    "semantic_hash": "1b863ee7b6c81c0e6dc4747d06f7c93f"
+  },
+  ".claude/reviews/adhoc-diff-conflict-blame-ui-fixes.md": {
+    "mtime": 1790583919.7615018,
+    "seen": 1793624239.824816,
+    "ast_hash": "622ddae252a644041c6c7a695ad171e6",
+    "semantic_hash": "622ddae252a644041c6c7a695ad171e6"
+  },
+  ".claude/reviews/adhoc-fix-dialog-button-clipping.md": {
+    "mtime": 1790594394.8490565,
+    "seen": 1793624239.8248167,
+    "ast_hash": "edb055367e14b0b0175f7b02939dba6c",
+    "semantic_hash": "edb055367e14b0b0175f7b02939dba6c"
+  },
+  ".claude/reviews/adhoc-lfs-clean-filter-staging.md": {
+    "mtime": 1791096385.9072552,
+    "seen": 1793624239.8248174,
+    "ast_hash": "97da85cf381601214b22d2e1bebc4b32",
+    "semantic_hash": "97da85cf381601214b22d2e1bebc4b32"
+  },
+  ".claude/reviews/fix-bitbucket-oauth-bearer-header.md": {
+    "mtime": 1788377210.1712482,
+    "seen": 1793624239.824818,
+    "ast_hash": "8e6d6266e58bbdfc82b5ea82556a5eca",
+    "semantic_hash": "8e6d6266e58bbdfc82b5ea82556a5eca"
+  },
+  ".claude/reviews/fix-bitbucket-oauth-credential-retry.md": {
+    "mtime": 1788275771.551478,
+    "seen": 1793624239.8248186,
+    "ast_hash": "4d4a67f7565ab281a7654ab69b1d0959",
+    "semantic_hash": "4d4a67f7565ab281a7654ab69b1d0959"
+  },
+  ".claude/reviews/main.md": {
+    "mtime": 1790685623.180552,
+    "seen": 1793624239.8248196,
+    "ast_hash": "a7caf8d2069da3ecea5f6d8e9c0e6d5f",
+    "semantic_hash": "a7caf8d2069da3ecea5f6d8e9c0e6d5f"
+  },
+  ".claude/reviews/merge-conflict-commit-message.md": {
+    "mtime": 1787593902.0170898,
+    "seen": 1793624239.8248203,
+    "ast_hash": "91f8691894fe83e42da70467f864afb0",
+    "semantic_hash": "91f8691894fe83e42da70467f864afb0"
+  },
+  ".claude/reviews/since-PickleGit_1.0.23.md": {
+    "mtime": 1790685012.212559,
+    "seen": 1793624239.8248208,
+    "ast_hash": "0e989f0d1cc28fa18b91d876b8eb5610",
+    "semantic_hash": "0e989f0d1cc28fa18b91d876b8eb5610"
+  },
+  ".claude/rules/architecture.md": {
+    "mtime": 1787231521.0595236,
+    "seen": 1793624239.8248215,
+    "ast_hash": "475676cc3a8c925769f618dbf4f47d9f",
+    "semantic_hash": "475676cc3a8c925769f618dbf4f47d9f"
+  },
+  ".claude/rules/code-style.md": {
+    "mtime": 1787228558.4446573,
+    "seen": 1793624239.824822,
+    "ast_hash": "50705cb9d3e2ea2240dd0a3364bee5e0",
+    "semantic_hash": "50705cb9d3e2ea2240dd0a3364bee5e0"
+  },
+  ".claude/rules/commit-format.md": {
+    "mtime": 1787228591.6828527,
+    "seen": 1793624239.824823,
+    "ast_hash": "f829c023aa46a9d0eb1dc23c00448a22",
+    "semantic_hash": "f829c023aa46a9d0eb1dc23c00448a22"
+  },
+  ".claude/rules/plans/bug.md": {
+    "mtime": 1787222270.5608525,
+    "seen": 1793624239.8248236,
+    "ast_hash": "baa8cfefeb3300d4cc913ad498c60091",
+    "semantic_hash": "baa8cfefeb3300d4cc913ad498c60091"
+  },
+  ".claude/rules/plans/feature.md": {
+    "mtime": 1787222270.5737846,
+    "seen": 1793624239.8248243,
+    "ast_hash": "e3c07da26bf7a7249ec0fd86c3f5b000",
+    "semantic_hash": "e3c07da26bf7a7249ec0fd86c3f5b000"
+  },
+  ".claude/rules/plans/investigation.md": {
+    "mtime": 1787222270.5822515,
+    "seen": 1793624239.8248248,
+    "ast_hash": "a5b9d0b0852656dc833006ce3d352b9a",
+    "semantic_hash": "a5b9d0b0852656dc833006ce3d352b9a"
+  },
+  ".claude/rules/plans/refactor.md": {
+    "mtime": 1787222270.5914695,
+    "seen": 1793624239.8248255,
+    "ast_hash": "da8e9d5b62403ccfb20cf7afc668ceb5",
+    "semantic_hash": "da8e9d5b62403ccfb20cf7afc668ceb5"
+  },
+  ".claude/rules/plans/script.md": {
+    "mtime": 1787222270.6004772,
+    "seen": 1793624239.8248265,
+    "ast_hash": "7b1438865e9150f6481e41392d9b43dc",
+    "semantic_hash": "7b1438865e9150f6481e41392d9b43dc"
+  },
+  ".claude/rules/security.md": {
+    "mtime": 1787228624.5637262,
+    "seen": 1793624239.824827,
+    "ast_hash": "08f3d22491ed4d6a30586e16a3e53738",
+    "semantic_hash": "08f3d22491ed4d6a30586e16a3e53738"
+  },
+  ".claude/rules/workflow.md": {
+    "mtime": 1787228672.0513117,
+    "seen": 1793624239.8248277,
+    "ast_hash": "0aa48aa988ed0ab4f4b88663f9ead0aa",
+    "semantic_hash": "0aa48aa988ed0ab4f4b88663f9ead0aa"
+  },
+  ".claude/skills/close-the-gaps/SKILL.md": {
+    "mtime": 1787222317.8273094,
+    "seen": 1793624239.8248284,
+    "ast_hash": "f0f5360e3e32b41aa60aa014b4bda1be",
+    "semantic_hash": "f0f5360e3e32b41aa60aa014b4bda1be"
+  },
+  ".claude/skills/codebase-design/DEEPENING.md": {
+    "mtime": 1786562811.1078975,
+    "seen": 1793624239.824829,
+    "ast_hash": "0622bf734fe6ba6958f26c57ead7557d",
+    "semantic_hash": "0622bf734fe6ba6958f26c57ead7557d"
+  },
+  ".claude/skills/codebase-design/DESIGN-IT-TWICE.md": {
+    "mtime": 1786562811.1149406,
+    "seen": 1793624239.82483,
+    "ast_hash": "eb3285023df906edc324cf0aee04d972",
+    "semantic_hash": "eb3285023df906edc324cf0aee04d972"
+  },
+  ".claude/skills/codebase-design/SKILL.md": {
+    "mtime": 1786562811.1240256,
+    "seen": 1793624239.8248308,
+    "ast_hash": "1a695eb7507563b370230939df4a7ad7",
+    "semantic_hash": "1a695eb7507563b370230939df4a7ad7"
+  },
+  ".claude/skills/diagnose/SKILL.md": {
+    "mtime": 1785351232.0641396,
+    "seen": 1793624239.8248312,
+    "ast_hash": "4bcd9cce196b0aa15fd65efe621f9466",
+    "semantic_hash": "4bcd9cce196b0aa15fd65efe621f9466"
+  },
+  ".claude/skills/domain-modeling/ADR-FORMAT.md": {
+    "mtime": 1786562811.1366699,
+    "seen": 1793624239.824832,
+    "ast_hash": "3c49999a3715a7b65fe8521d4bf9e188",
+    "semantic_hash": "3c49999a3715a7b65fe8521d4bf9e188"
+  },
+  ".claude/skills/domain-modeling/CONTEXT-FORMAT.md": {
+    "mtime": 1786562811.1471062,
+    "seen": 1793624239.8248324,
+    "ast_hash": "469f1fb6e9e7e94ecb41dc64b6d09032",
+    "semantic_hash": "469f1fb6e9e7e94ecb41dc64b6d09032"
+  },
+  ".claude/skills/domain-modeling/SKILL.md": {
+    "mtime": 1786562811.1534095,
+    "seen": 1793624239.8248334,
+    "ast_hash": "a08da26cbbf91264f078a48c680f2c71",
+    "semantic_hash": "a08da26cbbf91264f078a48c680f2c71"
+  },
+  ".claude/skills/grill-with-docs/SKILL.md": {
+    "mtime": 1786562811.1640015,
+    "seen": 1793624239.824834,
+    "ast_hash": "9ad65edf3ca9853a0647de78b7fa5e40",
+    "semantic_hash": "9ad65edf3ca9853a0647de78b7fa5e40"
+  },
+  ".claude/skills/grilling/SKILL.md": {
+    "mtime": 1786562811.1709268,
+    "seen": 1793624239.8248348,
+    "ast_hash": "4f237f2c7ce1924009c4e0539146be67",
+    "semantic_hash": "4f237f2c7ce1924009c4e0539146be67"
+  },
+  ".claude/skills/improve-codebase-architecture/HTML-REPORT.md": {
+    "mtime": 1786562811.178203,
+    "seen": 1793624239.8248353,
+    "ast_hash": "8cd65e64adb606ffdb6e50d57da7c164",
+    "semantic_hash": "8cd65e64adb606ffdb6e50d57da7c164"
+  },
+  ".claude/skills/improve-codebase-architecture/SKILL.md": {
+    "mtime": 1786562811.1874197,
+    "seen": 1793624239.824836,
+    "ast_hash": "c19f4f8809c707fe91c92d79b19f7fa8",
+    "semantic_hash": "c19f4f8809c707fe91c92d79b19f7fa8"
+  },
+  ".claude/skills/to-issues/SKILL.md": {
+    "mtime": 1787229180.662419,
+    "seen": 1793624239.824837,
+    "ast_hash": "05c94b1cb255edc255e02854745f3ebb",
+    "semantic_hash": "05c94b1cb255edc255e02854745f3ebb"
+  },
+  ".claude/skills/to-prd/SKILL.md": {
+    "mtime": 1785351232.1662443,
+    "seen": 1793624239.8248374,
+    "ast_hash": "12d0737b03d0511a5d5ad72c4dbad527",
+    "semantic_hash": "12d0737b03d0511a5d5ad72c4dbad527"
+  },
+  ".claude/skills/writing-great-skills/GLOSSARY.md": {
+    "mtime": 1786562811.261888,
+    "seen": 1793624239.8248382,
+    "ast_hash": "2e493247ed9eca5d556fdf1eb8bbcc82",
+    "semantic_hash": "2e493247ed9eca5d556fdf1eb8bbcc82"
+  },
+  ".claude/skills/writing-great-skills/SKILL.md": {
+    "mtime": 1786562811.2716177,
+    "seen": 1793624239.8248389,
+    "ast_hash": "fb776c0cccf6d435c664880652e5b972",
+    "semantic_hash": "fb776c0cccf6d435c664880652e5b972"
+  },
+  ".claude/skills/zoom-out/SKILL.md": {
+    "mtime": 1785351232.1912427,
+    "seen": 1793624239.8248394,
+    "ast_hash": "d7610fc22629360bdc078e0e5c255d0f",
+    "semantic_hash": "d7610fc22629360bdc078e0e5c255d0f"
+  },
+  ".github/copilot-instructions.md": {
+    "mtime": 1784646660.721148,
+    "seen": 1793624239.8248403,
+    "ast_hash": "1953f5a6e590a211329c8cff6f0fb3f3",
+    "semantic_hash": "1953f5a6e590a211329c8cff6f0fb3f3"
+  },
+  ".plans/adhoc-bitbucket-oauth-bearer-header.md": {
+    "mtime": 1788377210.179194,
+    "seen": 1793624239.824841,
+    "ast_hash": "de7ce32d255da95908e7bbb5327beda3",
+    "semantic_hash": "de7ce32d255da95908e7bbb5327beda3"
+  },
+  ".plans/adhoc-bitbucket-oauth-bearer-header.report.md": {
+    "mtime": 1788377210.1852045,
+    "seen": 1793624239.8248417,
+    "ast_hash": "d7fc8d18cfd7e9f31a9719a462c8123b",
+    "semantic_hash": "d7fc8d18cfd7e9f31a9719a462c8123b"
+  },
+  ".plans/adhoc-bitbucket-oauth-credential-retry.md": {
+    "mtime": 1788275771.562366,
+    "seen": 1793624239.8248422,
+    "ast_hash": "2a410730be48e586db4db2726a03b7d9",
+    "semantic_hash": "2a410730be48e586db4db2726a03b7d9"
+  },
+  ".plans/adhoc-bitbucket-oauth-credential-retry.report.md": {
+    "mtime": 1788275771.579297,
+    "seen": 1793624239.8248432,
+    "ast_hash": "0521071a6629f069d81753b7ce8165ee",
+    "semantic_hash": "0521071a6629f069d81753b7ce8165ee"
+  },
+  ".plans/adhoc-conflict-manual-edit-find-bar.md": {
+    "mtime": 1790600696.4512107,
+    "seen": 1793624239.824844,
+    "ast_hash": "070e3a0ec1449f8300762a56ce741d83",
+    "semantic_hash": "070e3a0ec1449f8300762a56ce741d83"
+  },
+  ".plans/adhoc-conflict-manual-edit-find-bar.report.md": {
+    "mtime": 1790600215.9181736,
+    "seen": 1793624239.8248448,
+    "ast_hash": "cdda24802e83da6355c03c167b4b2c3d",
+    "semantic_hash": "cdda24802e83da6355c03c167b4b2c3d"
+  },
+  ".plans/adhoc-conflict-staging-diff-fixes.md": {
+    "mtime": 1793618727.7296267,
+    "seen": 1793624239.8248453,
+    "ast_hash": "bd772dc80af4dcb744021be338c991f9",
+    "semantic_hash": "bd772dc80af4dcb744021be338c991f9"
+  },
+  ".plans/adhoc-conflict-staging-diff-fixes.report.md": {
+    "mtime": 1793618727.8749723,
+    "seen": 1793624239.824846,
+    "ast_hash": "a664d0a26cd1d828c024b6ec621b87b4",
+    "semantic_hash": "a664d0a26cd1d828c024b6ec621b87b4"
+  },
+  ".plans/adhoc-dialog-button-clipping.md": {
+    "mtime": 1790594394.8551145,
+    "seen": 1793624239.8248465,
+    "ast_hash": "e66a03de7f32b877a3847adb940206b1",
+    "semantic_hash": "e66a03de7f32b877a3847adb940206b1"
+  },
+  ".plans/adhoc-dialog-button-clipping.report.md": {
+    "mtime": 1790594394.8603175,
+    "seen": 1793624239.8248475,
+    "ast_hash": "1d2661434031967ad648b44680f59e72",
+    "semantic_hash": "1d2661434031967ad648b44680f59e72"
+  },
+  ".plans/adhoc-diff-conflict-blame-ui-fixes.md": {
+    "mtime": 1790584867.566907,
+    "seen": 1793624239.8248482,
+    "ast_hash": "7717d77942ba9ed8807112449cba85dc",
+    "semantic_hash": "7717d77942ba9ed8807112449cba85dc"
+  },
+  ".plans/adhoc-diff-conflict-blame-ui-fixes.report.md": {
+    "mtime": 1790582869.414774,
+    "seen": 1793624239.824849,
+    "ast_hash": "b5fabf9c3b2bf9753ba4ed922d78c345",
+    "semantic_hash": "b5fabf9c3b2bf9753ba4ed922d78c345"
+  },
+  ".plans/adhoc-icon-font-fallback.md": {
+    "mtime": 1787593942.0883403,
+    "seen": 1793624239.8248494,
+    "ast_hash": "9d9511b6f093dcfeea5dce3739f7455c",
+    "semantic_hash": "9d9511b6f093dcfeea5dce3739f7455c"
+  },
+  ".plans/adhoc-icon-font-fallback.report.md": {
+    "mtime": 1787593902.0368607,
+    "seen": 1793624239.82485,
+    "ast_hash": "bcdd07dc44fa81b3e7431fca0ae128d3",
+    "semantic_hash": "bcdd07dc44fa81b3e7431fca0ae128d3"
+  },
+  ".plans/adhoc-lfs-clean-filter-staging.md": {
+    "mtime": 1791096385.9132652,
+    "seen": 1793624239.824851,
+    "ast_hash": "ee0ef10ecb10599b99ef87e4d5c58e51",
+    "semantic_hash": "ee0ef10ecb10599b99ef87e4d5c58e51"
+  },
+  ".plans/adhoc-lfs-clean-filter-staging.report.md": {
+    "mtime": 1791096385.9180102,
+    "seen": 1793624239.8248518,
+    "ast_hash": "4d17c50de8a43d4f206775b3ae536e22",
+    "semantic_hash": "4d17c50de8a43d4f206775b3ae536e22"
+  },
+  ".plans/adhoc-merge-conflict-commit-message.md": {
+    "mtime": 1787593910.6206794,
+    "seen": 1793624239.8248522,
+    "ast_hash": "c797071a7235cb83534258eb6e6bea66",
+    "semantic_hash": "c797071a7235cb83534258eb6e6bea66"
+  },
+  ".plans/adhoc-merge-conflict-commit-message.report.md": {
+    "mtime": 1787593910.6326687,
+    "seen": 1793624239.824853,
+    "ast_hash": "6de00a7ddd36c41858a857ed2e1835a8",
+    "semantic_hash": "6de00a7ddd36c41858a857ed2e1835a8"
+  },
+  ".plans/adhoc-primary-remote-selection.md": {
+    "mtime": 1791392447.995404,
+    "seen": 1793624239.8248537,
+    "ast_hash": "3184a2565a4a045989ff7292645e8d28",
+    "semantic_hash": "3184a2565a4a045989ff7292645e8d28"
+  },
+  "CLAUDE.md": {
+    "mtime": 1787231526.9849064,
+    "seen": 1793624239.8248546,
+    "ast_hash": "b6136d9ed79e05fea0a634a00e049a17",
+    "semantic_hash": "b6136d9ed79e05fea0a634a00e049a17"
+  },
+  "Installer/README.md": {
+    "mtime": 1784646660.7335632,
+    "seen": 1793624239.824855,
+    "ast_hash": "aee672d62892fd8258c4d0956127858d",
+    "semantic_hash": "aee672d62892fd8258c4d0956127858d"
+  },
+  "PickleGit/CLAUDE.md": {
+    "mtime": 1793618314.4145906,
+    "seen": 1793624239.8248558,
+    "ast_hash": "271b5714e1ad3c861ea3589b73088b7c",
+    "semantic_hash": "271b5714e1ad3c861ea3589b73088b7c"
+  },
+  "PickleGit/Resources/Help/01-getting-started.md": {
+    "mtime": 1784646660.891493,
+    "seen": 1793624239.8248565,
+    "ast_hash": "c119144e3dab832e0affe5ce0c7fd845",
+    "semantic_hash": "c119144e3dab832e0affe5ce0c7fd845"
+  },
+  "PickleGit/Resources/Help/02-commit-graph.md": {
+    "mtime": 1784646660.898095,
+    "seen": 1793624239.824857,
+    "ast_hash": "544f78e6cd78328cf7e9575ee8760707",
+    "semantic_hash": "544f78e6cd78328cf7e9575ee8760707"
+  },
+  "PickleGit/Resources/Help/03-staging-and-committing.md": {
+    "mtime": 1784646660.90363,
+    "seen": 1793624239.824858,
+    "ast_hash": "3c248600124a8ddf05b470d2b3c43982",
+    "semantic_hash": "3c248600124a8ddf05b470d2b3c43982"
+  },
+  "PickleGit/Resources/Help/04-diff-view.md": {
+    "mtime": 1784646660.9096055,
+    "seen": 1793624239.8248587,
+    "ast_hash": "6a9bf7ef88284bff37ca42d700ee0261",
+    "semantic_hash": "6a9bf7ef88284bff37ca42d700ee0261"
+  },
+  "PickleGit/Resources/Help/05-branches-and-stashes.md": {
+    "mtime": 1784646660.9146013,
+    "seen": 1793624239.8248594,
+    "ast_hash": "cd0d14ab77303f803b6faf5ddb3d13c3",
+    "semantic_hash": "cd0d14ab77303f803b6faf5ddb3d13c3"
+  },
+  "PickleGit/Resources/Help/06-syncing.md": {
+    "mtime": 1784646660.9220846,
+    "seen": 1793624239.8248599,
+    "ast_hash": "97e7047858d706e22a1f87d6fd46dec6",
+    "semantic_hash": "97e7047858d706e22a1f87d6fd46dec6"
+  },
+  "PickleGit/Resources/Help/07-pull-requests.md": {
+    "mtime": 1784646660.9266267,
+    "seen": 1793624239.8248606,
+    "ast_hash": "b6a4d5f963943fc8e797ccc4cac7ee5e",
+    "semantic_hash": "b6a4d5f963943fc8e797ccc4cac7ee5e"
+  },
+  "PickleGit/Resources/Help/08-history-tools.md": {
+    "mtime": 1784646660.932639,
+    "seen": 1793624239.8248615,
+    "ast_hash": "fcd9cb82fa75b49f37689032c2e2e018",
+    "semantic_hash": "fcd9cb82fa75b49f37689032c2e2e018"
+  },
+  "PickleGit/Resources/Help/09-settings.md": {
+    "mtime": 1784646660.938684,
+    "seen": 1793624239.824862,
+    "ast_hash": "2fed0dfe73758cc35fc15e81a335f29e",
+    "semantic_hash": "2fed0dfe73758cc35fc15e81a335f29e"
+  },
+  "PickleGit/Resources/Help/10-keyboard-shortcuts.md": {
+    "mtime": 1784646660.9436812,
+    "seen": 1793624239.8248627,
+    "ast_hash": "782b9d096bdf0b158a68c9483bbc2ece",
+    "semantic_hash": "782b9d096bdf0b158a68c9483bbc2ece"
+  },
+  "PickleGit/Resources/Help/11-context-menus.md": {
+    "mtime": 1784646660.9496863,
+    "seen": 1793624239.8248634,
+    "ast_hash": "b41855e3c2e7b45daee7405d990c9ff5",
+    "semantic_hash": "b41855e3c2e7b45daee7405d990c9ff5"
+  },
+  "PickleGit/docs/audit-and-close.html": {
+    "mtime": 1784646661.7750828,
+    "seen": 1793624239.824864,
+    "ast_hash": "1d16fd5e7ded4757fd59e526eda873a0",
+    "semantic_hash": "1d16fd5e7ded4757fd59e526eda873a0"
+  },
+  "PickleGit/docs/changelog.html": {
+    "mtime": 1790688672.899857,
+    "seen": 1793624239.8248649,
+    "ast_hash": "9f3022f2f40aae9a6b4e1a64c6416638",
+    "semantic_hash": "9f3022f2f40aae9a6b4e1a64c6416638"
+  },
+  "PickleGit/docs/closing-the-list.html": {
+    "mtime": 1784646661.8140297,
+    "seen": 1793624239.8248656,
+    "ast_hash": "32c9733b2ca0633b4be8fc3b1e4f58e5",
+    "semantic_hash": "32c9733b2ca0633b4be8fc3b1e4f58e5"
+  },
+  "PickleGit/docs/provider-native-prs.html": {
+    "mtime": 1784646661.829069,
+    "seen": 1793624239.8248663,
+    "ast_hash": "3af47c80fc8b4e477e05ee81cf5fa208",
+    "semantic_hash": "3af47c80fc8b4e477e05ee81cf5fa208"
+  },
+  "PickleGit/docs/release-notes-v1.0.24.md": {
+    "mtime": 1790687873.393139,
+    "seen": 1793624239.8248668,
+    "ast_hash": "2c999a3d3c19a8ad58474e3c3a83b1dc",
+    "semantic_hash": "2c999a3d3c19a8ad58474e3c3a83b1dc"
+  },
+  "PickleGit/docs/stability-and-polish-pass.html": {
+    "mtime": 1790687847.0118184,
+    "seen": 1793624239.8248675,
+    "ast_hash": "5e464e12c15122d63a5e04d5259a2c51",
+    "semantic_hash": "5e464e12c15122d63a5e04d5259a2c51"
+  },
+  "PickleGit/docs/staging-and-picker-polish.html": {
+    "mtime": 1784646661.8456507,
+    "seen": 1793624239.8248684,
+    "ast_hash": "d4b499ee5d0deb71b0f2e1cb0b19c610",
+    "semantic_hash": "d4b499ee5d0deb71b0f2e1cb0b19c610"
+  },
+  "PickleGit/plans/lovely-kindling-conway.md": {
+    "mtime": 1784646661.8701942,
+    "seen": 1793624239.8248692,
+    "ast_hash": "8c01476fe3a001d734174a23c87b7b82",
+    "semantic_hash": "8c01476fe3a001d734174a23c87b7b82"
+  },
+  "PickleGit/plans/quiet-background-refresh.md": {
+    "mtime": 1787039611.319514,
+    "seen": 1793624239.8248696,
+    "ast_hash": "4c2ecdd1eabbe7cc7f4f35388f38a6db",
+    "semantic_hash": "4c2ecdd1eabbe7cc7f4f35388f38a6db"
+  },
+  "PickleGit/plans/steady-splashing-scott.md": {
+    "mtime": 1784646661.8843417,
+    "seen": 1793624239.8248703,
+    "ast_hash": "d97e79fa90266f11b022cc741ce018a8",
+    "semantic_hash": "d97e79fa90266f11b022cc741ce018a8"
+  },
+  "ROADMAP.md": {
+    "mtime": 1784646661.9015305,
+    "seen": 1793624239.824871,
+    "ast_hash": "98119279c1f66af2fdb2bb1a08f673c5",
+    "semantic_hash": "98119279c1f66af2fdb2bb1a08f673c5"
+  },
+  "docs/adr/0001-hybrid-git-backend.md": {
+    "mtime": 1787231308.9945896,
+    "seen": 1793624239.8248718,
+    "ast_hash": "199f2c554f7b9c2ebcaeeb8fca1bd3e3",
+    "semantic_hash": "199f2c554f7b9c2ebcaeeb8fca1bd3e3"
+  },
+  "docs/adr/0002-no-di-container.md": {
+    "mtime": 1787231318.482339,
+    "seen": 1793624239.8248725,
+    "ast_hash": "4f53275cbb6b165281be17245bac5389",
+    "semantic_hash": "4f53275cbb6b165281be17245bac5389"
+  },
+  "docs/adr/0003-no-third-party-controls.md": {
+    "mtime": 1787231541.3606467,
+    "seen": 1793624239.8248732,
+    "ast_hash": "b13b39ad8f064cd31640c324dbcf706d",
+    "semantic_hash": "b13b39ad8f064cd31640c324dbcf706d"
+  },
+  "docs/adr/0004-thumb-based-pane-resizing.md": {
+    "mtime": 1787231339.695714,
+    "seen": 1793624239.824874,
+    "ast_hash": "0d40a9512cf77504609b1bf57a390987",
+    "semantic_hash": "0d40a9512cf77504609b1bf57a390987"
+  },
+  "PickleGit/Resources/Help/Screenshots/commit-graph.png": {
+    "mtime": 1784646660.957839,
+    "seen": 1793624239.8248744,
+    "ast_hash": "533303ca4602b65a9d3c2d0988982e8d",
+    "semantic_hash": "533303ca4602b65a9d3c2d0988982e8d"
+  },
+  "PickleGit/Resources/Help/Screenshots/create-branch-dialog.png": {
+    "mtime": 1784646660.9631956,
+    "seen": 1793624239.8248754,
+    "ast_hash": "3cbb86d5fea732e21b2c4881484e9073",
+    "semantic_hash": "3cbb86d5fea732e21b2c4881484e9073"
+  },
+  "PickleGit/Resources/Help/Screenshots/diff-view.png": {
+    "mtime": 1784646660.97169,
+    "seen": 1793624239.824876,
+    "ast_hash": "172c752155b1f3d93dff33e0c31ddbda",
+    "semantic_hash": "172c752155b1f3d93dff33e0c31ddbda"
+  },
+  "PickleGit/Resources/Help/Screenshots/main-window-overview.png": {
+    "mtime": 1784646660.994875,
+    "seen": 1793624239.8248768,
+    "ast_hash": "7da12deb856cd273f1768cdbaf28f5a0",
+    "semantic_hash": "7da12deb856cd273f1768cdbaf28f5a0"
+  },
+  "PickleGit/Resources/Help/Screenshots/settings-window.png": {
+    "mtime": 1784646661.002684,
+    "seen": 1793624239.8248773,
+    "ast_hash": "08a787a35d9e0b1018268ad7eeb917bf",
+    "semantic_hash": "08a787a35d9e0b1018268ad7eeb917bf"
+  },
+  "PickleGit/Resources/Help/Screenshots/staging-commit-panel.png": {
+    "mtime": 1784646661.0124693,
+    "seen": 1793624239.824878,
+    "ast_hash": "11ee5cfade755426300d5a88e6e7b0e5",
+    "semantic_hash": "11ee5cfade755426300d5a88e6e7b0e5"
+  }
+}

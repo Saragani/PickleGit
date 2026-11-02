@@ -365,3 +365,14 @@ FodyWeavers.xsd
 
 # Inno Setup installer output
 Installer/Output/
+
+# Graphify local state
+graphify-out/.graph.html.stale
+graphify-out/.graphify_detect.json
+graphify-out/.graphify_labels.json.sig
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/cache/
+
+# Graphify historical snapshots
+graphify-out/20??-??-??/
