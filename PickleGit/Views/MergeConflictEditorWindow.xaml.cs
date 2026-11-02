@@ -278,6 +278,7 @@ namespace PickleGit.Views
                 // item is a boxed 1-based line number here (see FindMatchesInResult) — there's no
                 // ListView row to ScrollIntoView, so move the AvalonEdit caret to the match itself
                 // and let BringCaretToView scroll both directions at once.
+                if (_sessionVm?.ResultFind.IsOpen != true) return;
                 if (!(item is int lineNumber)) return;
                 var doc = ConflictResultEditBox.Document;
                 if (lineNumber < 1 || lineNumber > doc.LineCount) return;
@@ -853,6 +854,21 @@ namespace PickleGit.Views
 
         private void ConflictResultChangeMap_JumpRequested(object sender, double fraction)
         {
+            if (_currentFileVm?.IsManuallyEdited == true)
+            {
+                // ConflictResultListView is collapsed in manual-edit mode; scroll the AvalonEdit pane
+                // instead. Markers come from ResultItems (pre-edit rows), so map by fraction of the
+                // document — positions can drift once edits change the line count.
+                var doc = ConflictResultEditBox.Document;
+                if (doc == null || doc.LineCount == 0) return;
+                int lineNumber = (int)(fraction * doc.LineCount) + 1;
+                if (lineNumber < 1) lineNumber = 1;
+                if (lineNumber > doc.LineCount) lineNumber = doc.LineCount;
+                ConflictResultEditBox.TextArea.Caret.Offset = doc.GetLineByNumber(lineNumber).Offset;
+                ConflictResultEditBox.ScrollToLine(lineNumber);
+                return;
+            }
+
             var lv = ConflictResultListView;
             if (lv.Items.Count == 0) return;
             int idx = (int)(fraction * lv.Items.Count);

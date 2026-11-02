@@ -72,6 +72,7 @@ namespace PickleGit.ViewModels
             FlatDiffItems = Array.Empty<DiffItem>();
             SideBySideItems = Array.Empty<SideBySideItem>();
             _currentDiffFile = null;
+            SetCurrentDecodedDiff(null);
             IsDiffFromStagedFile = false;
             IsLfsPointerDiff = false;
             IsBinaryDiff = false;

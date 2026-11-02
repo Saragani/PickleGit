@@ -94,21 +94,111 @@ namespace PickleGit.ViewModels
 
         // ── Conflict resolution ───────────────────────────────────────────────
 
-        private async Task ResolveConflictSideAsync(FileChange fc, string side)
+        /// <summary>The conflicted files a context-menu resolve command applies to: every selected
+        /// Unstaged file when the right-clicked row is part of a multi-selection (the same rule
+        /// stage/unstage/discard use, see StagingService.ResolveTargets), otherwise just the clicked
+        /// row — filtered to conflicted files, since a selection can mix in ordinary changes.</summary>
+        private List<FileChange> ConflictTargets(object param) =>
+            StagingService.ResolveTargets(_selectedWorkingFiles, param)
+                .Where(f => f.Kind == FileChangeKind.Conflicted)
+                .ToList();
+
+        /// <summary>Quoted path lists for git, split by GitService.ChunkPathsByLength so each command
+        /// line stays under Windows' 32,767-character CreateProcess limit (a whole folder can exceed it).</summary>
+        private static IEnumerable<string> QuotedPathChunks(IEnumerable<FileChange> files) =>
+            GitService.ChunkPathsByLength(files.Select(f => f.Path).ToList())
+                .Select(batch => string.Join(" ", batch.Select(Services.Git.CliGitService.Quote)));
+
+        /// <summary>Asks before a resolve action that will touch more than one file: checkout --ours/
+        /// --theirs overwrites each working file (including any hand-resolution in progress) and `git add`
+        /// stages it, so a folder or multi-selection must not do that silently. A single file keeps the
+        /// old no-prompt behavior unless it still contains conflict markers (Mark Resolved only).</summary>
+        private async Task<bool> ConfirmResolveAsync(List<FileChange> files, string action, bool checkMarkers)
         {
-            var quoted = Services.Git.CliGitService.Quote(fc.Path);
-            if (!await RunCliAsync($"Resolving {fc.Path} ({side})…", $"checkout --{side} -- {quoted}", "Resolve conflict"))
-                return;
-            await RunCliAsync($"Staging {fc.Path}…", $"add -- {quoted}", "Resolve conflict");
-            await LoadWorkingDirAsync();
+            var withMarkers = new List<FileChange>();
+            if (checkMarkers)
+            {
+                var abs = files.ToDictionary(f => f, f => GetAbsoluteFilePath(f));
+                withMarkers = await Task.Run(() => files.Where(f => ContainsConflictMarkers(abs[f])).ToList());
+            }
+            if (files.Count <= 1 && withMarkers.Count == 0) return true;
+
+            const int maxListed = 10;
+            var sb = new StringBuilder();
+            sb.Append(files.Count == 1 ? $"{action} for {files[0].Path}?" : $"{action} for these {files.Count} files?");
+            if (files.Count > 1)
+            {
+                sb.Append("\n\n").Append(string.Join("\n", files.Take(maxListed).Select(f => f.Path)));
+                if (files.Count > maxListed) sb.Append($"\n…and {files.Count - maxListed} more");
+            }
+            if (withMarkers.Count > 0)
+                sb.Append(files.Count == 1
+                    ? "\n\nIt still contains conflict markers (<<<<<<<), which would be staged as-is."
+                    : $"\n\n{withMarkers.Count} of them still contain conflict markers (<<<<<<<), which would be staged as-is.");
+            return DialogService.Confirm(action, sb.ToString(), action, danger: true);
+        }
+
+        private static bool ContainsConflictMarkers(string absolutePath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(absolutePath) || !File.Exists(absolutePath)) return false;
+                if (new FileInfo(absolutePath).Length > 20L * 1024 * 1024) return false; // not worth scanning
+                foreach (var line in File.ReadLines(absolutePath))
+                    if (line.StartsWith("<<<<<<< ", StringComparison.Ordinal)) return true;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error($"Scanning {absolutePath} for conflict markers failed", ex);
+                return false;
+            }
+        }
+
+        private static string DescribeTargets(List<FileChange> files) =>
+            files.Count == 1 ? files[0].Path : $"{files.Count} files";
+
+        private async Task ResolveConflictSideAsync(object param, string side)
+        {
+            var targets = ConflictTargets(param);
+            if (targets.Count == 0) return;
+
+            // A delete/modify conflict where the chosen side has no version of the file can't be
+            // resolved with `checkout --ours/--theirs` (git errors out), and one such path would
+            // fail the whole batched command — leave those to the merge editor and say so.
+            var missing = targets.Where(f => side == "ours" ? f.OursMissing : f.TheirsMissing).ToList();
+            var resolvable = targets.Except(missing).ToList();
+
+            if (resolvable.Count > 0)
+            {
+                if (!await ConfirmResolveAsync(resolvable, side == "ours" ? "Take Ours" : "Take Theirs", checkMarkers: false))
+                    return;
+                var label = DescribeTargets(resolvable);
+                foreach (var quoted in QuotedPathChunks(resolvable))
+                {
+                    if (!await RunCliAsync($"Resolving {label} ({side})…", $"checkout --{side} -- {quoted}", "Resolve conflict")
+                        || !await RunCliAsync($"Staging {label}…", $"add -- {quoted}", "Resolve conflict"))
+                        break;
+                }
+                await LoadWorkingDirAsync();
+            }
+
+            if (missing.Count > 0)
+                DialogService.ShowError("Resolve conflict",
+                    $"These files have no \"{side}\" version (deleted on that side), so they were left unresolved. " +
+                    "Use the merge editor to keep or delete them:\n\n" + string.Join("\n", missing.Select(f => f.Path)));
         }
 
         private async Task MarkResolvedAsync(object param)
         {
-            if (!(param is FileChange fc)) return;
-            if (!await RunCliAsync($"Marking {fc.Path} resolved…",
-                    $"add -- {Services.Git.CliGitService.Quote(fc.Path)}", "Mark resolved"))
-                return;
+            var targets = ConflictTargets(param);
+            if (targets.Count == 0) return;
+            if (!await ConfirmResolveAsync(targets, "Mark Resolved", checkMarkers: true)) return;
+            foreach (var quoted in QuotedPathChunks(targets))
+            {
+                if (!await RunCliAsync($"Marking {DescribeTargets(targets)} resolved…", $"add -- {quoted}", "Mark resolved"))
+                    break;
+            }
             await LoadWorkingDirAsync();
         }
 
@@ -217,7 +307,28 @@ namespace PickleGit.ViewModels
             }
         }
 
+        /// <summary>True from the first click until the merge editor closes. OpenMergeEditor awaits
+        /// executor/CLI work before ShowDialog, so without this a double-click (or any click while
+        /// it loads) starts a second invocation and opens a second window.</summary>
+        private bool _openingMergeEditor;
+
         private async void OpenMergeEditor(object param)
+        {
+            if (_openingMergeEditor) return;
+            _openingMergeEditor = true;
+            CommandManager.InvalidateRequerySuggested();
+            try
+            {
+                await OpenMergeEditorCoreAsync(param);
+            }
+            finally
+            {
+                _openingMergeEditor = false;
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+
+        private async Task OpenMergeEditorCoreAsync(object param)
         {
             var clicked = param as FileChange;
             var conflicted = ConflictedFileChanges.ToList();
@@ -241,6 +352,30 @@ namespace PickleGit.ViewModels
             foreach (var (path, text) in ancestorResults)
                 if (text != null) ancestorTextByPath[path] = text;
 
+            // Raw index-stage bytes, so the editor can rebuild conflicts git wouldn't text-merge
+            // (NUL-containing files such as UTF-16 get no conflict markers — see ThreeWayMerge).
+            // GetConflictStageBytes returns null (reading nothing) for ordinary text conflicts, so only
+            // binary-to-git files are loaded at all.
+            var stagesByPath = await _git.Executor.RunAsync(() =>
+            {
+                var map = new Dictionary<string, ConflictStages>();
+                foreach (var f in contentConflicted)
+                {
+                    try
+                    {
+                        var stages = _git.GetConflictStageBytes(f.Path);
+                        if (stages != null) map[f.Path] = stages;
+                    }
+                    catch (Exception ex) { AppLog.Error($"Reading conflict stages failed for {f.Path}", ex); }
+                }
+                return map;
+            });
+            // Decode + three-way merge is pure CPU/file work (no repository access), so it runs on the
+            // thread pool rather than the git executor, keeping the UI responsive for large files.
+            var absByPath = stagesByPath.Keys.ToDictionary(p => p, p => GetAbsoluteFilePath(conflicted.First(f => f.Path == p)));
+            var rebuiltByPath = await Task.Run(() => stagesByPath.ToDictionary(
+                kv => kv.Key, kv => RebuiltConflict.Prepare(kv.Value, absByPath[kv.Key])));
+
             var vm = new MergeConflictSessionViewModel(
                 conflicted,
                 path => GetAbsoluteFilePath(conflicted.FirstOrDefault(f => f.Path == path)),
@@ -249,7 +384,7 @@ namespace PickleGit.ViewModels
                     await RunCliAsync($"Staging {path}…",
                         $"add -- {Services.Git.CliGitService.Quote(path)}", "Mark resolved");
                 },
-                oursBranch, oursCommit, ConflictInfo?.SourceDescription, theirsCommit, ancestorTextByPath);
+                oursBranch, oursCommit, ConflictInfo?.SourceDescription, theirsCommit, ancestorTextByPath, rebuiltByPath);
 
             if (clicked != null)
             {

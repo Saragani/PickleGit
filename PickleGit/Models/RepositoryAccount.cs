@@ -98,11 +98,29 @@ namespace PickleGit.Models
 
         /// <summary>Folder rows only: the folder's full relative path (e.g. "Views/Dialogs"),
         /// used as the expand/collapse state key — tracked independently per panel (Staged vs
-        /// Unstaged), see RepositoryViewModel's _expandedStagedTreeFolders/_expandedWorkingTreeFolders.</summary>
+        /// Unstaged), see RepositoryViewModel's _collapsedStagedTreeFolders/_collapsedWorkingTreeFolders.</summary>
         public string FullPath { get; set; }
 
-        /// <summary>Folder rows only: whether this folder is currently expanded — collapsed
-        /// (false) is the default, so a fresh tree starts fully collapsed.</summary>
+        /// <summary>Folder rows only: every file beneath this folder (all nesting levels), filled
+        /// regardless of whether the folder is expanded — a selected folder row stands for all of
+        /// these in stage/unstage/discard/resolve actions.</summary>
+        public System.Collections.Generic.List<FileChange> Files { get; set; }
+
+        /// <summary>Folder rows only: true when any file beneath it is a merge conflict — shows the
+        /// folder context menu's resolve actions.</summary>
+        public bool HasConflicts
+        {
+            get
+            {
+                if (Files == null) return false;
+                foreach (var f in Files)
+                    if (f.Kind == FileChangeKind.Conflicted) return true;
+                return false;
+            }
+        }
+
+        /// <summary>Folder rows only: whether this folder is currently expanded — expanded
+        /// (true) is the default, so a fresh tree starts fully expanded.</summary>
         public bool IsExpanded { get; set; }
     }
 
@@ -135,6 +153,21 @@ namespace PickleGit.Models
         public System.Collections.Generic.List<DiffHunk> Hunks { get; set; }
             = new System.Collections.Generic.List<DiffHunk>();
         public bool IsBinary { get; set; }
+
+        /// <summary>True when libgit2 reported this comparison as binary (NUL bytes — UTF-16 and
+        /// similar) and the hunks were instead computed in-app from decoded text (GitService.
+        /// DecodedTextFallback). Such hunks don't match the raw bytes, so `git apply`-based
+        /// hunk/line staging can't be used on them.</summary>
+        public bool IsDecodedText { get; set; }
+
+        /// <summary>Decoded old/new sides (encoding, BOM, line terminators) when <see cref="IsDecodedText"/>.</summary>
+        public PickleGit.Services.DecodedText OldText { get; set; }
+        public PickleGit.Services.DecodedText NewText { get; set; }
+
+        /// <summary>For a decoded-text diff: hunk/line stage/unstage/discard can run in-app
+        /// (DecodedStagingService) — both sides share an encoding + BOM and no .gitattributes
+        /// filter/encoding/eol conversion applies to the path.</summary>
+        public bool CanStagePartially { get; set; }
     }
 
     public class DiffHunk : System.ComponentModel.INotifyPropertyChanged

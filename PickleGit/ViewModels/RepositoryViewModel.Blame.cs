@@ -119,6 +119,7 @@ namespace PickleGit.ViewModels
         private void ClearWorkingDirDiffState()
         {
             _currentDiffFile = null;
+            SetCurrentDecodedDiff(null);
             IsDiffFromStagedFile = false;
             RaisePropertyChanged(nameof(IsWorkingDirDiff));
             RaisePropertyChanged(nameof(CanPartialStage));

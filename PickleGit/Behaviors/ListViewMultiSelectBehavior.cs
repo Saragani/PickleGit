@@ -103,10 +103,12 @@ namespace PickleGit.Behaviors
                         // highlighted. Re-check against the ListView's own current SelectedItems —
                         // the real-time source of truth — and only drop an item that's genuinely
                         // still deselected there.
+                        using (Suspend())
                         foreach (var item in removed)
                             if (!lv.SelectedItems.Contains(item)) SelectedItems.Remove(item);
                     }
                     finally { _updating = false; }
+                    ResyncIfViewModelAdjusted();
                 }), System.Windows.Threading.DispatcherPriority.Background);
                 return;
             }
@@ -114,11 +116,43 @@ namespace PickleGit.Behaviors
             _updating = true;
             try
             {
-                foreach (var item in e.RemovedItems) SelectedItems.Remove(item);
-                foreach (var item in e.AddedItems)
-                    if (!SelectedItems.Contains(item)) SelectedItems.Add(item);
+                // One selection gesture (Shift-range, Ctrl+A, a folder) can add thousands of items:
+                // apply them as a single notification when the collection supports it.
+                using (Suspend())
+                {
+                    foreach (var item in e.RemovedItems) SelectedItems.Remove(item);
+                    foreach (var item in e.AddedItems)
+                        if (!SelectedItems.Contains(item)) SelectedItems.Add(item);
+                }
             }
             finally { _updating = false; }
+            ResyncIfViewModelAdjusted();
+        }
+
+        /// <summary>The ViewModel may react to a selection change by adjusting the collection itself
+        /// (e.g. the staging tree replacing a selected folder with its remaining files when one of its
+        /// files is deselected). That happens while _updating is set, so OnViewModelCollectionChanged
+        /// ignored it — push the adjusted collection back to the ListView if the two now differ.</summary>
+        private void ResyncIfViewModelAdjusted()
+        {
+            var lv = AssociatedObject;
+            if (lv == null || SelectedItems == null) return;
+            bool same = lv.SelectedItems.Count == SelectedItems.Count;
+            if (same)
+                foreach (var item in SelectedItems)
+                    if (!lv.SelectedItems.Contains(item)) { same = false; break; }
+            if (!same) SyncListViewFromViewModel();
+        }
+
+        /// <summary>Pauses the bound collection's notifications for a batch (one Reset at the end),
+        /// when it supports that; a no-op scope otherwise.</summary>
+        private System.IDisposable Suspend() =>
+            (SelectedItems as PickleGit.ViewModels.ISuspendableNotifications)?.SuspendNotifications() ?? NoopScope.Instance;
+
+        private sealed class NoopScope : System.IDisposable
+        {
+            public static readonly NoopScope Instance = new NoopScope();
+            public void Dispose() { }
         }
 
         // ViewModel collection changed from code → push changes into ListView.

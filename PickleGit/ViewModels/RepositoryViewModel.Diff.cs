@@ -21,6 +21,7 @@ namespace PickleGit.ViewModels
             FlatDiffItems = Array.Empty<DiffItem>();
             SideBySideItems = Array.Empty<SideBySideItem>();
             _currentDiffFile = null;
+            SetCurrentDecodedDiff(null);
             IsDiffFromStagedFile = false;
             IsLfsPointerDiff = false;
             IsBinaryDiff = false;
@@ -90,8 +91,11 @@ namespace PickleGit.ViewModels
             }
         }
 
-        /// <summary>Hunk/line staging is only offered for working-dir diffs produced without -w.</summary>
-        public bool CanPartialStage => IsWorkingDirDiff && !IgnoreWhitespace && !IsConflictedFileDiff;
+        /// <summary>Hunk/line staging is only offered for working-dir diffs produced without -w. A
+        /// decoded-text diff (UTF-16 etc.) is staged in-app instead of via `git apply`, which is only
+        /// possible when FileDiffResult.CanStagePartially (same encoding both sides, no conversion attributes).</summary>
+        public bool CanPartialStage => IsWorkingDirDiff && !IgnoreWhitespace && !IsConflictedFileDiff
+            && (_currentDecodedDiff == null || _currentDecodedDiff.CanStagePartially);
 
         private bool _showEntireFile = AppSettings.LoadDiffShowEntireFile();
         /// <summary>Toggle, orthogonal to Unified/Side-by-side: shows the whole file
@@ -270,6 +274,16 @@ namespace PickleGit.ViewModels
         /// DiffView shows a "binary file" notice instead of a blank pane.</summary>
         public bool IsBinaryDiff { get => _isBinaryDiff; private set => Set(ref _isBinaryDiff, value); }
 
+        private FileDiffResult _currentDecodedDiff;
+
+        private void SetCurrentDecodedDiff(FileDiffResult diff)
+        {
+            var value = diff != null && diff.IsDecodedText ? diff : null;
+            if (ReferenceEquals(_currentDecodedDiff, value)) return;
+            _currentDecodedDiff = value;
+            RaisePropertyChanged(nameof(CanPartialStage));
+        }
+
         private bool _isConflictedFileDiff;
         /// <summary>True when the selected file has unmerged index entries (a live merge/rebase/cherry-pick
         /// conflict) — LibGit2Sharp's Diff.Compare can't produce a patch against an unmerged path (it silently
@@ -303,6 +317,7 @@ namespace PickleGit.ViewModels
                 FlatDiffItems = Array.Empty<DiffItem>();
                 SideBySideItems = Array.Empty<SideBySideItem>();
                 IsBinaryDiff = false; IsLfsPointerDiff = false;
+                SetCurrentDecodedDiff(diff);
                 return;
             }
             _pendingLargeDiff = null;
@@ -318,6 +333,7 @@ namespace PickleGit.ViewModels
             SideBySideItems = BuildSideBySideItems(hunks);
             IsLfsPointerDiff = DetectLfsPointer(diff.Hunks);
             IsBinaryDiff = diff.IsBinary;
+            SetCurrentDecodedDiff(diff);
             // FlatDiffItems/SideBySideItems' setters just raised PropertyChanged — DiffView.xaml.cs's
             // OnRepoVmPropertyChangedForScrollReset already invalidates UnifiedFind/SideBySideLeftFind/
             // SideBySideRightFind from that, so no explicit recompute is needed here anymore.
@@ -465,6 +481,7 @@ namespace PickleGit.ViewModels
             }
             DetailCommit = null;
             _currentDiffFile = fc;
+            SetCurrentDecodedDiff(null);
             IsDiffFromStagedFile = fc.IsStaged;
             IsLfsPointerDiff = false;
             IsBinaryDiff = false;
@@ -562,6 +579,7 @@ namespace PickleGit.ViewModels
                 IsBinaryDiff = false;
                 IsLargeDiffPending = false;
                 _currentDiffFile = null;
+                SetCurrentDecodedDiff(null);
                 RaisePropertyChanged(nameof(IsWorkingDirDiff));
                 RaisePropertyChanged(nameof(CanPartialStage));
             }
@@ -620,6 +638,11 @@ namespace PickleGit.ViewModels
         private async Task HunkOrLinesPatchAsync(object param, StagingPatchOp op, string status, string featureName)
         {
             if (!(param is DiffHunk hunk) || _currentDiffFile == null) return;
+            if (_currentDecodedDiff != null)
+            {
+                await DecodedHunkOrLinesAsync(hunk, op, status, featureName);
+                return;
+            }
             using (_watcher?.Suppress())
             {
                 string patch;
@@ -634,6 +657,38 @@ namespace PickleGit.ViewModels
                 }
                 if (await RunCliAsync(status, StagingService.ApplyArgs(op), featureName, patch))
                     await ReloadCurrentDiffAsync();
+            }
+        }
+
+        /// <summary>Hunk/line operation for a decoded-text diff (UTF-16 etc.): the selection is applied
+        /// to the decoded lines and the re-encoded result is written straight to the index (Stage/
+        /// Unstage) or the working file (Discard) — see DecodedStagingService for why `git apply`
+        /// can't be used here.</summary>
+        private async Task DecodedHunkOrLinesAsync(DiffHunk hunk, StagingPatchOp op, string status, string featureName)
+        {
+            var diff = _currentDecodedDiff;
+            var file = _currentDiffFile;
+            if (diff == null || file == null || !diff.CanStagePartially) return;
+            var selected = hunk.HasLineSelection
+                ? new HashSet<DiffLine>(hunk.Lines.Where(l => l.Kind != DiffLineKind.Context && _selectedLines.Contains(l)))
+                : null;
+            // The edit is computed from the decoded snapshot taken when the diff loaded; the write is
+            // refused if its target (index for Stage/Unstage, working file for Discard) no longer holds
+            // exactly those bytes, rather than overwriting a change made since (GitService.StaleContentException).
+            // Stage targets the index = the unstaged diff's old side; Unstage the index = the staged
+            // diff's new side; Discard the working file = the unstaged diff's new side.
+            var expected = op == StagingPatchOp.Stage ? diff.OldText.SourceBytes : diff.NewText.SourceBytes;
+            using (_watcher?.Suppress())
+            {
+                await RunAsync(status, () =>
+                {
+                    var bytes = DecodedStagingService.Apply(diff, hunk, selected, op);
+                    if (op == StagingPatchOp.Discard) _git.WriteWorkdirContent(file.Path, bytes, expected);
+                    else _git.WriteIndexContent(file.Path, bytes, expected);
+                });
+                // Reload either way: after success to show the new state, after a stale refusal so the
+                // diff matches the file again before the user retries.
+                await ReloadCurrentDiffAsync();
             }
         }
 

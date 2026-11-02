@@ -323,6 +323,7 @@ namespace PickleGit.ViewModels
                 // otherwise clobber the selection we just set from the list the user actually clicked.
                 if (_syncingFileSelection && value == null) return;
                 if (!Set(ref _selectedFile, value)) return;
+                SyncTreeSelectionToSelectedFile();
                 RaisePropertyChanged(nameof(ShowDiffInsteadOfCommits));
                 RaisePropertyChanged(nameof(DiffPaneHeaderText));
                 if (value == null) return;
@@ -410,8 +411,9 @@ namespace PickleGit.ViewModels
         private bool _showWorkingDir;
         private ObservableCollection<FileChange> _workingDirFiles = new ObservableCollection<FileChange>();
         private ObservableCollection<FileChange> _stagedFiles = new ObservableCollection<FileChange>();
-        private readonly ObservableCollection<FileChange> _selectedWorkingFiles = new ObservableCollection<FileChange>();
-        private readonly ObservableCollection<FileChange> _selectedStagedFiles = new ObservableCollection<FileChange>();
+        // Bulk-capable: a folder / Shift-range selection rewrites these as one notification.
+        private readonly BulkObservableCollection<FileChange> _selectedWorkingFiles = new BulkObservableCollection<FileChange>();
+        private readonly BulkObservableCollection<FileChange> _selectedStagedFiles = new BulkObservableCollection<FileChange>();
         private bool _syncingFileSelection;
         private string _commitMessage;
         private string _authorName;
@@ -556,14 +558,14 @@ namespace PickleGit.ViewModels
         private ObservableCollection<AggregatedFileTreeRow> _aggregatedFilesTreeRows = new ObservableCollection<AggregatedFileTreeRow>();
         public ObservableCollection<AggregatedFileTreeRow> AggregatedFilesTreeRows { get => _aggregatedFilesTreeRows; private set => Set(ref _aggregatedFilesTreeRows, value); }
 
-        /// <summary>Which tree-view folders are expanded, kept separately per panel (keyed by
-        /// relative folder path, e.g. "Services") — expanding a folder in Staged does NOT expand it
+        /// <summary>Which tree-view folders the user collapsed, kept separately per panel (keyed by
+        /// relative folder path, e.g. "Services") — collapsing a folder in Staged does NOT collapse it
         /// in Unstaged. Unlike sort mode/view mode (deliberately one shared setting), expand/collapse
-        /// is a per-panel navigation state, not a preference. Empty by default (all folders collapsed).</summary>
-        private readonly HashSet<string> _expandedStagedTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _expandedWorkingTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _expandedCommitFilesTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _expandedAggregatedFilesTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// is a per-panel navigation state, not a preference. Empty by default (all folders expanded).</summary>
+        private readonly HashSet<string> _collapsedStagedTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _collapsedWorkingTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _collapsedCommitFilesTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _collapsedAggregatedFilesTreeFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private void SetFileViewMode(object param)
         {
@@ -587,13 +589,13 @@ namespace PickleGit.ViewModels
             string path;
             Action rebuild;
             if (tagged.StartsWith("Staged:", StringComparison.Ordinal))
-            { set = _expandedStagedTreeFolders; path = tagged.Substring(7); rebuild = RebuildFileTreeRows; }
+            { set = _collapsedStagedTreeFolders; path = tagged.Substring(7); rebuild = RebuildFileTreeRows; }
             else if (tagged.StartsWith("Working:", StringComparison.Ordinal))
-            { set = _expandedWorkingTreeFolders; path = tagged.Substring(8); rebuild = RebuildFileTreeRows; }
+            { set = _collapsedWorkingTreeFolders; path = tagged.Substring(8); rebuild = RebuildFileTreeRows; }
             else if (tagged.StartsWith("CommitFiles:", StringComparison.Ordinal))
-            { set = _expandedCommitFilesTreeFolders; path = tagged.Substring(12); rebuild = RebuildCommitFileTreeRows; }
+            { set = _collapsedCommitFilesTreeFolders; path = tagged.Substring(12); rebuild = RebuildCommitFileTreeRows; }
             else if (tagged.StartsWith("Aggregated:", StringComparison.Ordinal))
-            { set = _expandedAggregatedFilesTreeFolders; path = tagged.Substring(11); rebuild = RebuildAggregatedFileTreeRows; }
+            { set = _collapsedAggregatedFilesTreeFolders; path = tagged.Substring(11); rebuild = RebuildAggregatedFileTreeRows; }
             else return;
             if (string.IsNullOrEmpty(path)) return;
             if (!set.Remove(path))
@@ -777,6 +779,7 @@ namespace PickleGit.ViewModels
                 RaisePropertyChanged(nameof(SelectedDiscardableFilesCount));
                 RaisePropertyChanged(nameof(ShowDiffInsteadOfCommits));
             };
+            InitTreeSelectionSync();
             RefreshCommand = new RelayCommand(async () => await RefreshAsync(), () => HasRepo);
             FetchCommand = new RelayCommand(async () => await FetchAsync(), () => HasRepo);
             PullCommand = new RelayCommand(async () => await PullAsync(), () => HasRepo);
@@ -884,9 +887,9 @@ namespace PickleGit.ViewModels
             AbortOperationCommand = new RelayCommand(async () => await AbortOperationAsync(),
                 () => HasConflict && !IsBusy);
             TakeOursCommand = new RelayCommand(
-                p => { if (p is FileChange fc) _ = ResolveConflictSideAsync(fc, "ours"); }, _ => HasRepo);
+                p => _ = ResolveConflictSideAsync(p, "ours"), _ => HasRepo);
             TakeTheirsCommand = new RelayCommand(
-                p => { if (p is FileChange fc) _ = ResolveConflictSideAsync(fc, "theirs"); }, _ => HasRepo);
+                p => _ = ResolveConflictSideAsync(p, "theirs"), _ => HasRepo);
             MarkResolvedCommand = new RelayCommand(p => _ = MarkResolvedAsync(p), _ => HasRepo);
             MarkUnresolvedCommand = new RelayCommand(p => _ = MarkUnresolvedAsync(p), _ => CanMarkUnresolved);
             // Guards against the banner's "Resolve Conflicts…" button (no file parameter) silently
@@ -896,7 +899,7 @@ namespace PickleGit.ViewModels
             // FileChange, which only exists (and only shows the menu item at all — see
             // CommitDetailView.xaml's Kind==Conflicted Visibility binding) while a conflict remains,
             // so this tighter check never blocks that path.
-            OpenMergeEditorCommand = new RelayCommand(OpenMergeEditor, _ => HasRepo && ConflictedFileChanges.Any());
+            OpenMergeEditorCommand = new RelayCommand(OpenMergeEditor, _ => HasRepo && !_openingMergeEditor && ConflictedFileChanges.Any());
             UndoCommand = new RelayCommand(async () => await UndoLastAsync(), () => CanUndo && !IsBusy);
             StageHunkOrLinesCommand = new RelayCommand(p => _ = StageHunkOrLinesAsync(p), _ => HasRepo);
             DiscardHunkOrLinesCommand = new RelayCommand(p => _ = DiscardHunkOrLinesAsync(p), _ => HasRepo);

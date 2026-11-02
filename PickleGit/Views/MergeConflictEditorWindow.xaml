@@ -557,12 +557,21 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Margin="0,0,0,8" FontSize="11">
-                        <Run Text="{Binding RelativePath, Mode=OneWay}" FontWeight="SemiBold" FontFamily="Consolas"/>
-                        <Run Text="  —  "/>
-                        <Run Foreground="{DynamicResource TextSecondaryBrush}"
-                             Text="{Binding BlockStatusLabel, Mode=OneWay}"/>
-                    </TextBlock>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                        <TextBlock FontSize="11">
+                            <Run Text="{Binding RelativePath, Mode=OneWay}" FontWeight="SemiBold" FontFamily="Consolas"/>
+                            <Run Text="  —  "/>
+                            <Run Foreground="{DynamicResource TextSecondaryBrush}"
+                                 Text="{Binding BlockStatusLabel, Mode=OneWay}"/>
+                        </TextBlock>
+                        <!-- Binary / changed-since-conflict files can't be resolved here (Save & Stage is disabled). -->
+                        <Border Margin="0,6,0,0" Padding="8,6" CornerRadius="4" BorderThickness="1"
+                                BorderBrush="{DynamicResource WarningBrush}" Background="{DynamicResource SurfaceBrush}"
+                                Visibility="{Binding ConflictWarning, Converter={StaticResource NullToVis}}">
+                            <TextBlock Text="{Binding ConflictWarning, Mode=OneWay}" TextWrapping="Wrap" FontSize="11"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+                        </Border>
+                    </StackPanel>
 
                     <!-- Existence (add/delete) conflict: no content to diff — keep or delete instead -->
                     <Border Grid.Row="1" Grid.RowSpan="2" Padding="16" VerticalAlignment="Top"

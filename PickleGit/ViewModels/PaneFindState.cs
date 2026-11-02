@@ -99,5 +99,30 @@ namespace PickleGit.ViewModels
         /// otherwise no longer belong to the live ItemsSource. Recomputes against the fresh list
         /// rather than closing outright, so an active search stays open across the reload.</summary>
         public void Invalidate() => Recompute();
+
+        /// <summary>Recomputes matches after the pane's text was edited in place (the merge editor's
+        /// manual-edit pane, on every keystroke) without navigating: the current match index is kept
+        /// (clamped to the new count) and ScrollToMatchRequested is NOT raised. Navigating here would
+        /// move the editor caret to a match on every keystroke, so typed/deleted characters would land
+        /// at the match instead of where the user is editing.</summary>
+        public void RefreshWithoutNavigating()
+        {
+            _matches = string.IsNullOrEmpty(_searchText)
+                ? new List<(object, int, int)>()
+                : (_computeMatches(_searchText) ?? new List<(object, int, int)>());
+            if (_matches.Count == 0 || _pos < 0)
+            {
+                _pos = -1;
+                CurrentMatch = null;
+                CurrentMatchRange = null;
+                Status = FindNavigationHelper.MatchCountStatus(_searchText, _matches.Count);
+                return;
+            }
+            _pos = Math.Min(_pos, _matches.Count - 1);
+            var (item, start, length) = _matches[_pos];
+            CurrentMatch = item;
+            CurrentMatchRange = new DiffHighlightSpan(start, length);
+            Status = FindNavigationHelper.PositionStatus(_pos, _matches.Count);
+        }
     }
 }

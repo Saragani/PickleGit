@@ -391,6 +391,17 @@ namespace PickleGit.ViewModels
         private readonly string _absolutePath;
         private readonly MergeConflictDocument _doc;
         private readonly System.Text.Encoding _encoding;
+        // Set for files rebuilt from index stages (see the constructor): Save writes these exact
+        // BOM bytes followed by _encoding's bytes, instead of File.WriteAllText's own preamble handling.
+        private readonly byte[] _preamble;
+
+        /// <summary>Shown above the panes when this file can't be merged normally here (binary
+        /// content, or a working copy changed since the conflict); null otherwise.</summary>
+        public string ConflictWarning { get; }
+
+        /// <summary>False when Save &amp; Stage must not run for this file (see ConflictWarning) —
+        /// saving would silently resolve the conflict to whatever happens to be in the working file.</summary>
+        public bool CanSave { get; } = true;
         private readonly List<ConflictBlockViewModel> _blockVms = new List<ConflictBlockViewModel>();
         private readonly Dictionary<MergeConflictBlock, ConflictBlockViewModel> _blockVmByBlock =
             new Dictionary<MergeConflictBlock, ConflictBlockViewModel>();
@@ -537,7 +548,8 @@ namespace PickleGit.ViewModels
         public MergeConflictFileViewModel(string absolutePath, string relativePath, bool oursMissing, bool theirsMissing,
             string oursCommitLabel = null, string oursCommitTooltip = null,
             string theirsCommitLabel = null, string theirsCommitTooltip = null,
-            string gitAncestorText = null)
+            string gitAncestorText = null,
+            RebuiltConflict rebuilt = null)
         {
             _absolutePath = absolutePath;
             RelativePath = relativePath;
@@ -570,21 +582,48 @@ namespace PickleGit.ViewModels
             {
                 // Defensive: status reported a content conflict, but the file is gone from disk
                 // (e.g. deleted externally between the status read and opening this editor) —
-                // there's nothing to show or resolve here rather than throwing.
+                // there's nothing to show or resolve here rather than throwing. Saving would write an
+                // empty file and resolve the conflict to it, so Save & Stage is disabled.
+                ConflictWarning = rebuilt?.Warning ?? "This file no longer exists in the working tree. Close this window " +
+                                  "and use Take Ours / Take Theirs, or restore the file first.";
+                CanSave = false;
                 _doc = new MergeConflictDocument();
                 _resultText = string.Empty;
                 RebuildPaneAndResultItems();
                 return;
             }
 
-            // Preserve the file's encoding: honor a BOM if present, otherwise read and write back
-            // as BOM-less UTF-8 (never introduce a BOM the file didn't have).
             string content;
-            using (var reader = new StreamReader(absolutePath,
-                new System.Text.UTF8Encoding(false), detectEncodingFromByteOrderMarks: true))
+            if (rebuilt != null)
             {
-                content = reader.ReadToEnd();
-                _encoding = reader.CurrentEncoding;
+                // git didn't text-merge this file (it treated it as binary — e.g. UTF-16), so the
+                // conflict was rebuilt from the index stages off the UI thread (RebuiltConflict.Prepare).
+                ConflictWarning = rebuilt.Warning;
+                CanSave = rebuilt.CanSave;
+                _encoding = rebuilt.Encoding ?? new System.Text.UTF8Encoding(false);
+                _preamble = rebuilt.Preamble;
+                if (rebuilt.MarkedText == null)
+                {
+                    // Nothing displayable (binary / too large) — empty document, Save & Stage disabled.
+                    _doc = new MergeConflictDocument();
+                    _resultText = string.Empty;
+                    RebuildPaneAndResultItems();
+                    return;
+                }
+                content = rebuilt.MarkedText;
+                // The CLI-fetched ancestor is decoded as UTF-8 (garbage for UTF-16): use the rebuilt one.
+                gitAncestorText = rebuilt.AncestorText;
+            }
+            else
+            {
+                // Preserve the file's encoding: honor a BOM if present, otherwise read and write back
+                // as BOM-less UTF-8 (never introduce a BOM the file didn't have).
+                using (var reader = new StreamReader(absolutePath,
+                    new System.Text.UTF8Encoding(false), detectEncodingFromByteOrderMarks: true))
+                {
+                    content = reader.ReadToEnd();
+                    _encoding = reader.CurrentEncoding;
+                }
             }
             _doc = MergeConflictParser.Parse(content);
             if (gitAncestorText != null) ApplyGitAncestorText(gitAncestorText);
@@ -1035,8 +1074,110 @@ namespace PickleGit.ViewModels
                 // it's staged as-is by the caller's subsequent `git add`.
                 return true;
             }
+            if (!CanSave) return false;
             if (!IsManuallyEdited && UnresolvedCount > 0 && !force) return false;
-            File.WriteAllText(_absolutePath, ResultText, _encoding);
+            if (_preamble != null)
+            {
+                var body = _encoding.GetBytes(ResultText ?? string.Empty);
+                var bytes = new byte[_preamble.Length + body.Length];
+                System.Buffer.BlockCopy(_preamble, 0, bytes, 0, _preamble.Length);
+                System.Buffer.BlockCopy(body, 0, bytes, _preamble.Length, body.Length);
+                File.WriteAllBytes(_absolutePath, bytes);
+            }
+            else
+                File.WriteAllText(_absolutePath, ResultText, _encoding);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// A conflict rebuilt from the index stages because git didn't text-merge the file (it treated it
+    /// as binary — any NUL byte, so every UTF-16 file — and left only "ours" in the working file with
+    /// no markers). <see cref="Prepare"/> does the file read, decoding and three-way merge; it runs off
+    /// the UI thread when the merge editor opens (RepositoryViewModel.OpenMergeEditorCoreAsync), and
+    /// MergeConflictFileViewModel then just parses <see cref="MarkedText"/> like a normal marker file.
+    /// </summary>
+    public sealed class RebuiltConflict
+    {
+        /// <summary>Merge-style marker text (no base section), or null when nothing can be shown.</summary>
+        public string MarkedText { get; private set; }
+
+        /// <summary>Decoded base, for MergeConflictFileViewModel.ApplyGitAncestorText — the same path a
+        /// normal UTF-8 conflict's CLI-fetched ancestor takes, so untouched blocks behave identically.</summary>
+        public string AncestorText { get; private set; }
+
+        public System.Text.Encoding Encoding { get; private set; }
+        public byte[] Preamble { get; private set; }
+        public string Warning { get; private set; }
+        public bool CanSave { get; private set; } = true;
+
+        public static RebuiltConflict Prepare(ConflictStages stages, string absolutePath)
+        {
+            if (stages == null) return null;
+            if (stages.TooLarge)
+                return Blocked("This file is too large to merge here. Close this window and use Take Ours / Take Theirs on the file instead.");
+            if (stages.NotText)
+                return Blocked("This is a binary file — it can't be merged here. Close this window and use " +
+                               "Take Ours / Take Theirs on the file instead.");
+            try
+            {
+                if (!TextDecoding.TryDecode(stages.Base, out var baseText)
+                    || !TextDecoding.TryDecode(stages.Ours, out var oursText)
+                    || !TextDecoding.TryDecode(stages.Theirs, out var theirsText))
+                    return Blocked("This is a binary file — it can't be merged here. Close this window and use " +
+                                   "Take Ours / Take Theirs on the file instead.");
+
+                var workBytes = File.Exists(absolutePath) ? File.ReadAllBytes(absolutePath) : null;
+                if (BytesEqual(workBytes, stages.Ours))
+                {
+                    return new RebuiltConflict
+                    {
+                        MarkedText = ThreeWayMerge.Merge(baseText, oursText, theirsText, "HEAD", "base", "theirs", includeBase: false).MarkedText,
+                        AncestorText = string.Join("\n", baseText.Lines) + (baseText.Lines.Count > 0 ? "\n" : string.Empty),
+                        Encoding = Strict(oursText.Encoding),
+                        Preamble = oursText.Preamble,
+                    };
+                }
+
+                // Changed since git wrote "ours" (e.g. edited by hand) — rebuilding the conflict would
+                // discard those edits, and saving the working file as-is would silently resolve the
+                // conflict to it. Show it, but don't offer Save & Stage.
+                var changed = new RebuiltConflict
+                {
+                    Warning = "This file was changed after the conflict occurred, and git couldn't merge it as text " +
+                              "(it treats this encoding as binary). It's shown as-is; resolve it in your editor and " +
+                              "use Mark Resolved, or Take Ours / Take Theirs.",
+                    CanSave = false,
+                };
+                if (TextDecoding.TryDecode(workBytes, out var workText))
+                {
+                    changed.MarkedText = string.Join("\n", workText.Lines);
+                    changed.Encoding = Strict(workText.Encoding);
+                    changed.Preamble = workText.Preamble;
+                }
+                return changed;
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error($"Rebuilding conflict failed for {absolutePath}", ex);
+                return Blocked("This file couldn't be read for merging. Close this window and use Take Ours / Take Theirs on the file instead.");
+            }
+        }
+
+        private static RebuiltConflict Blocked(string warning) => new RebuiltConflict { Warning = warning, CanSave = false };
+
+        /// <summary>The same code page, but throwing on characters it can't represent instead of
+        /// writing '?': e.g. a UTF-16 "theirs" line taken into a file whose "ours" side decoded as the
+        /// system ANSI code page. The EncoderFallbackException surfaces as a save error dialog
+        /// (MergeConflictSessionViewModel.TrySave) rather than silent data loss.</summary>
+        private static System.Text.Encoding Strict(System.Text.Encoding e) =>
+            System.Text.Encoding.GetEncoding(e.CodePage, System.Text.EncoderFallback.ExceptionFallback, System.Text.DecoderFallback.ReplacementFallback);
+
+        private static bool BytesEqual(byte[] x, byte[] y)
+        {
+            int lx = x?.Length ?? 0, ly = y?.Length ?? 0;
+            if (lx != ly) return false;
+            for (int i = 0; i < lx; i++) if (x[i] != y[i]) return false;
             return true;
         }
     }
@@ -1106,6 +1247,7 @@ namespace PickleGit.ViewModels
         public event Action<bool> RequestClose;
 
         private readonly Dictionary<string, string> _gitAncestorTextByPath;
+        private readonly Dictionary<string, RebuiltConflict> _rebuiltByPath;
 
         // ── Find — one independent PaneFindState per pane (Left/Right/Result), not one shared
         // search spanning (and highlighting every occurrence across) all three at once. Matches on
@@ -1194,9 +1336,11 @@ namespace PickleGit.ViewModels
             Func<string, string> resolveAbsolutePath, Func<string, Task> stageFileAsync,
             string oursBranch = null, CommitInfo oursCommit = null,
             string theirsDescription = null, CommitInfo theirsCommit = null,
-            Dictionary<string, string> gitAncestorTextByPath = null)
+            Dictionary<string, string> gitAncestorTextByPath = null,
+            Dictionary<string, RebuiltConflict> rebuiltByPath = null)
         {
             _gitAncestorTextByPath = gitAncestorTextByPath ?? new Dictionary<string, string>();
+            _rebuiltByPath = rebuiltByPath ?? new Dictionary<string, RebuiltConflict>();
             _resolveAbsolutePath = resolveAbsolutePath;
             _stageFileAsync = stageFileAsync;
             Files = new ObservableCollection<ConflictFileListEntry>(
@@ -1210,7 +1354,7 @@ namespace PickleGit.ViewModels
                 : theirsDescription;
             TheirsCommitTooltip = FormatCommitTooltip(theirsCommit);
 
-            SaveCurrentCommand = new RelayCommand(async () => await SaveCurrentAsync(), () => CurrentFile != null);
+            SaveCurrentCommand = new RelayCommand(async () => await SaveCurrentAsync(), () => CurrentFile != null && CurrentFile.CanSave);
             CloseCommand = new RelayCommand(() => RequestClose?.Invoke(Files.Any(f => f.IsResolved)));
             InitializeFind();
 
@@ -1237,8 +1381,9 @@ namespace PickleGit.ViewModels
             {
                 var abs = _resolveAbsolutePath(entry.Path);
                 _gitAncestorTextByPath.TryGetValue(entry.Path, out var gitAncestorText);
+                _rebuiltByPath.TryGetValue(entry.Path, out var rebuilt);
                 vm = new MergeConflictFileViewModel(abs, entry.Path, entry.FileChange.OursMissing, entry.FileChange.TheirsMissing,
-                    OursCommitLabel, OursCommitTooltip, TheirsCommitLabel, TheirsCommitTooltip, gitAncestorText);
+                    OursCommitLabel, OursCommitTooltip, TheirsCommitLabel, TheirsCommitTooltip, gitAncestorText, rebuilt);
                 _fileVmCache[entry.Path] = vm;
             }
             CurrentFile = vm;
@@ -1258,11 +1403,37 @@ namespace PickleGit.ViewModels
                 LeftFind.Invalidate();
                 RightFind.Invalidate();
             }
+            else if (e.PropertyName == nameof(MergeConflictFileViewModel.ResultText)
+                     && sender is MergeConflictFileViewModel file && file.IsManuallyEdited)
+            {
+                // Typing in the manual-edit pane: refresh counts only; navigating would move the caret.
+                ResultFind.RefreshWithoutNavigating();
+            }
             else if (e.PropertyName == nameof(MergeConflictFileViewModel.ResultItems)
                      || e.PropertyName == nameof(MergeConflictFileViewModel.ResultText)
                      || e.PropertyName == nameof(MergeConflictFileViewModel.IsManuallyEdited))
             {
                 ResultFind.Invalidate();
+            }
+        }
+
+        /// <summary>Runs vm.Save, turning write failures — I/O errors, or a character the file's encoding
+        /// can't represent (EncoderFallbackException: e.g. a lone surrogate typed into a UTF-16 file in
+        /// manual edit) — into an error dialog instead of an unhandled exception. Returns false when
+        /// it failed that way.</summary>
+        private static bool TrySave(MergeConflictFileViewModel vm, bool force, out bool saved)
+        {
+            saved = false;
+            try
+            {
+                saved = vm.Save(force);
+                return true;
+            }
+            catch (Exception ex) when (ex is EncoderFallbackException || ex is IOException || ex is UnauthorizedAccessException)
+            {
+                AppLog.Error($"Saving {vm.RelativePath} failed", ex);
+                DialogService.ShowError("Cannot Save", $"{vm.RelativePath} couldn't be saved: {ex.Message}");
+                return false;
             }
         }
 
@@ -1272,7 +1443,8 @@ namespace PickleGit.ViewModels
             var vm = CurrentFile;
             if (entry == null || vm == null) return;
 
-            if (!vm.Save())
+            if (!TrySave(vm, force: false, out var saved)) return;
+            if (!saved)
             {
                 if (vm.IsExistenceConflict)
                 {
@@ -1283,7 +1455,7 @@ namespace PickleGit.ViewModels
                         $"{vm.UnresolvedCount} conflict(s) still remain in {entry.Path}. Save anyway?",
                         "Save Anyway", danger: true))
                     return;
-                if (!vm.Save(force: true)) return;
+                if (!TrySave(vm, force: true, out saved) || !saved) return;
             }
 
             entry.IsResolved = true;

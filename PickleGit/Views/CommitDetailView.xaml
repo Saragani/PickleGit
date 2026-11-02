@@ -19,6 +19,22 @@
                                           Command="{Binding Tag.ToggleTreeFolderCommand, RelativeSource={RelativeSource AncestorType=Grid}}"
                                           CommandParameter="{Binding FullPath, Converter={StaticResource Prepend}, ConverterParameter='Staged:'}"/>
                         </Grid.InputBindings>
+                        <!-- A folder row stands for every file beneath it (FileTreeRow.Files); the row itself is
+                             the CommandParameter, expanded by StagingService.ResolveTargets. -->
+                        <Grid.ContextMenu>
+                            <ContextMenu>
+                            <MenuItem Header="Unstage"
+                                      Command="{Binding PlacementTarget.Tag.UnstageFileCommand,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="Discard changes"
+                                      Command="{Binding PlacementTarget.Tag.DiscardStagedFileCommand,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            </ContextMenu>
+                        </Grid.ContextMenu>
                         <StackPanel Orientation="Horizontal"
                                     Margin="{Binding IndentLevel, Converter={StaticResource IndentLevelToMargin}}">
                             <!-- Same normalized 6x6-bbox chevron geometry as the sidebar's SidebarChevron
@@ -118,6 +134,49 @@
                                           Command="{Binding Tag.ToggleTreeFolderCommand, RelativeSource={RelativeSource AncestorType=Grid}}"
                                           CommandParameter="{Binding FullPath, Converter={StaticResource Prepend}, ConverterParameter='Working:'}"/>
                         </Grid.InputBindings>
+                        <!-- A folder row stands for every file beneath it (FileTreeRow.Files); the row itself is
+                             the CommandParameter, expanded by StagingService.ResolveTargets. -->
+                        <Grid.ContextMenu>
+                            <ContextMenu>
+                            <MenuItem Header="Take Ours"
+                                      Visibility="{Binding PlacementTarget.DataContext.HasConflicts,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                Converter={StaticResource BoolToVis}}"
+                                      Command="{Binding PlacementTarget.Tag.TakeOursCommand,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="Take Theirs"
+                                      Visibility="{Binding PlacementTarget.DataContext.HasConflicts,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                Converter={StaticResource BoolToVis}}"
+                                      Command="{Binding PlacementTarget.Tag.TakeTheirsCommand,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="Mark Resolved"
+                                      Visibility="{Binding PlacementTarget.DataContext.HasConflicts,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                Converter={StaticResource BoolToVis}}"
+                                      Command="{Binding PlacementTarget.Tag.MarkResolvedCommand,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <Separator Visibility="{Binding PlacementTarget.DataContext.HasConflicts,
+                                                  RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                  Converter={StaticResource BoolToVis}}"/>
+                            <MenuItem Header="Stage"
+                                      Command="{Binding PlacementTarget.Tag.StageFileCommand,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="Discard changes"
+                                      Command="{Binding PlacementTarget.Tag.DiscardFileCommand,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            </ContextMenu>
+                        </Grid.ContextMenu>
                         <StackPanel Orientation="Horizontal"
                                     Margin="{Binding IndentLevel, Converter={StaticResource IndentLevelToMargin}}">
                             <Grid Width="8" Height="8" Margin="0,0,4,0" VerticalAlignment="Center">
@@ -631,6 +690,7 @@
                       Style="{StaticResource DarkListView}"
                       ItemContainerStyle="{StaticResource DarkListViewItem}"
                       ItemsSource="{Binding CommitFilesTreeRows}"
+                      SelectedItem="{Binding SelectedCommitFilesTreeRow}"
                       ItemTemplateSelector="{StaticResource CommitFilesTreeSelector}"
                       SelectionMode="Single"
                       Visibility="{Binding FileViewMode, Converter={StaticResource EnumEqualsVis}, ConverterParameter=Tree}">
@@ -1042,8 +1102,11 @@
                       ItemContainerStyle="{StaticResource DarkListViewItem}"
                       ItemsSource="{Binding StagedFileTreeRows}"
                       ItemTemplateSelector="{StaticResource StagedFileTreeSelector}"
-                      SelectionMode="Single"
+                      SelectionMode="Extended"
                       Visibility="{Binding FileViewMode, Converter={StaticResource EnumEqualsVis}, ConverterParameter=Tree}">
+                <i:Interaction.Behaviors>
+                    <behaviors:ListViewMultiSelectBehavior SelectedItems="{Binding SelectedStagedTreeRows}"/>
+                </i:Interaction.Behaviors>
                 <ListView.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel/>
@@ -1256,8 +1319,11 @@
                               ItemContainerStyle="{StaticResource DarkListViewItem}"
                               ItemsSource="{Binding WorkingFileTreeRows}"
                               ItemTemplateSelector="{StaticResource WorkingFileTreeSelector}"
-                              SelectionMode="Single"
+                              SelectionMode="Extended"
                               Visibility="{Binding FileViewMode, Converter={StaticResource EnumEqualsVis}, ConverterParameter=Tree}">
+                        <i:Interaction.Behaviors>
+                            <behaviors:ListViewMultiSelectBehavior SelectedItems="{Binding SelectedWorkingTreeRows}"/>
+                        </i:Interaction.Behaviors>
                         <ListView.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel/>

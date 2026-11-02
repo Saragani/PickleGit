@@ -127,12 +127,8 @@ namespace PickleGit.ViewModels
                 WorkingDirFiles = new ObservableCollection<FileChange>(working);
                 StagedFiles = new ObservableCollection<FileChange>(staged);
 
-                _selectedWorkingFiles.Clear();
-                foreach (var f in WorkingDirFiles.Where(f => selectedWorkingPaths.Contains(f.Path)))
-                    _selectedWorkingFiles.Add(f);
-                _selectedStagedFiles.Clear();
-                foreach (var f in StagedFiles.Where(f => selectedStagedPaths.Contains(f.Path)))
-                    _selectedStagedFiles.Add(f);
+                _selectedWorkingFiles.ReplaceAll(WorkingDirFiles.Where(f => selectedWorkingPaths.Contains(f.Path)));
+                _selectedStagedFiles.ReplaceAll(StagedFiles.Where(f => selectedStagedPaths.Contains(f.Path)));
 
                 RebuildFileTreeRows();
                 RaisePropertyChanged(nameof(ConflictedFileChanges));
@@ -243,16 +239,212 @@ namespace PickleGit.ViewModels
         private void RebuildFileTreeRows()
         {
             var cmp = BuildFileComparer();
-            StagedFileTreeRows = new ObservableCollection<FileTreeRow>(FileTreeBuilder.Build(StagedFiles, cmp, _expandedStagedTreeFolders));
-            WorkingFileTreeRows = new ObservableCollection<FileTreeRow>(FileTreeBuilder.Build(WorkingDirFiles, cmp, _expandedWorkingTreeFolders));
+            StagedFileTreeRows = new ObservableCollection<FileTreeRow>(FileTreeBuilder.Build(StagedFiles, cmp, _collapsedStagedTreeFolders));
+            WorkingFileTreeRows = new ObservableCollection<FileTreeRow>(FileTreeBuilder.Build(WorkingDirFiles, cmp, _collapsedWorkingTreeFolders));
+            // New row objects: re-select the rows matching the (path-reconciled) file selection.
+            SyncTreeRowsFromFiles(StagedFileTreeRows, _selectedStagedTreeRows, _selectedStagedFiles, _selectedStagedTreeFolderPaths, staged: true);
+            SyncTreeRowsFromFiles(WorkingFileTreeRows, _selectedWorkingTreeRows, _selectedWorkingFiles, _selectedWorkingTreeFolderPaths, staged: false);
         }
+
+        // ── Tree-mode row selection ───────────────────────────────────────────
+        // The tree ListViews hold FileTreeRow items, so they can't bind straight to the FileChange
+        // selection the flat lists use.
+        //
+        // Staged/Unstaged trees are multi-select (Ctrl/Shift): ListViewMultiSelectBehavior syncs each
+        // tree's selected rows into SelectedStagedTreeRows/SelectedWorkingTreeRows. Those rows map to
+        // an "effective" file set — selected file rows plus every file beneath each selected folder
+        // row — written into _selectedStagedFiles/_selectedWorkingFiles, the same collections the flat
+        // lists and every stage/unstage/discard/resolve command already use (StagingService.ResolveTargets).
+        // The reverse direction (SyncTreeRowsFromFiles) re-selects tree rows when those collections
+        // change from elsewhere (flat-list click, the other panel clearing this one, a refresh's
+        // by-path reconcile) or the tree is rebuilt (refresh, folder expand/collapse).
+        //
+        // The single-commit "Files changed" tree stays single-select: picking a File row forwards
+        // row.File to SelectedFile, which loads the diff exactly as a flat-mode click does.
+        private readonly BulkObservableCollection<FileTreeRow> _selectedStagedTreeRows = new BulkObservableCollection<FileTreeRow>();
+        private readonly BulkObservableCollection<FileTreeRow> _selectedWorkingTreeRows = new BulkObservableCollection<FileTreeRow>();
+        // The rows each tree had selected after the last applied change — lets ApplyTreeRowSelection
+        // tell which file rows the user just deselected.
+        private List<FileTreeRow> _lastStagedTreeRows = new List<FileTreeRow>();
+        private List<FileTreeRow> _lastWorkingTreeRows = new List<FileTreeRow>();
+        // Folder rows selected in each tree, by path — so a rebuild (new row objects) can restore them.
+        private readonly HashSet<string> _selectedStagedTreeFolderPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _selectedWorkingTreeFolderPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private bool _applyingStagedTreeSelection;
+        private bool _applyingWorkingTreeSelection;
+        private FileTreeRow _selectedCommitFilesTreeRow;
+        private bool _syncingTreeSelection;
+
+        public ObservableCollection<FileTreeRow> SelectedStagedTreeRows => _selectedStagedTreeRows;
+        public ObservableCollection<FileTreeRow> SelectedWorkingTreeRows => _selectedWorkingTreeRows;
+
+        /// <summary>Wires the tree-row ↔ file-selection sync. Called once from the constructor.</summary>
+        private void InitTreeSelectionSync()
+        {
+            // ChangesApplied, not CollectionChanged: ApplyTreeRowSelection may rewrite the row collection
+            // (folder split on deselect), which is illegal from inside its own CollectionChanged.
+            _selectedStagedTreeRows.ChangesApplied += (_, __) =>
+                ApplyTreeRowSelection(StagedFileTreeRows, _selectedStagedTreeRows, _selectedStagedFiles, _selectedStagedTreeFolderPaths, staged: true);
+            _selectedWorkingTreeRows.ChangesApplied += (_, __) =>
+                ApplyTreeRowSelection(WorkingFileTreeRows, _selectedWorkingTreeRows, _selectedWorkingFiles, _selectedWorkingTreeFolderPaths, staged: false);
+            _selectedStagedFiles.CollectionChanged += (_, __) =>
+            {
+                if (!_applyingStagedTreeSelection)
+                    SyncTreeRowsFromFiles(StagedFileTreeRows, _selectedStagedTreeRows, _selectedStagedFiles, _selectedStagedTreeFolderPaths, staged: true);
+            };
+            _selectedWorkingFiles.CollectionChanged += (_, __) =>
+            {
+                if (!_applyingWorkingTreeSelection)
+                    SyncTreeRowsFromFiles(WorkingFileTreeRows, _selectedWorkingTreeRows, _selectedWorkingFiles, _selectedWorkingTreeFolderPaths, staged: false);
+            };
+        }
+
+        /// <summary>A tree's row selection changed (user click): rewrite the panel's file selection
+        /// to the effective set (as one bulk change), and show the diff when that set is a single file.</summary>
+        private void ApplyTreeRowSelection(IList<FileTreeRow> treeRows, BulkObservableCollection<FileTreeRow> rows,
+            BulkObservableCollection<FileChange> files, HashSet<string> folderPaths, bool staged)
+        {
+            if (_syncingTreeSelection) return;
+
+            var current = rows.ToList();
+            if (SplitFoldersAroundDeselectedFiles(treeRows, staged ? _lastStagedTreeRows : _lastWorkingTreeRows, current))
+            {
+                _syncingTreeSelection = true;
+                try { rows.ReplaceAll(current); }
+                finally { _syncingTreeSelection = false; }
+            }
+            if (staged) _lastStagedTreeRows = current; else _lastWorkingTreeRows = current;
+
+            folderPaths.Clear();
+            var effective = new List<FileChange>();
+            var seen = new HashSet<FileChange>();
+            foreach (var row in current)
+            {
+                if (row.Kind == FileTreeRowKind.Folder)
+                {
+                    folderPaths.Add(row.FullPath);
+                    foreach (var f in row.Files ?? new List<FileChange>())
+                        if (seen.Add(f)) effective.Add(f);
+                }
+                else if (row.File != null && seen.Add(row.File))
+                    effective.Add(row.File);
+            }
+
+            if (!files.SequenceEqual(effective))
+            {
+                if (staged) _applyingStagedTreeSelection = true; else _applyingWorkingTreeSelection = true;
+                try { files.ReplaceAll(effective); }
+                finally
+                {
+                    if (staged) _applyingStagedTreeSelection = false; else _applyingWorkingTreeSelection = false;
+                }
+            }
+
+            if (effective.Count == 1) SelectedFile = effective[0];
+        }
+
+        /// <summary>A selected folder stands for every file beneath it, so Ctrl-deselecting one of those
+        /// files would otherwise have no effect (the folder still covers it) while the row looks
+        /// deselected. Instead: drop each selected folder that covers a just-deselected file, and keep
+        /// the rest of that folder's content selected explicitly — its visible file rows, plus any
+        /// collapsed subfolder rows (which stand for their own files). Returns true when
+        /// <paramref name="current"/> was changed.</summary>
+        private static bool SplitFoldersAroundDeselectedFiles(IList<FileTreeRow> treeRows, List<FileTreeRow> previous,
+            List<FileTreeRow> current)
+        {
+            if (treeRows == null || previous == null || previous.Count == 0) return false;
+            var currentSet = new HashSet<FileTreeRow>(current);
+            var deselected = previous.Where(r => r.Kind == FileTreeRowKind.File && r.File != null && !currentSet.Contains(r)).ToList();
+            if (deselected.Count == 0) return false;
+
+            bool changed = false;
+            foreach (var removed in deselected)
+            {
+                foreach (var folder in current.Where(r => r.Kind == FileTreeRowKind.Folder && r.Files != null && r.Files.Contains(removed.File)).ToList())
+                {
+                    current.Remove(folder);
+                    currentSet.Remove(folder);
+                    changed = true;
+                    int index = treeRows.IndexOf(folder);
+                    if (index < 0) continue;
+                    for (int j = index + 1; j < treeRows.Count && treeRows[j].IndentLevel > folder.IndentLevel; j++)
+                    {
+                        var row = treeRows[j];
+                        bool keep = row.Kind == FileTreeRowKind.File
+                            ? row != removed && row.File != removed.File
+                            : !row.IsExpanded && (row.Files == null || !row.Files.Contains(removed.File));
+                        if (keep && currentSet.Add(row)) current.Add(row);
+                    }
+                }
+            }
+            return changed;
+        }
+
+        /// <summary>Re-selects tree rows to match the panel's file selection: every file row whose file
+        /// is selected, plus every previously-selected folder row whose files are all still selected.</summary>
+        private void SyncTreeRowsFromFiles(IEnumerable<FileTreeRow> treeRows, BulkObservableCollection<FileTreeRow> selectedRows,
+            ObservableCollection<FileChange> files, HashSet<string> folderPaths, bool staged)
+        {
+            var fileSet = new HashSet<FileChange>(files);
+            var target = new List<FileTreeRow>();
+            if (treeRows != null)
+            {
+                foreach (var row in treeRows)
+                {
+                    if (row.Kind == FileTreeRowKind.Folder)
+                    {
+                        if (folderPaths.Contains(row.FullPath) && row.Files != null && row.Files.Count > 0 && row.Files.All(fileSet.Contains))
+                            target.Add(row);
+                    }
+                    else if (row.File != null && fileSet.Contains(row.File))
+                        target.Add(row);
+                }
+            }
+            if (staged) _lastStagedTreeRows = target; else _lastWorkingTreeRows = target;
+            if (selectedRows.SequenceEqual(target)) return;
+
+            _syncingTreeSelection = true;
+            try { selectedRows.ReplaceAll(target); }
+            finally { _syncingTreeSelection = false; }
+        }
+
+        public FileTreeRow SelectedCommitFilesTreeRow
+        {
+            get => _selectedCommitFilesTreeRow;
+            set { if (Set(ref _selectedCommitFilesTreeRow, value)) OnTreeRowSelected(value); }
+        }
+
+        private void OnTreeRowSelected(FileTreeRow row)
+        {
+            // Folder rows (and the null a rebuild produces) leave the current diff alone.
+            if (_syncingTreeSelection || row?.Kind != FileTreeRowKind.File || row.File == null) return;
+            SelectedFile = row.File;
+        }
+
+        /// <summary>Points the "Files changed" tree's selected row at the row wrapping
+        /// <see cref="SelectedFile"/> (or null) without feeding back into SelectedFile. The Staged/
+        /// Unstaged trees follow the file-selection collections instead (SyncTreeRowsFromFiles).</summary>
+        private void SyncTreeSelectionToSelectedFile()
+        {
+            _syncingTreeSelection = true;
+            try
+            {
+                SelectedCommitFilesTreeRow = FindTreeRow(CommitFilesTreeRows, _selectedFile);
+            }
+            finally { _syncingTreeSelection = false; }
+        }
+
+        private static FileTreeRow FindTreeRow(IEnumerable<FileTreeRow> rows, FileChange file) =>
+            file == null || rows == null ? null
+                : rows.FirstOrDefault(r => r.Kind == FileTreeRowKind.File && ReferenceEquals(r.File, file));
 
         /// <summary>Tree-mode rows for the single-commit "Files changed" panel — see CommitFiles'
         /// setter, which calls this on every assignment so it never goes stale.</summary>
         private void RebuildCommitFileTreeRows()
         {
             var cmp = BuildFileComparer();
-            CommitFilesTreeRows = new ObservableCollection<FileTreeRow>(FileTreeBuilder.Build(CommitFiles, cmp, _expandedCommitFilesTreeFolders));
+            CommitFilesTreeRows = new ObservableCollection<FileTreeRow>(FileTreeBuilder.Build(CommitFiles, cmp, _collapsedCommitFilesTreeFolders));
+            SyncTreeSelectionToSelectedFile();
         }
 
         /// <summary>Tree-mode rows for the multi-select "Files changed" panel — callers must call
@@ -261,7 +453,7 @@ namespace PickleGit.ViewModels
         private void RebuildAggregatedFileTreeRows()
         {
             var cmp = BuildAggregatedFileComparer();
-            AggregatedFilesTreeRows = new ObservableCollection<AggregatedFileTreeRow>(FileTreeBuilder.BuildAggregated(AggregatedFiles, cmp, _expandedAggregatedFilesTreeFolders));
+            AggregatedFilesTreeRows = new ObservableCollection<AggregatedFileTreeRow>(FileTreeBuilder.BuildAggregated(AggregatedFiles, cmp, _collapsedAggregatedFilesTreeFolders));
         }
 
         /// <summary>Same ordering convention as <see cref="BuildFileComparer"/>, for the

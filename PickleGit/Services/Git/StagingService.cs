@@ -41,6 +41,19 @@ namespace PickleGit.Services.Git
         /// </summary>
         public static List<FileChange> ResolveTargets(ObservableCollection<FileChange> selected, object param)
         {
+            // Tree view: a right-clicked row arrives as a FileTreeRow. A folder row stands for every
+            // file beneath it; when all of those are already part of the current selection, the action
+            // applies to the whole selection (same rule as a clicked file inside a multi-selection).
+            if (param is FileTreeRow row)
+            {
+                var rowFiles = row.Kind == FileTreeRowKind.Folder
+                    ? (row.Files ?? new List<FileChange>())
+                    : (row.File != null ? new List<FileChange> { row.File } : new List<FileChange>());
+                if (selected != null && selected.Count > rowFiles.Count && rowFiles.Count > 0 && rowFiles.All(selected.Contains))
+                    return selected.ToList();
+                return rowFiles.ToList();
+            }
+
             var clicked = param as FileChange;
             if (selected != null && selected.Count > 1 && (clicked == null || selected.Contains(clicked)))
                 return selected.ToList();

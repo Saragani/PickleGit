@@ -1080,6 +1080,21 @@ namespace PickleGit.Services
                     parent?.Tree, commit.Tree, new[] { filePath }, null, compareOptions);
             }
             var result = ParsePatchEntries(patch);
+            if (commitSha == null)
+                result = DecodedTextFallback(result, () => SourceAt(_repo.Head?.Tip, filePath),
+                    () => WorkdirSource(filePath), filePath, contextLines, ignoreWhitespace: false, stageable: false);
+            else
+            {
+                // Lookups stay inside the lambdas: DecodedTextFallback only invokes them for a binary result.
+                result = DecodedTextFallback(result,
+                    () =>
+                    {
+                        var parent = _repo.Lookup<Commit>(commitSha)?.Parents.FirstOrDefault();
+                        return SourceAt(parent, filePath);
+                    },
+                    () => SourceAt(_repo.Lookup<Commit>(commitSha), filePath),
+                    filePath, contextLines, ignoreWhitespace: false, stageable: false);
+            }
             Highlighting.SyntaxHighlighter.Apply(result.Hunks, filePath);
             return result;
         }
@@ -1095,7 +1110,8 @@ namespace PickleGit.Services
             if (commitA == null || commitB == null) return new FileDiffResult();
             var patch = _repo.Diff.Compare<Patch>(commitA.Tree, commitB.Tree, new[] { filePath },
                 null, new CompareOptions { ContextLines = contextLines });
-            var result = ParsePatchEntries(patch);
+            var result = DecodedTextFallback(ParsePatchEntries(patch), () => SourceAt(commitA, filePath),
+                () => SourceAt(commitB, filePath), filePath, contextLines, ignoreWhitespace: false, stageable: false);
             Highlighting.SyntaxHighlighter.Apply(result.Hunks, filePath);
             return result;
         }
@@ -1106,7 +1122,8 @@ namespace PickleGit.Services
             EnsureOpen();
             var patch = _repo.Diff.Compare<Patch>(new[] { filePath }, includeUntracked: true,
                 explicitPathsOptions: null, compareOptions: new CompareOptions { ContextLines = contextLines });
-            var result = ParsePatchEntries(patch);
+            var result = DecodedTextFallback(ParsePatchEntries(patch), () => IndexSource(filePath),
+                () => WorkdirSource(filePath), filePath, contextLines, ignoreWhitespace: false);
             Highlighting.SyntaxHighlighter.Apply(result.Hunks, filePath);
             return result;
         }
@@ -1117,7 +1134,9 @@ namespace PickleGit.Services
             EnsureOpen();
             var patch = _repo.Diff.Compare<Patch>(_repo.Head?.Tip?.Tree, DiffTargets.Index, new[] { filePath },
                 null, new CompareOptions { ContextLines = contextLines });
-            var result = ParsePatchEntries(patch);
+            var result = DecodedTextFallback(ParsePatchEntries(patch),
+                () => SourceAt(_repo.Head?.Tip, filePath),
+                () => IndexSource(filePath), filePath, contextLines, ignoreWhitespace: false);
             Highlighting.SyntaxHighlighter.Apply(result.Hunks, filePath);
             return result;
         }
@@ -1151,8 +1170,316 @@ namespace PickleGit.Services
                 result.IsBinary = true;
             foreach (var hunk in result.Hunks)
                 ComputeWordDiffsForHunk(hunk);
+            if (result.IsBinary)
+            {
+                Func<ContentSource> oldBytes, newBytes;
+                if (commitSha == null)
+                {
+                    if (staged)
+                    {
+                        oldBytes = () => SourceAt(_repo.Head?.Tip, filePath);
+                        newBytes = () => IndexSource(filePath);
+                    }
+                    else
+                    {
+                        oldBytes = () => IndexSource(filePath);
+                        newBytes = () => WorkdirSource(filePath);
+                    }
+                }
+                else
+                {
+                    var commit = _repo.Lookup<Commit>(commitSha);
+                    var parent = commit?.Parents.FirstOrDefault();
+                    oldBytes = () => SourceAt(parent, filePath);
+                    newBytes = () => SourceAt(commit, filePath);
+                }
+                // Partial staging is never offered with ignore-whitespace on (CanPartialStage), so skip check-attr.
+                result = DecodedTextFallback(result, oldBytes, newBytes, filePath, contextLines, ignoreWhitespace: true, stageable: false);
+            }
             Highlighting.SyntaxHighlighter.Apply(result.Hunks, filePath);
             return result;
+        }
+
+        /// <summary>libgit2 (and `git diff`) call a file binary when it contains NUL bytes, which
+        /// every UTF-16 text file does — so UTF-16 files, and a file converted between UTF-16 and
+        /// UTF-8-with-BOM, showed only the "Binary file" notice. When the comparison came back binary
+        /// with no hunks and both sides decode as text (<see cref="TextDecoding"/>), diff them in-app
+        /// (<see cref="LineDiff"/>) instead. Genuinely binary content (either side fails to decode)
+        /// keeps the binary result. The decoded sides are kept on the result for in-app hunk staging.</summary>
+        /// <param name="stageable">True only for the Staged/Unstaged diffs, where hunk/line staging can
+        /// apply — the only case worth spawning `git check-attr` for.</param>
+        private FileDiffResult DecodedTextFallback(FileDiffResult result, Func<ContentSource> oldSource, Func<ContentSource> newSource,
+            string filePath, int contextLines, bool ignoreWhitespace, bool stageable = true)
+        {
+            if (result == null || !result.IsBinary || result.Hunks.Count > 0 || IsImagePath(filePath)) return result;
+            try
+            {
+                // Size-cap and sniff the first bytes before reading anything in full: a large genuine
+                // binary (zip, video, dll) would otherwise be read completely, twice, on the executor
+                // thread just to be rejected.
+                var oldSrc = oldSource();
+                var newSrc = newSource();
+                if (oldSrc.Length > MaxDecodedDiffBytes || newSrc.Length > MaxDecodedDiffBytes) return result;
+                if (!oldSrc.ProbablyText() || !newSrc.ProbablyText()) return result;
+                if (!TextDecoding.TryDecode(oldSrc.ReadAll(), out var oldText) || !TextDecoding.TryDecode(newSrc.ReadAll(), out var newText))
+                    return result;
+                var hunks = LineDiff.Compute(oldText, newText, contextLines, ignoreWhitespace);
+                foreach (var hunk in hunks)
+                    ComputeWordDiffsForHunk(hunk);
+                var decoded = new FileDiffResult { Hunks = hunks, IsBinary = false, IsDecodedText = true, OldText = oldText, NewText = newText };
+                decoded.CanStagePartially = stageable && Git.DecodedStagingService.CanApplyPartially(decoded)
+                                            && !HasContentConversionAttributes(filePath);
+                return decoded;
+            }
+            catch (Exception ex)
+            {
+                // A failure here must not blank the pane — fall back to the plain binary notice.
+                AppLog.Error($"Decoded-text diff failed for {filePath}", ex);
+                return result;
+            }
+        }
+
+        /// <summary>True when .gitattributes gives <paramref name="filePath"/> a clean/smudge filter,
+        /// working-tree-encoding, or forced text/eol conversion. In-app partial staging writes the
+        /// index blob directly (Index.Add with a raw blob), bypassing those conversions, so it's only
+        /// offered when none apply. Conservatively true when git.exe isn't available to ask.</summary>
+        private bool HasContentConversionAttributes(string filePath)
+        {
+            if (Cli == null || !Cli.IsAvailable) return true;
+            var stamp = AttributesStamp(filePath);
+            if (_attrCache.TryGetValue(filePath, out var cached) && cached.Stamp == stamp) return cached.Converts;
+            var converts = QueryContentConversionAttributes(filePath);
+            _attrCache[filePath] = (stamp, converts);
+            return converts;
+        }
+
+        // check-attr spawns a process; each decoded diff reload (e.g. after every hunk stage) would
+        // otherwise run it again. Cached per path, invalidated when any attributes file that can apply
+        // to the path (.gitattributes in the path's directories, .git/info/attributes) changes.
+        private readonly Dictionary<string, (string Stamp, bool Converts)> _attrCache =
+            new Dictionary<string, (string Stamp, bool Converts)>(StringComparer.OrdinalIgnoreCase);
+
+        private string AttributesStamp(string filePath)
+        {
+            var sb = new System.Text.StringBuilder();
+            void Add(string f)
+            {
+                var fi = new FileInfo(f);
+                sb.Append(fi.Exists ? fi.LastWriteTimeUtc.Ticks + ":" + fi.Length : "-").Append('|');
+            }
+            var root = _repo.Info.WorkingDirectory;
+            Add(Path.Combine(_repo.Info.Path, "info", "attributes"));
+            Add(Path.Combine(root, ".gitattributes"));
+            var parts = filePath.Split('/');
+            var dir = root;
+            for (int i = 0; i < parts.Length - 1; i++)
+            {
+                dir = Path.Combine(dir, parts[i]);
+                Add(Path.Combine(dir, ".gitattributes"));
+            }
+            return sb.ToString();
+        }
+
+        private bool QueryContentConversionAttributes(string filePath)
+        {
+            var res = Cli.RunAsync("check-attr filter working-tree-encoding text eol crlf -- " + Git.CliGitService.Quote(filePath))
+                .GetAwaiter().GetResult();
+            if (!res.Success) return true;
+            foreach (var raw in (res.StdOut ?? string.Empty).Split('\n'))
+            {
+                // "<path>: <attr>: <value>" — the path itself may contain ": ", so split from the right.
+                var line = raw.TrimEnd('\r');
+                int valueSep = line.LastIndexOf(": ", StringComparison.Ordinal);
+                if (valueSep < 0) continue;
+                int attrSep = line.LastIndexOf(": ", valueSep - 1, StringComparison.Ordinal);
+                if (attrSep < 0) continue;
+                var attr = line.Substring(attrSep + 2, valueSep - attrSep - 2);
+                var value = line.Substring(valueSep + 2);
+                if (value == "unspecified" || value == "unset") continue;
+                if (attr == "text" && value == "auto") continue; // auto = no conversion for content git sees as binary
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Replaces the index entry for <paramref name="filePath"/> with exactly these bytes
+        /// (no filters applied), keeping the entry's file mode. Used by in-app partial stage/unstage
+        /// of decoded-text diffs. <paramref name="expectedCurrent"/> is the index content the edit was
+        /// computed from; if the index no longer holds exactly that (staged elsewhere since the diff was
+        /// shown), nothing is written and <see cref="StaleContentException"/> is thrown — the same
+        /// refusal `git apply` gives for a patch that no longer applies.</summary>
+        public void WriteIndexContent(string filePath, byte[] content, byte[] expectedCurrent)
+        {
+            EnsureOpen();
+            if (content == null) throw new ArgumentNullException(nameof(content));
+            // LibGit2Sharp keeps an in-memory copy of the index and Index.Write() saves that whole copy
+            // back — so without a fresh read, both the staleness check below and the write would work
+            // from a cached index and silently undo anything staged outside this repository object
+            // since it was loaded (git.exe from this app or another program). Re-open to re-read it.
+            Reopen();
+            if (!SameBytes(GetIndexBlobBytes(filePath), expectedCurrent))
+                throw new StaleContentException(filePath);
+            var existing = _repo.Index[filePath];
+            var mode = existing?.Mode ?? Mode.NonExecutableFile;
+            Blob blob;
+            using (var ms = new MemoryStream(content))
+                blob = _repo.ObjectDatabase.CreateBlob(ms);
+            _repo.Index.Add(blob, filePath, mode);
+            _repo.Index.Write();
+        }
+
+        /// <summary>Overwrites the working-tree file with these bytes. Used by in-app partial discard
+        /// of decoded-text diffs. Like <see cref="WriteIndexContent"/>, refuses (throws
+        /// <see cref="StaleContentException"/>) when the file no longer holds <paramref name="expectedCurrent"/>
+        /// — e.g. edited in another program after the diff was shown — instead of overwriting those edits.</summary>
+        public void WriteWorkdirContent(string filePath, byte[] content, byte[] expectedCurrent)
+        {
+            EnsureOpen();
+            if (content == null) throw new ArgumentNullException(nameof(content));
+            var fullPath = ResolveInsideWorkdir(filePath);
+            var current = File.Exists(fullPath) ? File.ReadAllBytes(fullPath) : null;
+            if (!SameBytes(current, expectedCurrent))
+                throw new StaleContentException(filePath);
+            File.WriteAllBytes(fullPath, content);
+        }
+
+        /// <summary>Largest file the decoded-text diff fallback will read (per side).</summary>
+        public const long MaxDecodedDiffBytes = 50L * 1024 * 1024;
+
+        /// <summary>One side of a diff, sized and sniffable before being read in full.</summary>
+        private sealed class ContentSource
+        {
+            public static readonly ContentSource Empty = new ContentSource
+            {
+                Length = 0, ReadPrefix = n => new byte[0], ReadAll = () => null
+            };
+
+            public long Length { get; set; }
+            public Func<int, byte[]> ReadPrefix { get; set; }
+            public Func<byte[]> ReadAll { get; set; }
+
+            public bool ProbablyText()
+            {
+                if (Length == 0) return true;
+                var prefix = ReadPrefix(TextDecoding.SniffLength);
+                return TextDecoding.IsProbablyText(prefix, isWholeContent: prefix.Length >= Length);
+            }
+        }
+
+        private static ContentSource BlobSource(Blob blob)
+        {
+            if (blob == null) return ContentSource.Empty;
+            return new ContentSource
+            {
+                Length = blob.Size,
+                ReadPrefix = n => { using (var st = blob.GetContentStream()) return ReadUpTo(st, n); },
+                ReadAll = () => BlobBytes(blob),
+            };
+        }
+
+        private static ContentSource SourceAt(Commit commit, string filePath) =>
+            BlobSource(commit?[filePath]?.Target as Blob);
+
+        private ContentSource IndexSource(string filePath)
+        {
+            var entry = _repo.Index?[filePath];
+            return BlobSource(entry == null ? null : _repo.Lookup<Blob>(entry.Id));
+        }
+
+        private ContentSource WorkdirSource(string filePath)
+        {
+            var fullPath = ResolveInsideWorkdir(filePath);
+            var fi = new FileInfo(fullPath);
+            if (!fi.Exists) return ContentSource.Empty;
+            return new ContentSource
+            {
+                Length = fi.Length,
+                ReadPrefix = n => { using (var st = File.OpenRead(fullPath)) return ReadUpTo(st, n); },
+                ReadAll = () => File.ReadAllBytes(fullPath),
+            };
+        }
+
+        private static byte[] ReadUpTo(Stream stream, int count)
+        {
+            var buffer = new byte[count];
+            int total = 0, read;
+            while (total < count && (read = stream.Read(buffer, total, count - total)) > 0) total += read;
+            if (total == count) return buffer;
+            var trimmed = new byte[total];
+            Buffer.BlockCopy(buffer, 0, trimmed, 0, total);
+            return trimmed;
+        }
+
+        /// <summary>Thrown when an in-app partial stage/unstage/discard finds its target changed since
+        /// the diff it was computed from was loaded.</summary>
+        public sealed class StaleContentException : InvalidOperationException
+        {
+            public StaleContentException(string path)
+                : base($"{path} changed since its diff was shown. Nothing was changed — the diff has been reloaded; try again.") { }
+        }
+
+        /// <summary>Null and empty both mean "no content" (a missing side decodes as an empty file).</summary>
+        private static bool SameBytes(byte[] a, byte[] b)
+        {
+            int la = a?.Length ?? 0, lb = b?.Length ?? 0;
+            if (la != lb) return false;
+            for (int i = 0; i < la; i++) if (a[i] != b[i]) return false;
+            return true;
+        }
+
+        /// <summary>Raw bytes of a conflicted path's three index stages, for rebuilding conflicts git
+        /// wouldn't text-merge (it treats NUL-containing files such as UTF-16 as binary — see
+        /// ThreeWayMerge). Returns null for an ordinary text conflict (no stage is binary to libgit2,
+        /// so git wrote conflict markers and nothing needs rebuilding) — no blob is read in that case.
+        /// A stage larger than <see cref="MaxRebuildBlobBytes"/> isn't read either; the result is then
+        /// flagged <see cref="ConflictStages.TooLarge"/>.</summary>
+        public ConflictStages GetConflictStageBytes(string filePath)
+        {
+            EnsureOpen();
+            var conflict = _repo.Index.Conflicts[filePath];
+            if (conflict == null) return null;
+            var blobs = new[] { conflict.Ancestor, conflict.Ours, conflict.Theirs }
+                .Select(e => e == null ? null : _repo.Lookup<Blob>(e.Id)).ToArray();
+            if (!blobs.Any(b => b != null && b.IsBinary)) return null;
+            if (blobs.Any(b => b != null && b.Size > MaxRebuildBlobBytes)) return new ConflictStages { TooLarge = true };
+            // Genuinely binary assets (images, archives, DLLs) are rejected from their first bytes,
+            // without reading every stage in full.
+            if (blobs.Any(b => b != null && !BlobSource(b).ProbablyText())) return new ConflictStages { NotText = true };
+            return new ConflictStages { Base = BlobBytes(blobs[0]), Ours = BlobBytes(blobs[1]), Theirs = BlobBytes(blobs[2]) };
+        }
+
+        /// <summary>Largest stage blob GetConflictStageBytes will load for an in-app merge.</summary>
+        public const long MaxRebuildBlobBytes = 50L * 1024 * 1024;
+
+        private static byte[] BlobBytes(Blob blob)
+        {
+            if (blob == null) return null;
+            using (var stream = blob.GetContentStream())
+            using (var ms = new MemoryStream())
+            {
+                stream.CopyTo(ms);
+                return ms.ToArray();
+            }
+        }
+
+        private byte[] ReadWorkdirBytes(string filePath)
+        {
+            var fullPath = ResolveInsideWorkdir(filePath);
+            return File.Exists(fullPath) ? File.ReadAllBytes(fullPath) : null;
+        }
+
+        /// <summary>SECURITY: repo-relative paths come from git status, but are still resolved and
+        /// required to stay inside the working directory before any read/write. The root is compared
+        /// with a trailing separator so a sibling directory (C:\repo2 vs C:\repo) can never match.</summary>
+        private string ResolveInsideWorkdir(string filePath)
+        {
+            var root = Path.GetFullPath(_repo.Info.WorkingDirectory);
+            if (!root.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+                root += Path.DirectorySeparatorChar;
+            var fullPath = Path.GetFullPath(Path.Combine(root, filePath.Replace('/', Path.DirectorySeparatorChar)));
+            if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Refusing to access a path outside the working directory: " + filePath);
+            return fullPath;
         }
 
         private static FileDiffResult ParsePatchEntries(Patch patch)
@@ -1850,7 +2177,7 @@ namespace PickleGit.Services
         /// <summary>Splits a path list into batches whose joined length stays comfortably under
         /// Windows' ~32,767-character command-line limit — see DiscardPathsCli.</summary>
         private const int PathArgBudgetChars = 20000;
-        private static IEnumerable<List<string>> ChunkPathsByLength(IReadOnlyCollection<string> paths)
+        internal static IEnumerable<List<string>> ChunkPathsByLength(IReadOnlyCollection<string> paths)
         {
             var batch = new List<string>();
             int len = 0;

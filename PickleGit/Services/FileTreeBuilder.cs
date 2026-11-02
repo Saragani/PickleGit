@@ -18,11 +18,11 @@ namespace PickleGit.Services
             public readonly List<FileChange> Files = new List<FileChange>();
         }
 
-        /// <summary>Builds the flattened tree. A folder not present in <paramref name="expandedFolders"/>
-        /// still gets its own row (so it can be expanded), but none of its descendant files/subfolders
-        /// are emitted — collapsed is the default for every folder.</summary>
+        /// <summary>Builds the flattened tree. A folder present in <paramref name="collapsedFolders"/>
+        /// still gets its own row (so it can be expanded again), but none of its descendant
+        /// files/subfolders are emitted — expanded is the default for every folder.</summary>
         public static List<FileTreeRow> Build(IEnumerable<FileChange> files, Comparison<FileChange> leafComparer,
-            ISet<string> expandedFolders)
+            ISet<string> collapsedFolders)
         {
             var root = new Node();
             foreach (var f in files)
@@ -43,27 +43,30 @@ namespace PickleGit.Services
             }
 
             var rows = new List<FileTreeRow>();
-            Flatten(root, 0, string.Empty, rows, leafComparer, expandedFolders);
+            Flatten(root, 0, string.Empty, rows, leafComparer, collapsedFolders);
             return rows;
         }
 
         private static void Flatten(Node node, int indent, string pathPrefix, List<FileTreeRow> rows,
-            Comparison<FileChange> leafComparer, ISet<string> expandedFolders)
+            Comparison<FileChange> leafComparer, ISet<string> collapsedFolders)
         {
             foreach (var kvp in node.Children.OrderBy(c => c.Key, StringComparer.OrdinalIgnoreCase))
             {
                 var folderPath = pathPrefix.Length == 0 ? kvp.Key : pathPrefix + "/" + kvp.Key;
-                bool expanded = expandedFolders.Contains(folderPath);
+                bool expanded = !collapsedFolders.Contains(folderPath);
+                var descendants = new List<FileChange>();
+                CollectFiles(kvp.Value, descendants);
                 rows.Add(new FileTreeRow
                 {
                     Kind = FileTreeRowKind.Folder,
                     IndentLevel = indent,
                     DisplayName = kvp.Key,
                     FullPath = folderPath,
-                    IsExpanded = expanded
+                    IsExpanded = expanded,
+                    Files = descendants
                 });
                 if (expanded)
-                    Flatten(kvp.Value, indent + 1, folderPath, rows, leafComparer, expandedFolders);
+                    Flatten(kvp.Value, indent + 1, folderPath, rows, leafComparer, collapsedFolders);
             }
 
             var files = node.Files.ToList();
@@ -80,6 +83,13 @@ namespace PickleGit.Services
             }
         }
 
+        private static void CollectFiles(Node node, List<FileChange> into)
+        {
+            foreach (var child in node.Children.OrderBy(c => c.Key, StringComparer.OrdinalIgnoreCase))
+                CollectFiles(child.Value, into);
+            into.AddRange(node.Files);
+        }
+
         // ── Aggregated (multi-select) variant ───────────────────────────────────────────────
         // Same flatten-a-tree algorithm as above, duplicated rather than made generic: the two
         // models (FileChange vs AggregatedFileChange) are XAML-bound through separate
@@ -94,7 +104,7 @@ namespace PickleGit.Services
         }
 
         public static List<AggregatedFileTreeRow> BuildAggregated(IEnumerable<AggregatedFileChange> files,
-            Comparison<AggregatedFileChange> leafComparer, ISet<string> expandedFolders)
+            Comparison<AggregatedFileChange> leafComparer, ISet<string> collapsedFolders)
         {
             var root = new AggregatedNode();
             foreach (var f in files)
@@ -115,18 +125,18 @@ namespace PickleGit.Services
             }
 
             var rows = new List<AggregatedFileTreeRow>();
-            FlattenAggregated(root, 0, string.Empty, rows, leafComparer, expandedFolders);
+            FlattenAggregated(root, 0, string.Empty, rows, leafComparer, collapsedFolders);
             return rows;
         }
 
         private static void FlattenAggregated(AggregatedNode node, int indent, string pathPrefix,
             List<AggregatedFileTreeRow> rows, Comparison<AggregatedFileChange> leafComparer,
-            ISet<string> expandedFolders)
+            ISet<string> collapsedFolders)
         {
             foreach (var kvp in node.Children.OrderBy(c => c.Key, StringComparer.OrdinalIgnoreCase))
             {
                 var folderPath = pathPrefix.Length == 0 ? kvp.Key : pathPrefix + "/" + kvp.Key;
-                bool expanded = expandedFolders.Contains(folderPath);
+                bool expanded = !collapsedFolders.Contains(folderPath);
                 rows.Add(new AggregatedFileTreeRow
                 {
                     Kind = FileTreeRowKind.Folder,
@@ -136,7 +146,7 @@ namespace PickleGit.Services
                     IsExpanded = expanded
                 });
                 if (expanded)
-                    FlattenAggregated(kvp.Value, indent + 1, folderPath, rows, leafComparer, expandedFolders);
+                    FlattenAggregated(kvp.Value, indent + 1, folderPath, rows, leafComparer, collapsedFolders);
             }
 
             var files = node.Files.ToList();
