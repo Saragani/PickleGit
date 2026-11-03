@@ -266,26 +266,78 @@ namespace PickleGit.Services.Git
                         await stdin.WriteAsync(opts.StdIn).ConfigureAwait(false);
                 }
 
-                using (ct.Register(() =>
+                Task killTask = null;
+                try
                 {
-                    try { if (!proc.HasExited) proc.Kill(); }
-                    catch { }
-                }))
-                {
-                    var exitCode = await tcs.Task.ConfigureAwait(false);
-                    // Ensure both pumps have drained (EOF) before reading stdout/stderr below.
-                    try { await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false); }
-                    catch { /* pump can fault on Kill() tearing down the pipe mid-read */ }
-                    ct.ThrowIfCancellationRequested();
-                    PickleGit.Services.AppLog.Info($"git {args} exit={exitCode} in {sw.ElapsedMilliseconds}ms (in {workDir})");
-                    return new GitCliResult
+                    using (ct.Register(() => killTask = KillProcessTree(proc)))
                     {
-                        ExitCode = exitCode,
-                        StdOut = stdout.ToString(),
-                        StdErr = stderr.ToString()
-                    };
+                        var exitCode = await tcs.Task.ConfigureAwait(false);
+                        // Ensure both pumps have drained (EOF) before reading stdout/stderr below.
+                        try { await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false); }
+                        catch { /* intentionally ignored: pump can fault on Kill() tearing down the pipe mid-read */ }
+                        ct.ThrowIfCancellationRequested();
+                        PickleGit.Services.AppLog.Info($"git {args} exit={exitCode} in {sw.ElapsedMilliseconds}ms (in {workDir})");
+                        return new GitCliResult
+                        {
+                            ExitCode = exitCode,
+                            StdOut = stdout.ToString(),
+                            StdErr = stderr.ToString()
+                        };
+                    }
+                }
+                finally
+                {
+                    // Keep `proc` (and so its OS handle) alive until the kill has finished: while the
+                    // handle is open Windows cannot reuse the PID, so taskkill can never hit an
+                    // unrelated process. The registration above is already disposed here, and its
+                    // Dispose waits for an in-flight callback, so killTask is stable.
+                    if (killTask != null)
+                        await Task.WhenAny(killTask, Task.Delay(TimeSpan.FromSeconds(6))).ConfigureAwait(false);
                 }
             }
+        }
+
+        /// <summary>Kills git.exe AND its children on cancellation. A bare <c>proc.Kill()</c> only
+        /// kills the <c>cmd\git.exe</c> launcher: the real <c>git.exe</c> / <c>git-remote-https</c> /
+        /// <c>ssh</c> children survive, keep the inherited stdout/stderr pipes open, and the stream
+        /// pumps then never reach EOF — leaving the caller (and the executor thread) hung forever.
+        /// Runs off the cancelling thread (often the UI thread) since taskkill takes ~100 ms.
+        /// The caller awaits the returned task before disposing <paramref name="proc"/>.</summary>
+        private static Task KillProcessTree(Process proc)
+        {
+            int pid;
+            try
+            {
+                if (proc.HasExited) return Task.CompletedTask;
+                pid = proc.Id;
+            }
+            catch (InvalidOperationException) { return Task.CompletedTask; } // never started / already disposed
+
+            return Task.Run(() =>
+            {
+                try
+                {
+                    // Re-check right before killing: the process may have exited on its own since
+                    // the PID was read. The handle is still held by the caller, so the PID is ours.
+                    if (proc.HasExited) return;
+                    // SECURITY: absolute System32 path (no PATH lookup); the only argument is an integer PID.
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = Path.Combine(Environment.SystemDirectory, "taskkill.exe"),
+                        Arguments = $"/T /F /PID {pid}",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                    };
+                    using (var killer = Process.Start(psi))
+                        killer?.WaitForExit(5000);
+                }
+                catch (Exception ex)
+                {
+                    PickleGit.Services.AppLog.Warn($"taskkill of git process tree {pid} failed; falling back to Kill()", ex);
+                }
+                try { if (!proc.HasExited) proc.Kill(); }
+                catch (Exception ex) { PickleGit.Services.AppLog.Info($"Fallback Kill() of git process {pid} skipped: {ex.Message}"); }
+            });
         }
 
         /// <summary>Reads <paramref name="reader"/> to EOF, invoking <paramref name="onLine"/> for each

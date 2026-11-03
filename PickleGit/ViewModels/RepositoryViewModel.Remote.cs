@@ -190,6 +190,155 @@ namespace PickleGit.ViewModels
             finally { IsBusy = false; }
         }
 
+        /// <summary>Silent fetch used by <see cref="AppViewModel"/>'s periodic auto-fetch pass. Never
+        /// prompts and never shows an error dialog — failures and skips only go to <see cref="AppLog"/>.
+        /// Only remotes that need no PickleGit-managed credential are fetched (SSH, local path /
+        /// file://, or HTTPS with a configured credential helper); a repo with no such remote is
+        /// skipped. Each remote gets <see cref="BackgroundFetchTimeout"/>.
+        /// Deliberately does not set <see cref="IsBusy"/>, so the sidebar/toolbar stay usable.
+        /// Instead each remote's fetch is one executor work item: the executor is a serial queue,
+        /// so a user operation started mid-fetch waits behind that remote and runs right after.
+        /// Skips the tab when a user operation is already running.</summary>
+        public async Task BackgroundFetchAsync()
+        {
+            if (_closed || IsBusy || !_git.IsOpen || _git.Cli == null || !_git.Cli.IsAvailable) return;
+
+            var cts = new System.Threading.CancellationTokenSource();
+            _backgroundFetchCts = cts;
+            try
+            {
+                var token = cts.Token;
+                // Read from git (not the Remotes property): tabs that were never activated may not
+                // have populated their sidebar collections yet.
+                var remotes = await _git.Executor.RunAsync(() => _git.GetRemotes());
+                if (_closed) return;
+                if (remotes == null || remotes.Count == 0)
+                {
+                    AppLog.Info($"Background fetch: skipped {RepoName} (no remotes)");
+                    return;
+                }
+
+                var eligible = new List<RemoteInfo>();
+                foreach (var r in remotes)
+                {
+                    // SECURITY: a name starting with '-' would be parsed by git as a fetch option
+                    // (e.g. --upload-pack=...) — never pass one on an unattended, recurring command.
+                    if (string.IsNullOrEmpty(r.Name) || r.Name.StartsWith("-"))
+                    {
+                        AppLog.Warn($"Background fetch: skipped remote with unsafe name in {RepoName}");
+                        continue;
+                    }
+                    if (GitCli.IsSshUrl(r.Url) || IsLocalRemoteUrl(r.Url) ||
+                        await GitCli.HasConfiguredCredentialHelperAsync(_git.Cli.WorkingDirectory, r.Url))
+                        eligible.Add(r);
+                    else
+                        AppLog.Info($"Background fetch: skipped remote '{r.Name}' of {RepoName} (no credential helper)");
+                }
+                if (_closed || eligible.Count == 0) return;
+
+                AppLog.Info($"Background fetch: start {RepoName}");
+                var fetched = false;
+                using (_watcher?.Suppress())
+                {
+                    // One executor work item per remote (not one for the whole repo), so diff/commit
+                    // loads and user operations queued meanwhile run between remotes instead of
+                    // waiting for every remote's fetch.
+                    foreach (var r in eligible)
+                    {
+                        if (token.IsCancellationRequested || _closed) break;
+                        if (await _git.Executor.RunAsync(() => FetchRemoteSilently(r, token)))
+                            fetched = true;
+                    }
+                }
+                AppLog.Info($"Background fetch: done {RepoName}");
+
+                // Light refresh tier: brief tab spinner at most, never the IsBusy sidebar/toolbar lock.
+                if (fetched && !_closed && IsLoaded)
+                    await RefreshAsync(false, FetchRefreshScope, isBackgroundTrigger: true);
+            }
+            catch (Exception ex) when (_closed && (ex is OperationCanceledException || ex is ObjectDisposedException))
+            {
+                // Tab closed mid-fetch — expected, nothing to report.
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn($"Background fetch failed [{RepoName}]: {RedactUrlCredentials(ex.GetType().Name + ": " + ex.Message)}");
+            }
+            finally
+            {
+                if (_backgroundFetchCts == cts) _backgroundFetchCts = null;
+                cts.Dispose();
+            }
+        }
+
+        /// <summary>Runs ON the executor thread: fetches one remote non-interactively and reopens the
+        /// repo on success. Returns true when the fetch succeeded. Never throws except the
+        /// tab-close <see cref="OperationCanceledException"/>, which the caller treats as expected.</summary>
+        private bool FetchRemoteSilently(RemoteInfo remote, System.Threading.CancellationToken closeToken)
+        {
+            // Per-remote timeout: a remote that never answers must not hold this tab's executor
+            // (and any user op queued behind it) or the whole pass for long.
+            using (var perRemote = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(closeToken))
+            {
+                perRemote.CancelAfter(BackgroundFetchTimeout);
+                GitCliResult result;
+                try
+                {
+                    // GIT_TERMINAL_PROMPT=0 (set by GitCli) only stops git's own terminal prompt —
+                    // Git Credential Manager would still open its GUI sign-in window. Force it
+                    // non-interactive so a missing/expired login fails fast instead of popping UI.
+                    result = _git.Cli.RunAsync(
+                        $"-c credential.interactive=never fetch {CliGitService.Quote(remote.Name)}",
+                        new GitCliOptions { Env = BackgroundFetchEnv },
+                        perRemote.Token).GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException) when (!closeToken.IsCancellationRequested)
+                {
+                    AppLog.Warn($"Background fetch of '{remote.Name}' timed out after {BackgroundFetchTimeout.TotalSeconds:0}s [{RepoName}]");
+                    return false;
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException))
+                {
+                    AppLog.Warn($"Background fetch of '{remote.Name}' could not run [{RepoName}]: {RedactUrlCredentials(ex.Message)}");
+                    return false;
+                }
+                // Tab closing: Dispose() is tearing the repo down concurrently — don't Reopen().
+                if (closeToken.IsCancellationRequested) return false;
+                if (!result.Success)
+                {
+                    AppLog.Warn($"Background fetch of '{remote.Name}' failed [{RepoName}]: {RedactUrlCredentials(result.ErrorText)}");
+                    return false;
+                }
+                _git.Reopen();
+                return true;
+            }
+        }
+
+        private static readonly TimeSpan BackgroundFetchTimeout = TimeSpan.FromSeconds(60);
+
+        private static readonly IDictionary<string, string> BackgroundFetchEnv =
+            new Dictionary<string, string> { ["GCM_INTERACTIVE"] = "never" };
+
+        /// <summary>A file:// URL or a plain filesystem path (absolute, UNC, or relative) — such
+        /// remotes need no authentication at all, so a background fetch is always safe.</summary>
+        private static bool IsLocalRemoteUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return false;
+            if (url.StartsWith("file://", StringComparison.OrdinalIgnoreCase)) return true;
+            if (url.Contains("://") || GitCli.IsSshUrl(url)) return false;
+            // C:\ or C:/ drive path, \\server\share UNC, /posix, or ./ ../ relative.
+            if (url.Length >= 3 && char.IsLetter(url[0]) && url[1] == ':' && (url[2] == '\\' || url[2] == '/')) return true;
+            return url.StartsWith("\\\\") || url.StartsWith("/") || url.StartsWith(".");
+        }
+
+        // SECURITY: git error text can echo a remote URL with embedded basic-auth
+        // (https://user:token@host/...) — strip it before it reaches the log file.
+        private static readonly System.Text.RegularExpressions.Regex UrlCredentialRegex =
+            new System.Text.RegularExpressions.Regex(@"://[^/\s@]+@", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        private static string RedactUrlCredentials(string text) =>
+            string.IsNullOrEmpty(text) ? text : UrlCredentialRegex.Replace(text, "://***@");
+
         /// <summary>Updates a local branch other than the checked-out one to match its upstream,
         /// without switching to it — via a plain refspec fetch (`fetch &lt;remote&gt; &lt;upstream&gt;:&lt;local&gt;`),
         /// which git only allows when it's a fast-forward and the branch isn't currently checked out.

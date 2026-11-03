@@ -141,6 +141,8 @@ namespace PickleGit
 
             if (activeTab != null)
                 viewModel.ActiveTab = activeTab;
+
+            viewModel.StartBackgroundFetch();
         }
 
         private static void ForwardToRunningInstance(string repoPath)

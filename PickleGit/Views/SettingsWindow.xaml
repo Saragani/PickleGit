@@ -65,6 +65,13 @@
                              HorizontalAlignment="Left"
                              Text="{Binding DefaultCommitLoadLimit, UpdateSourceTrigger=PropertyChanged}"
                              Margin="0,0,0,20"/>
+
+                    <TextBlock Text="Auto-fetch interval (minutes, 0 = off)" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                    <TextBox Name="AutoFetchIntervalBox" Style="{StaticResource DarkTextBox}" Width="140"
+                             HorizontalAlignment="Left"
+                             Text="{Binding AutoFetchIntervalMinutes, UpdateSourceTrigger=LostFocus}"
+                             Margin="0,0,0,20"/>
                 </StackPanel>
             </ScrollViewer>
 
