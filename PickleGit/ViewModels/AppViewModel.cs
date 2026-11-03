@@ -365,6 +365,86 @@ namespace PickleGit.ViewModels
             }
         }
 
+        private int _autoFetchIntervalMinutes;
+        /// <summary>Minutes between background fetch passes over all open tabs; 0 = off.</summary>
+        public int AutoFetchIntervalMinutes
+        {
+            get => _autoFetchIntervalMinutes;
+            set
+            {
+                var v = AppSettings.ClampAutoFetchInterval(value);
+                var wasOff = _autoFetchIntervalMinutes <= 0;
+                if (!Set(ref _autoFetchIntervalMinutes, v))
+                {
+                    // Clamped back to the current value — re-raise so the TextBox shows what's in effect.
+                    if (v != value) RaisePropertyChanged(nameof(AutoFetchIntervalMinutes));
+                    return;
+                }
+                if (v != value) RaisePropertyChanged(nameof(AutoFetchIntervalMinutes));
+                AppSettings.SaveAutoFetchIntervalMinutes(v);
+                RescheduleBackgroundFetch();
+                // Turning auto-fetch on fetches now, not one full interval later.
+                if (wasOff && v > 0 && _backgroundFetchStarted)
+                    _ = RunBackgroundFetchPassAsync();
+            }
+        }
+
+        // ── Background auto-fetch ───────────────────────────────────────────────
+
+        private System.Windows.Threading.DispatcherTimer _backgroundFetchTimer;
+        private bool _backgroundFetchStarted;
+        private bool _fetchPassRunning;
+
+        /// <summary>Called once from App.OnStartup after the saved tabs are open: runs one
+        /// background fetch pass immediately, then one every <see cref="AutoFetchIntervalMinutes"/>.
+        /// An interval of 0 disables both.</summary>
+        public void StartBackgroundFetch()
+        {
+            _backgroundFetchStarted = true;
+            RescheduleBackgroundFetch();
+            if (_autoFetchIntervalMinutes > 0)
+                _ = RunBackgroundFetchPassAsync();
+        }
+
+        /// <summary>Applies a changed <see cref="AutoFetchIntervalMinutes"/> to the running scheduler.</summary>
+        private void RescheduleBackgroundFetch()
+        {
+            if (!_backgroundFetchStarted) return;
+            _backgroundFetchTimer?.Stop();
+            if (_autoFetchIntervalMinutes <= 0) return;
+            if (_backgroundFetchTimer == null)
+            {
+                _backgroundFetchTimer = new System.Windows.Threading.DispatcherTimer();
+                _backgroundFetchTimer.Tick += (s, e) => _ = RunBackgroundFetchPassAsync();
+            }
+            _backgroundFetchTimer.Interval = TimeSpan.FromMinutes(_autoFetchIntervalMinutes);
+            _backgroundFetchTimer.Start();
+        }
+
+        /// <summary>Fetches every open tab one after another (never in parallel). A pass that is
+        /// still running when the next tick arrives makes that tick a no-op.</summary>
+        private async Task RunBackgroundFetchPassAsync()
+        {
+            if (_fetchPassRunning) return;
+            _fetchPassRunning = true;
+            try
+            {
+                foreach (var tab in Tabs.ToList())
+                {
+                    if (!Tabs.Contains(tab)) continue; // closed while an earlier tab was fetching
+                    await tab.BackgroundFetchAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("Background fetch pass failed", ex);
+            }
+            finally
+            {
+                _fetchPassRunning = false;
+            }
+        }
+
         // ── UI preferences (Settings window) ────────────────────────────────────
 
         private string _dateFormat;
@@ -617,6 +697,7 @@ namespace PickleGit.ViewModels
             _gpgSignCommits = AppSettings.LoadGpgSignCommits();
             _gitExePathOverride = AppSettings.LoadGitExePathOverride();
             _defaultCommitLoadLimit = AppSettings.LoadCommitLimit();
+            _autoFetchIntervalMinutes = AppSettings.LoadAutoFetchIntervalMinutes();
             _dateFormat = AppSettings.LoadDateFormat();
             Converters.DateFormatConverter.CurrentFormat = _dateFormat;
             _useRelativeDates = AppSettings.LoadUseRelativeDates();

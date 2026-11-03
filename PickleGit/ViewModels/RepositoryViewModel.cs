@@ -2334,8 +2334,19 @@ namespace PickleGit.ViewModels
             AppSettings.SaveCollapsedBranchNodes(RepoPath, _collapsedBranchNodes);
         }
 
+        /// <summary>Set once the tab is closed — tells an in-flight <see cref="BackgroundFetchAsync"/>
+        /// to stop touching the (now disposed) repo.</summary>
+        private bool _closed;
+
+        /// <summary>Cancels the running background fetch's git.exe on tab close, so
+        /// <see cref="GitService.Dispose"/>'s executor join returns at once instead of freezing the UI.</summary>
+        private System.Threading.CancellationTokenSource _backgroundFetchCts;
+
         public void Dispose()
         {
+            _closed = true;
+            try { _backgroundFetchCts?.Cancel(); }
+            catch (ObjectDisposedException) { /* intentionally ignored: the fetch finished and disposed its CTS first */ }
             StopRepoMonitoring();
             _git.Dispose();
         }

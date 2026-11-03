@@ -23,6 +23,9 @@ namespace PickleGit.Services
             /// <summary>Ceiling for the history walk; "Load more" doubles it per click at runtime.</summary>
             public int CommitLoadLimit { get; set; } = 10000;
 
+            /// <summary>Minutes between background fetch passes over all open tabs; 0 disables.</summary>
+            public int AutoFetchIntervalMinutes { get; set; } = 5;
+
             public List<string> OpenRepoPaths { get; set; } = new List<string>();
             public string ActiveRepoPath { get; set; }
             public string LastRepoPath { get; set; } // backward compat
@@ -207,6 +210,15 @@ namespace PickleGit.Services
             return limit > 0 ? limit : 10000;
         }
 
+        public const int MaxAutoFetchIntervalMinutes = 1440;
+
+        /// <summary>Clamped to 0..<see cref="MaxAutoFetchIntervalMinutes"/> — settings.json is semi-trusted.</summary>
+        public static int LoadAutoFetchIntervalMinutes() =>
+            ClampAutoFetchInterval((Load() ?? new SettingsData()).AutoFetchIntervalMinutes);
+
+        public static int ClampAutoFetchInterval(int minutes) =>
+            Math.Max(0, Math.Min(MaxAutoFetchIntervalMinutes, minutes));
+
         public static (double branchTag, double graph, double commitDesc, double author, double dateTime, double sha)
             LoadColumnWidths()
         {
@@ -377,6 +389,18 @@ namespace PickleGit.Services
                 Save(data);
             }
             catch { }
+        }
+
+        public static void SaveAutoFetchIntervalMinutes(int minutes)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
+                var data = Load() ?? new SettingsData();
+                data.AutoFetchIntervalMinutes = ClampAutoFetchInterval(minutes);
+                Save(data);
+            }
+            catch (Exception ex) { AppLog.Warn("Failed to save auto-fetch interval", ex); }
         }
 
         public static void SaveCommitLoadLimit(int limit)

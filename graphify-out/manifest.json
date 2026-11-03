@@ -36,10 +36,10 @@
     "semantic_hash": "8fe3ac4722a86200ea71de81d18dd867"
   },
   ".claude/settings.json": {
-    "mtime": 1783064014.1276064,
-    "seen": 1793624239.824691,
-    "ast_hash": "3a05f16c58298c1dfb537415be1ca5dd",
-    "semantic_hash": "3a05f16c58298c1dfb537415be1ca5dd"
+    "mtime": 1793625666.6411357,
+    "seen": 1793717512.7862809,
+    "ast_hash": "fc0953548e877b01f3593cca48afb1cd",
+    "semantic_hash": ""
   },
   ".claude/settings.local.json": {
     "mtime": 1787169219.9199872,
@@ -72,10 +72,10 @@
     "semantic_hash": "a92eb4218f15c6638189cac87cdfcc17"
   },
   "PickleGit/App.xaml.cs": {
-    "mtime": 1784646660.774123,
-    "seen": 1793624239.8246953,
-    "ast_hash": "e3312e3287a4eb8f5b7d8b05a2a95f5a",
-    "semantic_hash": "e3312e3287a4eb8f5b7d8b05a2a95f5a"
+    "mtime": 1793716609.2581248,
+    "seen": 1793717512.7862875,
+    "ast_hash": "21aa5f4dc73f961a6a8d62c71be50433",
+    "semantic_hash": ""
   },
   "PickleGit/Behaviors/BlameSearchHighlighter.cs": {
     "mtime": 1786885177.0166113,
@@ -90,8 +90,8 @@
     "semantic_hash": "a5c8e7e42836b95a4288aa96b7d04131"
   },
   "PickleGit/Behaviors/ListViewMultiSelectBehavior.cs": {
-    "mtime": 1793618198.925055,
-    "seen": 1793624239.8246975,
+    "mtime": 1793625666.6632648,
+    "seen": 1793717512.786291,
     "ast_hash": "c07da0e233e14509b62b28c51f9e2ac1",
     "semantic_hash": "c07da0e233e14509b62b28c51f9e2ac1"
   },
@@ -198,8 +198,8 @@
     "semantic_hash": "6278475be950ba2304ab1350ad4474e2"
   },
   "PickleGit/Models/RepositoryAccount.cs": {
-    "mtime": 1793614392.4902618,
-    "seen": 1793624239.8247104,
+    "mtime": 1793625666.6657915,
+    "seen": 1793717512.7863085,
     "ast_hash": "602b1ac8a7692c05dc216121d1cdf1c4",
     "semantic_hash": "602b1ac8a7692c05dc216121d1cdf1c4"
   },
@@ -240,10 +240,10 @@
     "semantic_hash": "8e96b8933d3513b51cd1756774b99af3"
   },
   "PickleGit/Services/AppSettings.cs": {
-    "mtime": 1787486115.1827755,
-    "seen": 1793624239.824715,
-    "ast_hash": "5a36f0154edac66aaef5b76412f1425b",
-    "semantic_hash": "5a36f0154edac66aaef5b76412f1425b"
+    "mtime": 1793716366.5738645,
+    "seen": 1793717512.7863154,
+    "ast_hash": "a0a7d54bdd0c7e4c82b3e8d17a23b451",
+    "semantic_hash": ""
   },
   "PickleGit/Services/AvatarService.cs": {
     "mtime": 1784646661.0556939,
@@ -270,14 +270,14 @@
     "semantic_hash": "f334abbc468a024853c01ddcae0e9323"
   },
   "PickleGit/Services/FileTreeBuilder.cs": {
-    "mtime": 1793612670.3500571,
-    "seen": 1793624239.824719,
+    "mtime": 1793625666.6667905,
+    "seen": 1793717512.7863204,
     "ast_hash": "fa3747417150dd3e51980f1968863390",
     "semantic_hash": "fa3747417150dd3e51980f1968863390"
   },
   "PickleGit/Services/GitService.cs": {
-    "mtime": 1793618690.704196,
-    "seen": 1793624239.8247197,
+    "mtime": 1793625666.6722596,
+    "seen": 1793717512.7863214,
     "ast_hash": "23f618418bd76fd435bd974e2191376e",
     "semantic_hash": "23f618418bd76fd435bd974e2191376e"
   },
@@ -288,16 +288,16 @@
     "semantic_hash": "911506b2f2ed34453cefbe0c061026ae"
   },
   "PickleGit/Services/Git/DecodedStagingService.cs": {
-    "mtime": 1793614413.3927362,
-    "seen": 1793624239.8247209,
+    "mtime": 1793625666.667801,
+    "seen": 1793717512.7863233,
     "ast_hash": "43c7b5cd17ba172f55c0c86e3aaff048",
     "semantic_hash": "43c7b5cd17ba172f55c0c86e3aaff048"
   },
   "PickleGit/Services/Git/GitCli.cs": {
-    "mtime": 1790685723.257612,
-    "seen": 1793624239.8247213,
-    "ast_hash": "c102e5725742d124dc89ce9ca7d2b076",
-    "semantic_hash": "c102e5725742d124dc89ce9ca7d2b076"
+    "mtime": 1793718336.7769449,
+    "seen": 1793718544.673531,
+    "ast_hash": "c55aa9714597bb00c1830e6afeac1e78",
+    "semantic_hash": ""
   },
   "PickleGit/Services/Git/GitExecutor.cs": {
     "mtime": 1786881017.1637888,
@@ -318,8 +318,8 @@
     "semantic_hash": "d79b92eca86395dfff12d7af472d6104"
   },
   "PickleGit/Services/Git/StagingService.cs": {
-    "mtime": 1793612670.9699087,
-    "seen": 1793624239.8247242,
+    "mtime": 1793625666.6697974,
+    "seen": 1793717512.7863278,
     "ast_hash": "062a987ead4381b263379a4d6bd62745",
     "semantic_hash": "062a987ead4381b263379a4d6bd62745"
   },
@@ -390,8 +390,8 @@
     "semantic_hash": "ff66544f1070a206255238632612b913"
   },
   "PickleGit/Services/LineDiff.cs": {
-    "mtime": 1793615173.6168275,
-    "seen": 1793624239.8247323,
+    "mtime": 1793625666.6734867,
+    "seen": 1793717512.7863395,
     "ast_hash": "3bd9b2ff11dff5994677b9017e7d56f4",
     "semantic_hash": "3bd9b2ff11dff5994677b9017e7d56f4"
   },
@@ -420,14 +420,14 @@
     "semantic_hash": "2f75d9f9e250aa1a426e76b20e7a6f77"
   },
   "PickleGit/Services/TextDecoding.cs": {
-    "mtime": 1793617992.5040057,
-    "seen": 1793624239.8247356,
+    "mtime": 1793625666.674533,
+    "seen": 1793717512.7863445,
     "ast_hash": "c6cc3ba76a2446e6b264b79db8fd0189",
     "semantic_hash": "c6cc3ba76a2446e6b264b79db8fd0189"
   },
   "PickleGit/Services/ThreeWayMerge.cs": {
-    "mtime": 1793618044.374885,
-    "seen": 1793624239.8247366,
+    "mtime": 1793625666.675539,
+    "seen": 1793717512.7863455,
     "ast_hash": "1d64f4a074f244e880d406e3e9bcc40a",
     "semantic_hash": "1d64f4a074f244e880d406e3e9bcc40a"
   },
@@ -468,10 +468,10 @@
     "semantic_hash": "5ed13f4d9ad8d773109b2b47ad65c02a"
   },
   "PickleGit/ViewModels/AppViewModel.cs": {
-    "mtime": 1787486115.1889596,
-    "seen": 1793624239.8247414,
-    "ast_hash": "4edefc2f22b5474b2e73de18c1489f7a",
-    "semantic_hash": "4edefc2f22b5474b2e73de18c1489f7a"
+    "mtime": 1793718351.0395968,
+    "seen": 1793718544.6735792,
+    "ast_hash": "d7742a7ccd7e52ff0ae0316b61d23f29",
+    "semantic_hash": ""
   },
   "PickleGit/ViewModels/BaseViewModel.cs": {
     "mtime": 1784646661.2610903,
@@ -486,8 +486,8 @@
     "semantic_hash": "c5d39fff26b4647a8ff87cdc014db257"
   },
   "PickleGit/ViewModels/BulkObservableCollection.cs": {
-    "mtime": 1793618690.9324336,
-    "seen": 1793624239.8247435,
+    "mtime": 1793625666.6765025,
+    "seen": 1793717512.7863555,
     "ast_hash": "d985aa44f52dd191d1e8f5b09ebefaad",
     "semantic_hash": "d985aa44f52dd191d1e8f5b09ebefaad"
   },
@@ -510,14 +510,14 @@
     "semantic_hash": "fd403e447675b8f2b92fbbd3281cea76"
   },
   "PickleGit/ViewModels/MergeConflictEditorViewModel.cs": {
-    "mtime": 1793618063.8065104,
-    "seen": 1793624239.824746,
+    "mtime": 1793625666.677504,
+    "seen": 1793717512.7863593,
     "ast_hash": "afe9a04fd777362814b1b668a7c2bd7a",
     "semantic_hash": "afe9a04fd777362814b1b668a7c2bd7a"
   },
   "PickleGit/ViewModels/PaneFindState.cs": {
-    "mtime": 1793612253.6726866,
-    "seen": 1793624239.8247476,
+    "mtime": 1793625666.6784947,
+    "seen": 1793717512.78636,
     "ast_hash": "322a0d311a2b567a2d7c4a18a1ad98c8",
     "semantic_hash": "322a0d311a2b567a2d7c4a18a1ad98c8"
   },
@@ -528,8 +528,8 @@
     "semantic_hash": "70cfbb02573883d17e780096dc943aa1"
   },
   "PickleGit/ViewModels/RepositoryViewModel.Blame.cs": {
-    "mtime": 1793616795.2697222,
-    "seen": 1793624239.8247488,
+    "mtime": 1793625666.6804953,
+    "seen": 1793717512.7863622,
     "ast_hash": "034ce92182236febf0a20a5df37a3970",
     "semantic_hash": "034ce92182236febf0a20a5df37a3970"
   },
@@ -540,8 +540,8 @@
     "semantic_hash": "59a7992c2cde2033c74a6f323bdcf581"
   },
   "PickleGit/ViewModels/RepositoryViewModel.Compare.cs": {
-    "mtime": 1793616795.2722306,
-    "seen": 1793624239.8247502,
+    "mtime": 1793625666.6815002,
+    "seen": 1793717512.786364,
     "ast_hash": "89e65cc4dfe63e7125b1730bb8083e24",
     "semantic_hash": "89e65cc4dfe63e7125b1730bb8083e24"
   },
@@ -552,8 +552,8 @@
     "semantic_hash": "4ec0fd94ae31f96b7346b4fcf5eafce9"
   },
   "PickleGit/ViewModels/RepositoryViewModel.Diff.cs": {
-    "mtime": 1793618063.809115,
-    "seen": 1793624239.8247516,
+    "mtime": 1793625666.6825926,
+    "seen": 1793717512.786366,
     "ast_hash": "bd7c2e4b8ecc62454aea97fac6f34003",
     "semantic_hash": "bd7c2e4b8ecc62454aea97fac6f34003"
   },
@@ -564,28 +564,28 @@
     "semantic_hash": "f8f6f72d3114bcdd240481008d0e366f"
   },
   "PickleGit/ViewModels/RepositoryViewModel.Rebase.cs": {
-    "mtime": 1793618501.3638637,
-    "seen": 1793624239.8247528,
+    "mtime": 1793625666.6835332,
+    "seen": 1793717512.786368,
     "ast_hash": "9592e8ba87bba38bea9117fff96cb23e",
     "semantic_hash": "9592e8ba87bba38bea9117fff96cb23e"
   },
   "PickleGit/ViewModels/RepositoryViewModel.Remote.cs": {
-    "mtime": 1791392448.005195,
-    "seen": 1793624239.8247538,
-    "ast_hash": "7549660b394b22a8d2e1b8f2f9f0052d",
-    "semantic_hash": "7549660b394b22a8d2e1b8f2f9f0052d"
+    "mtime": 1793718310.0402012,
+    "seen": 1793718544.6736073,
+    "ast_hash": "13f40c3d938cf5fc0ef42939f8b964fe",
+    "semantic_hash": ""
   },
   "PickleGit/ViewModels/RepositoryViewModel.Staging.cs": {
-    "mtime": 1793618355.3243659,
-    "seen": 1793624239.8247542,
+    "mtime": 1793625666.6845298,
+    "seen": 1793717512.7863696,
     "ast_hash": "34ef4a99b5dfa1c6ea7837aa00c545e4",
     "semantic_hash": "34ef4a99b5dfa1c6ea7837aa00c545e4"
   },
   "PickleGit/ViewModels/RepositoryViewModel.cs": {
-    "mtime": 1793617894.9349015,
-    "seen": 1793624239.824755,
-    "ast_hash": "8b521370d96bc88aaf4915ee6c84191b",
-    "semantic_hash": "8b521370d96bc88aaf4915ee6c84191b"
+    "mtime": 1793718350.2596595,
+    "seen": 1793718544.6736104,
+    "ast_hash": "2f341639aef3f27c2fee197df0c904f9",
+    "semantic_hash": ""
   },
   "PickleGit/Views/CloneDialog.xaml": {
     "mtime": 1784880256.3605266,
@@ -612,8 +612,8 @@
     "semantic_hash": "9bda31e5bfd6558682650c8e612972c1"
   },
   "PickleGit/Views/CommitDetailView.xaml": {
-    "mtime": 1793612787.697917,
-    "seen": 1793624239.8247583,
+    "mtime": 1793625666.6910632,
+    "seen": 1793717512.7863753,
     "ast_hash": "887959312aa6b0bafee4ea9b11ea86c6",
     "semantic_hash": "887959312aa6b0bafee4ea9b11ea86c6"
   },
@@ -744,14 +744,14 @@
     "semantic_hash": "666dd2f4ac091de2eb0bffb6d5b76f50"
   },
   "PickleGit/Views/MergeConflictEditorWindow.xaml": {
-    "mtime": 1793615341.185851,
-    "seen": 1793624239.8247733,
+    "mtime": 1793625666.6975143,
+    "seen": 1793717512.7863965,
     "ast_hash": "df8f5e98e6b186d85abe226ac7303b71",
     "semantic_hash": "df8f5e98e6b186d85abe226ac7303b71"
   },
   "PickleGit/Views/MergeConflictEditorWindow.xaml.cs": {
-    "mtime": 1793610979.4290676,
-    "seen": 1793624239.8247738,
+    "mtime": 1793625666.7072911,
+    "seen": 1793717512.7863972,
     "ast_hash": "7ad5bc7860cef699de201e5dc88c386e",
     "semantic_hash": "7ad5bc7860cef699de201e5dc88c386e"
   },
@@ -780,10 +780,10 @@
     "semantic_hash": "82d1fdc736be6ae88d87e34f0f63f441"
   },
   "PickleGit/Views/SettingsWindow.xaml": {
-    "mtime": 1784646661.66607,
-    "seen": 1793624239.8247774,
-    "ast_hash": "7c0791ca55087453d51d09cef706bb5c",
-    "semantic_hash": "7c0791ca55087453d51d09cef706bb5c"
+    "mtime": 1793718351.6796503,
+    "seen": 1793718544.6736643,
+    "ast_hash": "d55f8487f0cd697fc972ceaa0e5d6514",
+    "semantic_hash": ""
   },
   "PickleGit/Views/SettingsWindow.xaml.cs": {
     "mtime": 1784646661.6814344,
@@ -1074,10 +1074,10 @@
     "semantic_hash": "741cd4688f9e095df8f9ab0553004292"
   },
   ".claude/reviews/adhoc-conflict-staging-diff-fixes.md": {
-    "mtime": 1793617676.3852227,
-    "seen": 1793624239.824815,
-    "ast_hash": "1b863ee7b6c81c0e6dc4747d06f7c93f",
-    "semantic_hash": "1b863ee7b6c81c0e6dc4747d06f7c93f"
+    "mtime": 1793625666.635569,
+    "seen": 1793717512.78645,
+    "ast_hash": "902b828d07de23968f25a9fee1407316",
+    "semantic_hash": ""
   },
   ".claude/reviews/adhoc-diff-conflict-blame-ui-fixes.md": {
     "mtime": 1790583919.7615018,
@@ -1332,16 +1332,16 @@
     "semantic_hash": "cdda24802e83da6355c03c167b4b2c3d"
   },
   ".plans/adhoc-conflict-staging-diff-fixes.md": {
-    "mtime": 1793618727.7296267,
-    "seen": 1793624239.8248453,
-    "ast_hash": "bd772dc80af4dcb744021be338c991f9",
-    "semantic_hash": "bd772dc80af4dcb744021be338c991f9"
+    "mtime": 1793625666.651945,
+    "seen": 1793717512.7864957,
+    "ast_hash": "4dbcce10a10a792dc61534cb04ef309c",
+    "semantic_hash": ""
   },
   ".plans/adhoc-conflict-staging-diff-fixes.report.md": {
-    "mtime": 1793618727.8749723,
-    "seen": 1793624239.824846,
-    "ast_hash": "a664d0a26cd1d828c024b6ec621b87b4",
-    "semantic_hash": "a664d0a26cd1d828c024b6ec621b87b4"
+    "mtime": 1793625666.6581917,
+    "seen": 1793717512.7864969,
+    "ast_hash": "4ff85b3c21b2cc2b601f4946e86d5327",
+    "semantic_hash": ""
   },
   ".plans/adhoc-dialog-button-clipping.md": {
     "mtime": 1790594394.8551145,
@@ -1410,10 +1410,10 @@
     "semantic_hash": "3184a2565a4a045989ff7292645e8d28"
   },
   "CLAUDE.md": {
-    "mtime": 1787231526.9849064,
-    "seen": 1793624239.8248546,
-    "ast_hash": "b6136d9ed79e05fea0a634a00e049a17",
-    "semantic_hash": "b6136d9ed79e05fea0a634a00e049a17"
+    "mtime": 1793625666.661183,
+    "seen": 1793717512.7865086,
+    "ast_hash": "15a7e47dcedd5641f3be9200ffa4d50d",
+    "semantic_hash": ""
   },
   "Installer/README.md": {
     "mtime": 1784646660.7335632,
@@ -1422,10 +1422,10 @@
     "semantic_hash": "aee672d62892fd8258c4d0956127858d"
   },
   "PickleGit/CLAUDE.md": {
-    "mtime": 1793618314.4145906,
-    "seen": 1793624239.8248558,
-    "ast_hash": "271b5714e1ad3c861ea3589b73088b7c",
-    "semantic_hash": "271b5714e1ad3c861ea3589b73088b7c"
+    "mtime": 1793625190.5495625,
+    "seen": 1793717512.7865107,
+    "ast_hash": "c581ffa5c1a21200215acf7178269d9c",
+    "semantic_hash": ""
   },
   "PickleGit/Resources/Help/01-getting-started.md": {
     "mtime": 1784646660.891493,
@@ -1618,5 +1618,29 @@
     "seen": 1793624239.824878,
     "ast_hash": "11ee5cfade755426300d5a88e6e7b0e5",
     "semantic_hash": "11ee5cfade755426300d5a88e6e7b0e5"
+  },
+  ".claude/hooks/graphify-guard.sh": {
+    "mtime": 1793625666.6335404,
+    "seen": 1793717512.7862625,
+    "ast_hash": "25485f8a7bf20a160f612415d4d548db",
+    "semantic_hash": ""
+  },
+  ".plans/adhoc-background-auto-fetch.md": {
+    "mtime": 1793717502.3498178,
+    "seen": 1793717512.7864873,
+    "ast_hash": "a0d1e34339001938f8d883c42df9a406",
+    "semantic_hash": ""
+  },
+  ".plans/adhoc-background-auto-fetch.report.md": {
+    "mtime": 1793717502.4786565,
+    "seen": 1793717512.7864885,
+    "ast_hash": "f8dcc82c84400c014202ca1a99c80417",
+    "semantic_hash": ""
+  },
+  ".claude/reviews/adhoc-background-auto-fetch.md": {
+    "mtime": 1793718160.4957807,
+    "seen": 1793718544.6737444,
+    "ast_hash": "8ef287fdae3a7c37e3cc866704e240e6",
+    "semantic_hash": ""
   }
 }
