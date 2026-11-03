@@ -3,9 +3,9 @@ issue: adhoc-background-auto-fetch
 title: Fetch all open tabs in the background on startup and on a configurable interval
 type: feature
 component: AppViewModel / RepositoryViewModel (remote operations) / Settings / App startup
-phase: BUILD
-step: 3
-next: BUILD complete — SHIP when ready
+phase: SHIP
+step: done
+next: done
 run_mode: auto
 updated: 2026-11-03 16:51
 ---
@@ -131,5 +131,12 @@ interval from `AutoFetchIntervalMinutes`; 0 → timer stopped, no startup pass),
 None.
 
 ## Deviation Register
+
+## Retro
+<!-- Written: 2026-11-03 17:20 -->
+
+**Deviations:** Step 2 grew three approved changes: process-tree kill in `GitCli.cs` (a bare `Kill()` orphaned git's children and hung the pass forever), a per-remote timeout, and fetching local/`file://` remotes. Post-review fixes then made Git Credential Manager non-interactive, used one executor item per remote with a 60 s timeout, and closed the PID-reuse race.
+**Steps planned vs. actual:** 3 planned / 3 actual. Steps 2 and 3 were verified together, since nothing calls `BackgroundFetchAsync` until the scheduler exists.
+**Process improvement:** For any feature that runs git unattended, put two hostile-remote stubs in the plan's Tests up front: a TCP listener that accepts and never answers, and an HTTPS remote that needs a login with none stored. The first exposed the orphaned-process hang, and the second (the GCM sign-in window) was only caught at review.
 
 ## Handoff
