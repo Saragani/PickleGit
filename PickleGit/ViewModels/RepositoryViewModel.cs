@@ -323,6 +323,8 @@ namespace PickleGit.ViewModels
                 // otherwise clobber the selection we just set from the list the user actually clicked.
                 if (_syncingFileSelection && value == null) return;
                 if (!Set(ref _selectedFile, value)) return;
+                if (_aggregatedSelectedFileChange != null && !ReferenceEquals(value, _aggregatedSelectedFileChange))
+                    DropAggregatedRowSelection();
                 SyncTreeSelectionToSelectedFile();
                 RaisePropertyChanged(nameof(ShowDiffInsteadOfCommits));
                 RaisePropertyChanged(nameof(DiffPaneHeaderText));
@@ -332,6 +334,7 @@ namespace PickleGit.ViewModels
                 if (IsComparisonMode) _ = LoadComparisonDiffAsync(_comparisonBaseSha, _comparisonTargetSha, value.Path);
                 else if (_detailCommit != null) _ = LoadDiffAsync(_detailCommit.Sha, value.Path);
                 else if (ShowWorkingDir) _ = LoadWorkingDiffAsync(value);
+                else if (IsMultiSelection && IsAggregatedFileSelected) _ = LoadRangeDiffAsync(value.Path);
             }
         }
 
@@ -348,6 +351,7 @@ namespace PickleGit.ViewModels
                 if (SelectedFile == null) return false;
                 if (IsComparisonMode) return true;
                 if (ShowWorkingDir) return SelectedDiscardableFilesCount == 1;
+                if (IsMultiSelection) return IsAggregatedFileSelected;
                 return DetailCommit != null;
             }
         }
@@ -356,7 +360,9 @@ namespace PickleGit.ViewModels
         /// normal single-commit/working-dir diff, since both drive the same pane.</summary>
         public string DiffPaneHeaderText => IsComparisonMode
             ? $"Comparing {ComparisonTargetName} → {ComparisonBaseName}: {SelectedFile?.Path}"
-            : $"Diff: {SelectedFile?.Path}";
+            : IsMultiSelection && IsAggregatedFileSelected
+                ? $"Diff ({_aggregatedShas.Count} commits): {SelectedFile?.Path}"
+                : $"Diff: {SelectedFile?.Path}";
         public IReadOnlyList<DiffItem> FlatDiffItems
         {
             get => _flatDiffItems;
