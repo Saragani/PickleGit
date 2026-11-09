@@ -598,6 +598,16 @@ namespace PickleGit.ViewModels
             if (string.IsNullOrWhiteSpace(CommitMessage)) return false;
             if (!EnsureIdentity()) return false;
             var amend = IsAmend;
+            // LibGit2Sharp's amend keeps HEAD's own parents and never adds MERGE_HEAD, then clears the
+            // merge state — the previous commit would be silently rewritten with the merged tree and the
+            // merge itself lost. Refuse instead (git's own `commit --amend` refuses mid-merge too).
+            if (amend && ConflictInfo?.Operation == ConflictOperation.Merge)
+            {
+                DialogService.ShowError("Amend Commit",
+                    "A merge is in progress, so the last commit can't be amended.\n\n" +
+                    "Uncheck \"Amend last commit\" to record the merge commit.");
+                return false;
+            }
             var signOff = SignOff;
             if (amend && !DialogService.Confirm("Amend Commit",
                     "Rewrite the last commit with the staged changes and this message?\n\n" +
