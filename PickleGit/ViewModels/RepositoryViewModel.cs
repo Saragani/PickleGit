@@ -463,9 +463,23 @@ namespace PickleGit.ViewModels
         public ConflictState ConflictInfo
         {
             get => _conflictInfo;
-            private set { if (Set(ref _conflictInfo, value)) { RaisePropertyChanged(nameof(HasConflict)); RaisePropertyChanged(nameof(CanMarkUnresolved)); } }
+            private set
+            {
+                if (!Set(ref _conflictInfo, value)) return;
+                RaisePropertyChanged(nameof(HasConflict));
+                RaisePropertyChanged(nameof(CanMarkUnresolved));
+                // Commit's CanExecute reads IsResolvedMergePending — re-query now rather than waiting
+                // for incidental input, so the button lights up as soon as the last conflict resolves.
+                CommandManager.InvalidateRequerySuggested();
+            }
         }
         public bool HasConflict => _conflictInfo?.HasConflicts == true;
+
+        /// <summary>A merge whose conflicts are all resolved but whose result may equal HEAD (e.g.
+        /// every conflict taken as "ours") — nothing is staged, yet git still has MERGE_HEAD and
+        /// `git commit` records the 2-parent merge. Lets Commit run without staged files.</summary>
+        private bool IsResolvedMergePending =>
+            _conflictInfo?.Operation == ConflictOperation.Merge && _conflictInfo.ConflictedFiles.Count == 0;
 
         /// <summary>"Mark Unresolved" (re-derive conflict markers for an already-resolved/staged
         /// file) needs a single tracked "theirs" ref to recompute the 3-way merge from — see
@@ -858,11 +872,11 @@ namespace PickleGit.ViewModels
             SetFileViewModeCommand = new RelayCommand(SetFileViewMode);
             ToggleTreeFolderCommand = new RelayCommand(ToggleTreeFolder);
             CommitCommand = new RelayCommand(async () => await CommitAsync(),
-                () => HasRepo && !string.IsNullOrWhiteSpace(CommitMessage) && (StagedFiles.Count > 0 || IsAmend));
+                () => HasRepo && !string.IsNullOrWhiteSpace(CommitMessage) && (StagedFiles.Count > 0 || IsAmend || IsResolvedMergePending));
             OpenIdentitySettingsCommand = new RelayCommand(OpenIdentitySettings);
             CommitAndPushCommand = new RelayCommand(
                 async () => { if (await CommitAsync()) await PushAsync(); },
-                () => HasRepo && !string.IsNullOrWhiteSpace(CommitMessage) && (StagedFiles.Count > 0 || IsAmend));
+                () => HasRepo && !string.IsNullOrWhiteSpace(CommitMessage) && (StagedFiles.Count > 0 || IsAmend || IsResolvedMergePending));
             StashCommand = new RelayCommand(async () => await StashAsync(), () => HasRepo);
             StashSelectedFilesCommand = new RelayCommand(async p => await StashSelectedFilesAsync(p), _ => HasRepo);
             PopStashCommand = new RelayCommand(PopStash, _ => HasRepo && Stashes.Count > 0);
