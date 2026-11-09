@@ -1,17 +1,17 @@
-# Graph Report - PickleGit  (2026-11-03)
+# Graph Report - PickleGit  (2026-11-09)
 
 ## Corpus Check
-- 262 files · ~292,401 words
+- 265 files · ~295,120 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 8 file(s) not represented in the graph (top: (none) 3, .lock 1, .iss 1)
 
 ## Summary
-- 4582 nodes · 8405 edges · 234 communities (163 shown, 71 thin omitted)
-- Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 540 edges (avg confidence: 0.83)
+- 4609 nodes · 8453 edges · 221 communities (152 shown, 69 thin omitted)
+- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 563 edges (avg confidence: 0.84)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `4e511605`
+- Built from commit: `a85980f2`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -25,8 +25,8 @@
 - Window
 - UserControl
 - AppViewModel
-- GraphNode
-- .Build
+- RelayCommand
+- Plan: adhoc-background-auto-fetch — Background auto-fetch of all open tabs
 - SyntaxHighlighter
 - .RefreshAsync
 - .RefreshOnceAsync
@@ -35,8 +35,9 @@
 - Window
 - NoLigaturesTypographyProperties
 - DiffView
+- .RunAsync
 - DiffTextSelectionController
-- DataTemplate
+- SidebarRowTemplateSelector
 - DecodedText
 - RepositoryWatcher
 - AppSettings
@@ -46,7 +47,6 @@
 - Task
 - CreatePullRequestDialog
 - IFileOpenDialog
-- .ShowError
 - InteractiveRebaseViewModel
 - github.sh
 - MergeConflictEditorWindow
@@ -74,7 +74,7 @@
 - PaneFindState
 - CredentialStore
 - CultureInfo
-- SidebarRowTemplateSelector
+- Type
 - DiffLine
 - HostingViewModel
 - Plan: Bitbucket OAuth credential retry
@@ -82,7 +82,7 @@
 - Differ
 - ConflictPaneItem
 - HelpWindow
-- Help: Settings & Preferences
+- Help: Staging & Committing
 - BisectState
 - GitCli
 - Plan: Conflict/staging/diff fixes
@@ -91,11 +91,11 @@
 - .RunAsync
 - MainWindow
 - RowText
-- DiffChangeMapControl
 - Audit & Close
 - PickleGit v1.0.24 Release Notes
 - Window
 - .HandleFindBoxKeyDown
+- .Warn
 - PickleGit Claude Workflow Team Guide
 - ShortcutManager
 - PullRequestInfo
@@ -106,10 +106,10 @@
 - ConflictState
 - .Apply
 - SideBySideItem
-- DiffHunk
+- FileChangeKind
 - Workflow Rules
 - CommitGraphCell
-- RefLabel
+- DiffHunk
 - StagingPatchOp
 - BitbucketCloudProvider
 - GitLabProvider
@@ -119,8 +119,8 @@
 - Unstaged Files List
 - ConflictResultItem
 - AvatarService
-- ValueConverters.cs
-- DetachedHeadConverter
+- IMultiValueConverter
+- IValueConverter
 - Diff View Screenshot
 - GitHubProvider
 - NewBranchDialog
@@ -140,7 +140,6 @@
 - /pkl:commit - Commit with Correct Format (SHIP flow)
 - Help: The Diff View
 - Plan: LFS clean filter staging
-- .ShowSection_Click
 - frontend-architect agent (WPF/MVVM)
 - Roadmap Phase 4 - Infrastructure & architecture
 - plan-frontmatter.sh
@@ -149,10 +148,8 @@
 - PickleGit.csproj
 - Provider-Native PRs
 - ReflogEntry
-- RepositoryAccount.cs
+- BlameSearchHighlighter
 - UI Performance Improvements Plan
-- TextBox
-- AggregatedFileTreeRow
 - Plan File (.plans/gh-N.md)
 - LigatureSuppressingColorizer
 - build-installer.ps1
@@ -176,11 +173,10 @@
 - DateFormatConverter
 - Closing the List
 - RowRoot
-- .ThemeBox_SelectionChanged
 - SidebarSearchClearButton
 - hitl-loop.template.sh
 - NullToVisibilityConverter
-- FileSortMode
+- RepositoryAccount.cs
 - Border
 - Op
 - ExistenceChoice
@@ -188,12 +184,15 @@
 - .SidebarSearchBox_TextChanged
 - CommitList
 - Close the Gaps Skill
-- ConflictResolution
-- .RunBackgroundFetchPassAsync
-- AggregatedFileChange
+- ResolutionToVisibilityConverter
+- AuthorInitialsConverter
+- BoolToGridLengthConverter
 - TabScrollLeftButton
+- BulkActionLabelConverter
+- DiffLineForegroundConverter
+- HunkActionLabelConverter
 - UndoEntry
-- BlameSearchHighlighter
+- IntAtLeastTwoToVisibilityConverter
 - /pkl:remove-irrelevant-comments
 - diff-profile.sh
 - plan-drift-check.sh
@@ -216,21 +215,13 @@
 - root-cause-analyst agent
 - system-architect agent
 - technical-writer agent
-- WordDiffHighlighter
-- BulkObservableCollection
-- Plan: adhoc-background-auto-fetch — Background auto-fetch of all open tabs
+- adhoc-merge-commit-no-changes.report.md
 - ConflictResultEditBox
-- .Warn
-- .Load
-- Help: The Commit Graph
-- App.xaml
-- TokenKind
-- Language
 - graphify-guard.sh
 - adhoc-background-auto-fetch.report.md
 
 ## God Nodes (most connected - your core abstractions)
-1. `RepositoryViewModel` - 561 edges
+1. `RepositoryViewModel` - 562 edges
 2. `GitService` - 157 edges
 3. `UserControl` - 132 edges
 4. `SettingsData` - 113 edges
@@ -242,16 +233,16 @@
 10. `Window` - 73 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Step 1: Auto-fetch interval setting ✓` --references--> `AppSettings`  [INFERRED]
-  .plans/adhoc-background-auto-fetch.md → PickleGit/Services/AppSettings.cs
+- `Questions checked (no finding)` --references--> `ConflictState`  [INFERRED]
+  .claude/reviews/adhoc-merge-commit-no-changes.md → PickleGit/Models/ConflictState.cs
 - `Step 1: Auto-fetch interval setting ✓` --references--> `SettingsData`  [INFERRED]
   .plans/adhoc-background-auto-fetch.md → PickleGit/Services/AppSettings.cs
 - `Requirements` --references--> `AppViewModel`  [INFERRED]
   .plans/adhoc-background-auto-fetch.md → PickleGit/ViewModels/AppViewModel.cs
 - `Step 3: Scheduler in AppViewModel + startup hook ✓` --references--> `AppViewModel`  [INFERRED]
   .plans/adhoc-background-auto-fetch.md → PickleGit/ViewModels/AppViewModel.cs
-- `Requirements` --references--> `RepositoryViewModel`  [INFERRED]
-  .plans/adhoc-background-auto-fetch.md → PickleGit/ViewModels/RepositoryViewModel.Bisect.cs
+- `Questions checked (no finding)` --references--> `RelayCommand`  [INFERRED]
+  .claude/reviews/adhoc-merge-commit-no-changes.md → PickleGit/ViewModels/BaseViewModel.cs
 
 ## Import Cycles
 - None detected.
@@ -284,11 +275,11 @@
 - **Verification discipline for BUILD steps** — claude_hard_gate_verification_stubs, claude_hard_gate_build_step_checkpoint, claude_retro_log_live_evidence_for_manual_stubs, claude_retro_log_checkpoint_auto_ticks_stubs, claude_agents_self_review_four_self_check_questions [INFERRED 0.85]
 - **Three-pane repository layout** — picklegit_resources_help_screenshots_commit_graph_sidebar, picklegit_resources_help_screenshots_commit_graph_commit_list, picklegit_resources_help_screenshots_commit_graph_commit_detail_panel [INFERRED 0.95]
 
-## Communities (234 total, 71 thin omitted)
+## Communities (221 total, 69 thin omitted)
 
 ### Community 0 - "RepositoryViewModel"
 Cohesion: 0.01
-Nodes (240): RepositoryViewModel, BisectBadCommand, BisectGoodCommand, BisectInfo, BisectResetCommand, BisectSkipCommand, CanStartBisect, HasBisect (+232 more)
+Nodes (241): RepositoryViewModel, BisectBadCommand, BisectGoodCommand, BisectInfo, BisectResetCommand, BisectSkipCommand, CanStartBisect, HasBisect (+233 more)
 
 ### Community 1 - "system"
 Cohesion: 0.05
@@ -322,21 +313,25 @@ Nodes (70): Commit.AuthorEmail, Commit.AuthorName, Commit.BisectMark, Commit.Com
 Cohesion: 0.03
 Nodes (68): AppViewModel, ActiveTab, AddEmptyTabCommand, AutoFetchIntervalMinutes, CanToggleAuthor, CanToggleBranchTag, CanToggleCommitDesc, CanToggleDateTime (+60 more)
 
-### Community 9 - "GraphNode"
-Cohesion: 0.13
-Nodes (15): GraphEdge, Color, FromLane, IsMerge, ToLane, GraphLayout, GraphNode, Commit (+7 more)
+### Community 9 - "RelayCommand"
+Cohesion: 0.10
+Nodes (15): RelayCommand, Acceptance Criteria, After Implementation, Constraints, Deviation Register, Handoff, Manual / Black-Box, Plan: adhoc-merge-commit-no-changes — Allow committing a resolved merge with no net changes (+7 more)
 
-### Community 10 - ".Build"
-Cohesion: 0.32
-Nodes (3): AggregatedNode, FileTreeBuilder, Node
+### Community 10 - "Plan: adhoc-background-auto-fetch — Background auto-fetch of all open tabs"
+Cohesion: 0.15
+Nodes (12): Acceptance Criteria, After Implementation, Constraints, Deviation Register, Handoff, Manual / Black-Box, Plan: adhoc-background-auto-fetch — Background auto-fetch of all open tabs, Problem Statement (+4 more)
+
+### Community 11 - "SyntaxHighlighter"
+Cohesion: 0.07
+Nodes (18): WordDiffHighlighter, SyntaxSpan, TokenKind, Comment, Keyword, Number, Preprocessor, String (+10 more)
 
 ### Community 12 - ".RefreshAsync"
-Cohesion: 0.10
-Nodes (5): GitCliOptions, Env, Progress, StdIn, Requirements
+Cohesion: 0.15
+Nodes (4): GitCliOptions, Env, Progress, StdIn
 
 ### Community 13 - ".RefreshOnceAsync"
-Cohesion: 0.05
-Nodes (38): BranchInfo, AheadBy, BehindBy, DisplayName, FullName, IsHead, IsRemote, IsStarred (+30 more)
+Cohesion: 0.06
+Nodes (22): RemoteInfo, Name, PushUrl, Url, StashInfo, Index, Message, Sha (+14 more)
 
 ### Community 14 - "Architecture Rules"
 Cohesion: 0.06
@@ -354,13 +349,17 @@ Nodes (51): ActiveTab.CanCancel, ActiveTab.CancelOperationCommand, ActiveTab.Can
 Cohesion: 0.04
 Nodes (44): NoLigaturesTypographyProperties, AnnotationAlternates, Capitals, CapitalSpacing, CaseSensitiveForms, ContextualAlternates, ContextualLigatures, ContextualSwashes (+36 more)
 
+### Community 19 - ".RunAsync"
+Cohesion: 0.07
+Nodes (7): Code Review — adhoc-merge-commit-no-changes, Counts, Findings, Questions checked (no finding), Resolution (2026-11-09), Rules compliance, DialogService
+
 ### Community 20 - "DiffTextSelectionController"
-Cohesion: 0.13
+Cohesion: 0.11
 Nodes (3): DiffTextSelectionController, HasSelection, IsSelecting
 
-### Community 21 - "DataTemplate"
-Cohesion: 0.10
-Nodes (20): AggregatedFileTreeRowTemplateSelector, FileTemplate, FolderTemplate, ConflictPaneItemTemplateSelector, BlockLineTemplate, BlockToolbarTemplate, ContextTemplate, ConflictResultItemTemplateSelector (+12 more)
+### Community 21 - "SidebarRowTemplateSelector"
+Cohesion: 0.06
+Nodes (39): AggregatedFileTreeRowTemplateSelector, FileTemplate, FolderTemplate, ConflictPaneItemTemplateSelector, BlockLineTemplate, BlockToolbarTemplate, ContextTemplate, ConflictResultItemTemplateSelector (+31 more)
 
 ### Community 22 - "DecodedText"
 Cohesion: 0.06
@@ -371,19 +370,19 @@ Cohesion: 0.06
 Nodes (7): GitExecutor, MonotonicClock, RepoChangeKind, Refs, WorkingDir, RepositoryWatcher, SuppressScope
 
 ### Community 25 - "CommitInfo"
-Cohesion: 0.08
-Nodes (22): CommitInfo, AuthorDate, AuthorDateRelative, AuthorEmail, AuthorName, BisectMark, CommitterDate, CommitterEmail (+14 more)
+Cohesion: 0.07
+Nodes (26): CommitHistory, BranchMasks, Commits, ReachedLimit, CommitInfo, AuthorDate, AuthorDateRelative, AuthorEmail (+18 more)
 
 ### Community 26 - "MergeConflictFileViewModel"
 Cohesion: 0.05
 Nodes (34): MergeConflictFileViewModel, AllMineCheckedWholeFile, AllTheirsCheckedWholeFile, BlockStatusLabel, CanSave, ConflictNavLabel, ConflictWarning, CurrentUnresolvedIndex (+26 more)
 
 ### Community 27 - "Window"
-Cohesion: 0.06
-Nodes (40): ActiveTab.AuthorEmail, ActiveTab.AuthorName, ActiveTab.InstallLfsCommand, ClearRepoIdentityCommand, ConfirmBeforeDiscard, DateFormat, DefaultAuthorEmail, DefaultAuthorName (+32 more)
+Cohesion: 0.05
+Nodes (61): ActiveTab.AuthorEmail, ActiveTab.AuthorName, ActiveTab.InstallLfsCommand, AutoFetchIntervalMinutes, ClearRepoIdentityCommand, ConfirmBeforeDiscard, DateFormat, DefaultAuthorEmail (+53 more)
 
 ### Community 28 - "Task"
-Cohesion: 0.07
+Cohesion: 0.08
 Nodes (14): SubmoduleInfo, IsDirty, IsInitialized, Name, Path, StatusLabel, Url, WorktreeInfo (+6 more)
 
 ### Community 29 - "CreatePullRequestDialog"
@@ -403,8 +402,8 @@ Cohesion: 0.06
 Nodes (42): /pkl:issue-comment, _api_call(), _api_call_gh(), _api_call_rest(), cmd_close(), cmd_comment(), cmd_create(), cmd_view() (+34 more)
 
 ### Community 36 - "PickleGit Claude Code Guide"
-Cohesion: 0.09
-Nodes (6): AppViewModel, CommitListView, LoadDiffAsync, PickleGit Claude Code Guide, RelayCommand, SyntaxHighlighter.TokenizeGeneric
+Cohesion: 0.07
+Nodes (10): Application, App.ApplyTheme, AppViewModel, CommitListView, LoadDiffAsync, PickleGit Claude Code Guide, RelayCommand, SyntaxHighlighter.TokenizeGeneric (+2 more)
 
 ### Community 37 - "ConflictBlockViewModel"
 Cohesion: 0.07
@@ -423,35 +422,35 @@ Cohesion: 0.08
 Nodes (30): (ctrl:ButtonChrome.HoverBackground), Foreground, IsDropDownOpen, Payload.IsHead, Bd, CheckMark, Chrome, ContentSite (+22 more)
 
 ### Community 41 - ".SideBySideListView_PreviewMouseLeftButtonDown"
-Cohesion: 0.21
+Cohesion: 0.15
 Nodes (6): FlatDiffItems, SideBySideItems, SideBySideLeftListView, SideBySideRightListView, UnifiedListView, ListView
 
 ### Community 42 - "MergeConflictBlock"
-Cohesion: 0.08
-Nodes (26): ConflictDocItem, Block, ContextText, Kind, ConflictDocItemKind, Block, Context, MergeConflictBlock (+18 more)
+Cohesion: 0.07
+Nodes (33): ConflictDocItem, Block, ContextText, Kind, ConflictDocItemKind, Block, Context, ConflictResolution (+25 more)
 
 ### Community 43 - "SidebarRowKind"
 Cohesion: 0.08
 Nodes (24): SidebarRow, IndentLevel, IsExpanded, Kind, Payload, SidebarRowKind, LocalBranchesHeader, LocalBranchGroup (+16 more)
 
 ### Community 44 - "SettingsWindow"
-Cohesion: 0.13
-Nodes (5): SelfHostedEntry, Domain, Kind, KindLabel, SettingsWindow
+Cohesion: 0.08
+Nodes (9): HostingCredentials, HostTokenEntry, Domain, Username, SelfHostedEntry, Domain, Kind, KindLabel (+1 more)
 
 ### Community 45 - "ConflictResultListView"
-Cohesion: 0.17
+Cohesion: 0.20
 Nodes (7): PaneItems, ResultItems, ConflictLeftListView, ConflictResultListView, ConflictRightListView, InvertBoolToVis, ListView
 
 ### Community 46 - "BranchNodeViewModel"
-Cohesion: 0.09
-Nodes (18): BranchNodeViewModel, AheadBy, BehindBy, BranchInfo, CanFetchBranch, Children, DisplayName, ExpansionChanged (+10 more)
+Cohesion: 0.06
+Nodes (30): BranchInfo, AheadBy, BehindBy, DisplayName, FullName, IsHead, IsRemote, IsStarred (+22 more)
 
 ### Community 47 - "TextPromptDialog"
 Cohesion: 0.09
 Nodes (21): CheckboxText, CheckboxVisibility, InputText, IsCheckboxChecked, PromptText, InputBox, Window, DialogTitle (+13 more)
 
 ### Community 48 - "MergeConflictSessionViewModel"
-Cohesion: 0.10
+Cohesion: 0.11
 Nodes (14): MergeConflictSessionViewModel, CloseCommand, CurrentFile, Files, LeftFind, OursCommitLabel, OursCommitTooltip, ResolvedCountLabel (+6 more)
 
 ### Community 50 - "CloneDialog"
@@ -463,8 +462,8 @@ Cohesion: 0.12
 Nodes (11): FileDiffResult, CanStagePartially, Hunks, IsBinary, IsDecodedText, NewText, OldText, ContentSource (+3 more)
 
 ### Community 52 - "Help: Context Menus"
-Cohesion: 0.15
-Nodes (14): CredentialStore, Phase 7 provider-native PR creation, Help: Pull Requests, Hosting personal access token, Pull request creation, Bisect workflow, Branch/commit comparison, Help: History Tools (+6 more)
+Cohesion: 0.11
+Nodes (23): CommitInfo.RefMask, CredentialStore, ListViewMultiSelectBehavior, Phase 7 provider-native PR creation, Badge hover highlight, Branch filter, Help: The Commit Graph, Multi-commit selection (+15 more)
 
 ### Community 53 - "CommandPaletteWindow"
 Cohesion: 0.07
@@ -487,20 +486,20 @@ Cohesion: 0.11
 Nodes (9): FindNavigationHelper, PaneFindState, CurrentMatch, CurrentMatchRange, IsOpen, NextCommand, PrevCommand, SearchText (+1 more)
 
 ### Community 58 - "CredentialStore"
-Cohesion: 0.20
+Cohesion: 0.18
 Nodes (3): CREDENTIAL, CredentialStore, NativeMethods
 
 ### Community 59 - "CultureInfo"
-Cohesion: 0.07
-Nodes (22): AuthorInitialsConverter, BisectMarkToLabelConverter, BisectProgressTextConverter, BoolToGridLengthConverter, BulkActionLabelConverter, DiffLineForegroundConverter, DiscardBadgeTextConverter, DiscardTooltipConverter (+14 more)
+Cohesion: 0.12
+Nodes (7): BisectMarkToLabelConverter, DiscardTooltipConverter, EnumEqualsVisibilityConverter, IndentLevelToMarginConverter, IntAboveZeroConverter, PercentToFractionConverter, StarMenuLabelConverter
 
-### Community 60 - "SidebarRowTemplateSelector"
-Cohesion: 0.11
-Nodes (19): SidebarRowTemplateSelector, LocalBranchesHeaderTemplate, LocalBranchGroupTemplate, LocalBranchLeafTemplate, PullRequestsHeaderTemplate, PullRequestTemplate, RemoteBranchesHeaderTemplate, RemoteBranchGroupTemplate (+11 more)
+### Community 60 - "Type"
+Cohesion: 0.12
+Nodes (7): BisectProgressTextConverter, DiscardBadgeTextConverter, GraphWidthConverter, HeadBoldConverter, PrependConverter, ShaShortConverter, WidthMinusBudgetConverter
 
 ### Community 61 - "DiffLine"
-Cohesion: 0.29
-Nodes (7): DiffLine, Content, HighlightSpans, Kind, NewLineNumber, OldLineNumber, SyntaxSpans
+Cohesion: 0.17
+Nodes (12): DiffLine, Content, HighlightSpans, Kind, NewLineNumber, OldLineNumber, SyntaxSpans, DiffLineKind (+4 more)
 
 ### Community 62 - "HostingViewModel"
 Cohesion: 0.10
@@ -522,16 +521,16 @@ Nodes (15): AlignedPair, LcsAligner, ConflictPaneItem, BlockVm, ContextNewLineNu
 Cohesion: 0.11
 Nodes (11): Bd, ContentViewer, TopicList, Window, HelpWindow, Topic, FileName, Title (+3 more)
 
-### Community 69 - "Help: Settings & Preferences"
-Cohesion: 0.15
-Nodes (13): AppSettings, Command Palette, Help: Getting Started, Main window layout, Repository tabs, Fetch, Pull, Push, Force push with lease, Help: Syncing (+5 more)
+### Community 69 - "Help: Staging & Committing"
+Cohesion: 0.11
+Nodes (19): AppSettings, PatchBuilder.BuildLinePatch, Command Palette, Help: Getting Started, Main window layout, Repository tabs, Amend last commit, Help: Staging & Committing (+11 more)
 
 ### Community 70 - "BisectState"
 Cohesion: 0.10
 Nodes (18): BisectMark, Bad, Current, Good, None, Skip, BisectState, BadSha (+10 more)
 
 ### Community 71 - "GitCli"
-Cohesion: 0.12
+Cohesion: 0.11
 Nodes (9): GitCli, GitPathOverride, IsGitAvailable, GitCliResult, ErrorText, ExitCode, StdErr, StdOut (+1 more)
 
 ### Community 74 - "Plan: Conflict/staging/diff fixes"
@@ -547,16 +546,12 @@ Cohesion: 0.12
 Nodes (16): ADR 0003 No Third-Party Controls (AvalonEdit exception), 1.2 AvatarService thread-safety, 1.3 CredentialStore robustness, 1.9 Dialog consistency pass (theme resources, DialogService), 3.5 Hosting upgrades (GitHub Enterprise, self-managed GitLab), PickleGit Improvement Roadmap, 3.4 Merge editor upgrades (BASE pane, BOM-aware encoding), 1.1 Merge-editor wrong-block resolution (MergeConflictEditorViewModel.ResolveCurrent) (+8 more)
 
 ### Community 77 - ".RunAsync"
-Cohesion: 0.14
-Nodes (7): CliGitService, IsAvailable, WorkingDirectory, GitMergeMode, Default, FastForwardOnly, NoFastForward
+Cohesion: 0.10
+Nodes (10): Code Review: adhoc-background-auto-fetch (vs main), Resolution (fixed before commit 3e7743a), Summary, CliGitService, IsAvailable, WorkingDirectory, GitMergeMode, Default (+2 more)
 
 ### Community 79 - "RowText"
 Cohesion: 0.11
 Nodes (18): Content, Header, Left, Left.Kind, Left.OldLineNumber, Line, Line.Kind, Line.NewLineNumber (+10 more)
-
-### Community 80 - "DiffChangeMapControl"
-Cohesion: 0.13
-Nodes (7): DiffChangeMapControl, RowKinds, DiffLineKind, Added, Context, Deleted, Header
 
 ### Community 81 - "Audit & Close"
 Cohesion: 0.20
@@ -571,19 +566,23 @@ Cohesion: 0.12
 Nodes (16): Action, CancelCommand, DataContext.CycleActionCommand, DataContext.MoveDownCommand, DataContext.MoveUpCommand, IsLoading, IsReword, Items (+8 more)
 
 ### Community 84 - ".HandleFindBoxKeyDown"
-Cohesion: 0.16
+Cohesion: 0.20
 Nodes (9): BlameFind.SearchText, SideBySideLeftFind.SearchText, SideBySideRightFind.SearchText, UnifiedFind.SearchText, BlameFindBox, SideBySideLeftFindBox, SideBySideRightFindBox, UnifiedFindBox (+1 more)
+
+### Community 85 - ".Warn"
+Cohesion: 0.13
+Nodes (3): AppLog, Requirements, Step 2: Silent per-repo background fetch ✓
 
 ### Community 86 - "PickleGit Claude Workflow Team Guide"
 Cohesion: 0.17
 Nodes (12): /sc:cleanup, /sc:design, /sc:document, Doxygen-Specific Rules, /sc:estimate, /sc:explain, /sc:implement, /sc:improve (+4 more)
 
 ### Community 87 - "ShortcutManager"
-Cohesion: 0.15
+Cohesion: 0.12
 Nodes (6): ShortcutDescriptor, ShortcutManager, ShortcutEntry, DisplayName, GestureText, Id
 
 ### Community 88 - "PullRequestInfo"
-Cohesion: 0.14
+Cohesion: 0.13
 Nodes (10): PullRequestInfo, Author, DisplayRoute, DisplayTitle, Id, SourceBranch, State, TargetBranch (+2 more)
 
 ### Community 89 - "RowText"
@@ -595,8 +594,8 @@ Cohesion: 0.17
 Nodes (13): /pkl:plan, After Implementation Section, Spec / Acceptance Criteria Section, /sc:brainstorm, PRD Creation Workflow Guide, /close-the-gaps, /grill-me, /grill-with-docs (+5 more)
 
 ### Community 91 - ".OnStartup"
-Cohesion: 0.24
-Nodes (4): App, IsLightTheme, SplashStatusViewModel, StatusMessage
+Cohesion: 0.19
+Nodes (5): App, IsLightTheme, SplashStatusViewModel, StatusMessage, Step 3: Scheduler in AppViewModel + startup hook ✓
 
 ### Community 92 - "Plan: Diff/Conflict/Blame UI fixes"
 Cohesion: 0.18
@@ -607,16 +606,24 @@ Cohesion: 0.12
 Nodes (15): ConflictOperation, CherryPick, Merge, None, Rebase, Revert, ConflictState, ConflictedFiles (+7 more)
 
 ### Community 95 - "SideBySideItem"
-Cohesion: 0.09
-Nodes (11): DiffItem, Header, Hunk, Kind, Line, SideBySideItem, Header, Hunk (+3 more)
+Cohesion: 0.14
+Nodes (14): DiffItem, Header, Hunk, Kind, Line, DiffItemKind, HunkHeader, Line (+6 more)
 
-### Community 96 - "DiffHunk"
-Cohesion: 0.13
-Nodes (15): DiffHunk, HasLineSelection, Header, Lines, NewStart, OldStart, FileChangeKind, Added (+7 more)
+### Community 96 - "FileChangeKind"
+Cohesion: 0.19
+Nodes (9): FileChangeKind, Added, Conflicted, Copied, Deleted, Modified, Renamed, Untracked (+1 more)
 
 ### Community 97 - "Workflow Rules"
 Cohesion: 0.14
 Nodes (12): Bug Plan Guide, Feature Plan Guide, Investigation Plan Guide, Refactor Plan Guide, Script Plan Guide, Approval Grammar, Deviation Register, pkl:plan (+4 more)
+
+### Community 98 - "CommitGraphCell"
+Cohesion: 0.05
+Nodes (21): CommitGraphCell, Node, RefLabel, RefName, DiffChangeMapControl, RowKinds, GraphEdge, Color (+13 more)
+
+### Community 99 - "DiffHunk"
+Cohesion: 0.23
+Nodes (6): DiffHunk, HasLineSelection, Header, Lines, NewStart, OldStart
 
 ### Community 100 - "StagingPatchOp"
 Cohesion: 0.16
@@ -627,8 +634,8 @@ Cohesion: 0.18
 Nodes (6): BitbucketCloudProvider, Domain, IsConfigured, Owner, ProviderName, Slug
 
 ### Community 102 - "GitLabProvider"
-Cohesion: 0.16
-Nodes (7): GitLabProvider, Domain, IsConfigured, Owner, ProjectPath, ProviderName, Slug
+Cohesion: 0.15
+Nodes (9): GitLabProvider, Domain, IsConfigured, Owner, ProjectPath, ProviderName, Slug, GitRemoteUrlParser (+1 more)
 
 ### Community 103 - "CredentialsDialog"
 Cohesion: 0.18
@@ -639,7 +646,7 @@ Cohesion: 0.16
 Nodes (12): /pkl:review-pr, Spawned Review Agent, Severity Summary + Verdict Format, /pkl:security-review, /pkl:static-analyze, Review: adhoc-conflict-staging-diff-fixes, GetConflictStageBytes Binary Memory, DecodedTextFallback Reads Whole Binaries (+4 more)
 
 ### Community 106 - "BlameLine"
-Cohesion: 0.14
+Cohesion: 0.16
 Nodes (9): BlameLine, AuthorDate, AuthorName, Content, IsBandAlt, LineNumber, MessageShort, Sha (+1 more)
 
 ### Community 107 - "Unstaged Files List"
@@ -650,13 +657,13 @@ Nodes (14): Staging & Commit Panel Screenshot, Amend Last Commit Checkbox, Commi
 Cohesion: 0.14
 Nodes (14): ConflictResultItem, BlockVm, Display, Kind, LineNumber, LineText, SourceLine, ConflictResultRowKind (+6 more)
 
-### Community 110 - "ValueConverters.cs"
-Cohesion: 0.13
-Nodes (5): ConditionalGraphWidthConverter, CurrentFindMatchConverter, DiffLineBackgroundConverter, ShowHideWidthConverter, TaskbarProgressStateConverter
+### Community 110 - "IMultiValueConverter"
+Cohesion: 0.15
+Nodes (4): ConditionalGraphWidthConverter, CurrentFindMatchConverter, ShowHideWidthConverter, TaskbarProgressStateConverter
 
-### Community 111 - "DetachedHeadConverter"
-Cohesion: 0.21
-Nodes (4): DetachedHeadConverter, Invert, ResolutionToVisibilityConverter, Invert
+### Community 111 - "IValueConverter"
+Cohesion: 0.15
+Nodes (5): DetachedHeadConverter, Invert, DiffLineBackgroundConverter, InverseBooleanConverter, RefsTooltipConverter
 
 ### Community 112 - "Diff View Screenshot"
 Cohesion: 0.19
@@ -675,7 +682,7 @@ Cohesion: 0.27
 Nodes (12): EnumEqualsVis, FileViewMode, StagedFiles, StagedFileTreeRows, WorkingDirFiles, WorkingFileTreeRows, StagedListView, StagedTreeListView (+4 more)
 
 ### Community 116 - ".HandleFindBoxKeyDown"
-Cohesion: 0.18
+Cohesion: 0.24
 Nodes (7): DataContext.LeftFind.SearchText, DataContext.ResultFind.SearchText, DataContext.RightFind.SearchText, LeftFindBox, ResultFindBox, RightFindBox, TextBox
 
 ### Community 117 - "Commit Graph Screenshot"
@@ -687,8 +694,8 @@ Cohesion: 0.21
 Nodes (12): Main Window Overview Screenshot, Hierarchical Local Branch Tree, Commit Graph Column, Commit List, Dark Theme, Ref Badges, Fetch / Pull / Push Split Buttons, Repository Tabs (+4 more)
 
 ### Community 119 - "IHostingProvider"
-Cohesion: 0.17
-Nodes (8): GitRemoteUrlParser, HostingProviderFactory, IHostingProvider, Domain, IsConfigured, Owner, ProviderName, Slug
+Cohesion: 0.18
+Nodes (6): IHostingProvider, Domain, IsConfigured, Owner, ProviderName, Slug
 
 ### Community 120 - "Retro Log (pkl:retro process improvements)"
 Cohesion: 0.22
@@ -727,16 +734,12 @@ Cohesion: 0.24
 Nodes (8): commit-format.md spec, /pkl:commit-only, /pkl:commit - Commit with Correct Format (SHIP flow), pkl:issue-comment, pkl:qa-list, pkl:review-pr, /pkl:issue-attach, /pkl:issue-close
 
 ### Community 130 - "Help: The Diff View"
-Cohesion: 0.13
-Nodes (13): DiffItemTemplateSelector, PatchBuilder.BuildLinePatch, Amend last commit, Help: Staging & Committing, Hunk and line staging, Read-only committer identity, Sign-off, Change-map strip (+5 more)
+Cohesion: 0.22
+Nodes (7): DiffItemTemplateSelector, Change-map strip, Entire-file toggle, Help: The Diff View, Inline blame, Side-by-side, Virtualized diff rendering
 
 ### Community 131 - "Plan: LFS clean filter staging"
 Cohesion: 0.29
 Nodes (7): ChunkPathsByLength, CLI-routed smudge-side operations, Git LFS clean filter, GitService.Reopen, Plan: LFS clean filter staging, Run report: LFS clean filter staging, StageCli
-
-### Community 133 - ".ShowSection_Click"
-Cohesion: 0.39
-Nodes (8): AboutSectionButton, GeneralSectionButton, GitBehaviorSectionButton, IntegrationsSectionButton, ProfileSectionButton, ShortcutsSectionButton, UISectionButton, Button
 
 ### Community 134 - "frontend-architect agent (WPF/MVVM)"
 Cohesion: 0.25
@@ -770,21 +773,9 @@ Nodes (9): Phase: Hosting & Ecosystem, BitbucketCloudProvider, Branch context me
 Cohesion: 0.22
 Nodes (8): ReflogEntry, Index, Message, NewSha, OldSha, Selector, ShortNewSha, Timestamp
 
-### Community 142 - "RepositoryAccount.cs"
-Cohesion: 0.15
-Nodes (12): BranchFilterMode, All, StarredOnly, DiffItemKind, HunkHeader, Line, DiffPaneMode, Diff (+4 more)
-
 ### Community 143 - "UI Performance Improvements Plan"
 Cohesion: 0.39
 Nodes (7): CommitGraphCell, CommitGraphControl, GitService, RefLabel, RepositoryViewModel, Sidebar TreeView virtualization, UI Performance Improvements Plan
-
-### Community 145 - "TextBox"
-Cohesion: 0.20
-Nodes (10): AutoFetchIntervalMinutes, DefaultCommitLoadLimit, GitExePathOverride, AutoFetchIntervalBox, CommitLimitBox, GitPathBox, HostDomainBox, HostUsernameBox (+2 more)
-
-### Community 146 - "AggregatedFileTreeRow"
-Cohesion: 0.20
-Nodes (10): AggregatedFileTreeRow, DisplayName, File, FullPath, IndentLevel, IsExpanded, Kind, FileTreeRowKind (+2 more)
 
 ### Community 147 - "Plan File (.plans/gh-N.md)"
 Cohesion: 0.25
@@ -823,8 +814,8 @@ Cohesion: 0.29
 Nodes (6): refactoring-expert agent, GitService / CliGitService, Hybrid LibGit2Sharp + git.exe backend, RepositoryViewModel (one per tab), 2.1 Cancel long operations (CancellationToken in GitCli.RunAsync), 4.4 RepositoryViewModel decomposition (partial classes, StagingService, WorktreeService, HostingViewModel)
 
 ### Community 157 - "FileTreeRow"
-Cohesion: 0.13
-Nodes (9): FileTreeRow, DisplayName, File, Files, FullPath, HasConflicts, IndentLevel, IsExpanded (+1 more)
+Cohesion: 0.05
+Nodes (30): AggregatedFileChange, CommitCount, Kind, Path, StatusLabel, AggregatedFileTreeRow, DisplayName, File (+22 more)
 
 ### Community 158 - "ADR 0002 No DI Container"
 Cohesion: 0.33
@@ -858,17 +849,13 @@ Nodes (3): SearchText, SearchBox, TextBox
 Cohesion: 0.40
 Nodes (5): Closing the List, Diff & History, Hardening, Interactive Rebase, Settings & Shortcuts
 
-### Community 174 - ".ThemeBox_SelectionChanged"
-Cohesion: 0.40
-Nodes (3): SelfHostedKindBox, ThemeBox, ComboBox
-
 ### Community 176 - "hitl-loop.template.sh"
 Cohesion: 0.83
 Nodes (3): capture(), hitl-loop.template.sh script, step()
 
-### Community 178 - "FileSortMode"
-Cohesion: 0.22
-Nodes (9): FileSortMode, NameAsc, NameDesc, PathAsc, PathDesc, Status, FileSortModeOption, Label (+1 more)
+### Community 178 - "RepositoryAccount.cs"
+Cohesion: 0.11
+Nodes (18): BranchFilterMode, All, StarredOnly, DiffPaneMode, Diff, History, FileSortMode, NameAsc (+10 more)
 
 ### Community 179 - "Border"
 Cohesion: 0.50
@@ -886,14 +873,6 @@ Nodes (4): ExistenceChoice, DeleteFile, KeepFile, Undecided
 Cohesion: 0.67
 Nodes (3): GraphNodes, CommitList, ListView
 
-### Community 187 - "ConflictResolution"
-Cohesion: 0.29
-Nodes (7): ConflictResolution, Base, Both, BothReverse, Ours, Theirs, Unresolved
-
-### Community 189 - "AggregatedFileChange"
-Cohesion: 0.40
-Nodes (5): AggregatedFileChange, CommitCount, Kind, Path, StatusLabel
-
 ### Community 192 - "TabScrollLeftButton"
 Cohesion: 0.67
 Nodes (3): TabScrollLeftButton, TabScrollRightButton, Button
@@ -902,65 +881,33 @@ Nodes (3): TabScrollLeftButton, TabScrollRightButton, Button
 Cohesion: 0.17
 Nodes (12): UndoEntry, BranchName, Description, Kind, PostHeadSha, PreHeadSha, Sha, UndoKind (+4 more)
 
-### Community 222 - "BulkObservableCollection"
-Cohesion: 0.19
-Nodes (3): BulkObservableCollection, ISuspendableNotifications, Scope
-
-### Community 223 - "Plan: adhoc-background-auto-fetch — Background auto-fetch of all open tabs"
-Cohesion: 0.12
-Nodes (12): Acceptance Criteria, After Implementation, Constraints, Deviation Register, Handoff, Manual / Black-Box, Plan: adhoc-background-auto-fetch — Background auto-fetch of all open tabs, Problem Statement (+4 more)
-
 ### Community 224 - "ConflictResultEditBox"
-Cohesion: 0.13
+Cohesion: 0.33
 Nodes (4): IsManuallyEdited, ConflictResultEditBox, BoolToVis, TextEditor
-
-### Community 225 - ".Warn"
-Cohesion: 0.10
-Nodes (4): Code Review: adhoc-background-auto-fetch (vs main), Summary, AppLog, Step 2: Silent per-repo background fetch ✓
-
-### Community 227 - ".Load"
-Cohesion: 0.18
-Nodes (4): HostingCredentials, HostTokenEntry, Domain, Username
-
-### Community 230 - "Help: The Commit Graph"
-Cohesion: 0.31
-Nodes (9): CommitInfo.RefMask, ListViewMultiSelectBehavior, Badge hover highlight, Branch filter, Help: The Commit Graph, Multi-commit selection, Branch operations, Help: Branches & Stashes (+1 more)
-
-### Community 231 - "App.xaml"
-Cohesion: 0.25
-Nodes (4): Application, App.ApplyTheme, DetachedHeadConverter, Theme setting
-
-### Community 232 - "TokenKind"
-Cohesion: 0.25
-Nodes (7): TokenKind, Comment, Keyword, Number, Preprocessor, String, Type
-
-### Community 233 - "Language"
-Cohesion: 0.25
-Nodes (8): Language, CSharpLike, Css, Json, Markdown, PowerShell, Python, Xml
 
 ## Ambiguous Edges - Review These
 - `CredentialsDialog` → `ConfirmDialog`  [AMBIGUOUS]
   .plans/adhoc-dialog-button-clipping.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **1859 isolated node(s):** `graphify-guard.sh script`, `detect-base-branch.sh script`, `diff-profile.sh script`, `plan-drift-check.sh script`, `IsLightTheme` (+1854 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2243 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **71 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **1871 isolated node(s):** `graphify-guard.sh script`, `detect-base-branch.sh script`, `diff-profile.sh script`, `plan-drift-check.sh script`, `IsLightTheme` (+1866 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2257 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **69 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `CredentialsDialog` and `ConfirmDialog`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `RepositoryViewModel` connect `RepositoryViewModel` to `system`, `GitService`, `AppViewModel`, `GraphNode`, `.RefreshAsync`, `.RefreshOnceAsync`, `RepositoryAccount.cs`, `.InitializeFind`, `AggregatedFileTreeRow`, `.Confirm`, `DiffView`, `RepositoryWatcher`, `BaseViewModel`, `CommitInfo`, `RefreshScope`, `Task`, `FileTreeRow`, `.RaisePropertyChanged`, `.ShowError`, `CommitListView`, `FileChange`, `.BranchNode_Drop`, `SettingsWindow`, `BranchNodeViewModel`, `SidebarView`, `FileSortMode`, `FileDiffResult`, `RemoteDialog`, `PaneFindState`, `DiffLine`, `AggregatedFileChange`, `HostingViewModel`, `.OpenRepoAsync`, `UndoEntry`, `BisectState`, `.OpenRepoInNewTabAsync`, `.LoadWorkingDirAsync`, `MainWindow`, `DiffChangeMapControl`, `ConflictState`, `BulkObservableCollection`, `SideBySideItem`, `DiffHunk`, `.Warn`, `StagingPatchOp`, `BlameLine`?**
-  _High betweenness centrality (0.451) - this node is a cross-community bridge._
-- **Why does `AppViewModel` connect `AppViewModel` to `.GetEffectiveColumnWidth`, `system`, `.Warn`, `RepositoryViewModel`, `HelpWindow`, `CommitListView`, `.OpenRepoInNewTabAsync`, `SettingsWindow`, `.RefreshAsync`, `MainWindow`, `SidebarView`, `CloneDialog`, `CommandPaletteWindow`, `AppSettings`, `.OnStartup`, `.RunBackgroundFetchPassAsync`, `BaseViewModel`?**
-  _High betweenness centrality (0.175) - this node is a cross-community bridge._
-- **Why does `App` connect `.OnStartup` to `AppViewModel`, `system`, `App.xaml`?**
-  _High betweenness centrality (0.140) - this node is a cross-community bridge._
+- **Why does `RepositoryViewModel` connect `RepositoryViewModel` to `system`, `GitService`, `AppViewModel`, `.RefreshAsync`, `.RefreshOnceAsync`, `.InitializeFind`, `DiffView`, `.RunAsync`, `RepositoryWatcher`, `BaseViewModel`, `CommitInfo`, `AppSettings`, `RefreshScope`, `Task`, `FileTreeRow`, `.RaisePropertyChanged`, `.RunBisectCliAsync`, `CommitListView`, `FileChange`, `SettingsWindow`, `BranchNodeViewModel`, `SidebarView`, `RepositoryAccount.cs`, `FileDiffResult`, `RemoteDialog`, `PaneFindState`, `DiffLine`, `HostingViewModel`, `UndoEntry`, `BisectState`, `.LoadWorkingDirAsync`, `MainWindow`, `.RunThenRefreshCheckout`, `.Warn`, `ConflictState`, `.ShowBranchDropMenu`, `SideBySideItem`, `CommitGraphCell`, `DiffHunk`, `StagingPatchOp`, `BlameLine`?**
+  _High betweenness centrality (0.467) - this node is a cross-community bridge._
+- **Why does `AppViewModel` connect `AppViewModel` to `.GetEffectiveColumnWidth`, `system`, `RepositoryViewModel`, `HelpWindow`, `CommitListView`, `GitCli`, `.SaveSettings`, `SettingsWindow`, `.RefreshOnceAsync`, `MainWindow`, `SidebarView`, `CloneDialog`, `CommandPaletteWindow`, `.Warn`, `AppSettings`, `.OnStartup`, `BaseViewModel`, `.InitInNewTab`?**
+  _High betweenness centrality (0.192) - this node is a cross-community bridge._
+- **Why does `App` connect `.OnStartup` to `AppViewModel`, `system`, `PickleGit Claude Code Guide`?**
+  _High betweenness centrality (0.165) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `RepositoryViewModel` (e.g. with `.AddEmptyTab()` and `Requirements`) actually correct?**
   _`RepositoryViewModel` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 3 inferred relationships involving `AppViewModel` (e.g. with `.OnStartup()` and `Requirements`) actually correct?**
   _`AppViewModel` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `graphify-guard.sh script`, `detect-base-branch.sh script`, `diff-profile.sh script` to the rest of the system?**
-  _1859 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _1871 weakly-connected nodes found - possible documentation gaps or missing edges._

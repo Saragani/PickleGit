@@ -72,8 +72,8 @@
     "semantic_hash": "a92eb4218f15c6638189cac87cdfcc17"
   },
   "PickleGit/App.xaml.cs": {
-    "mtime": 1793716609.2581248,
-    "seen": 1793717512.7862875,
+    "mtime": 1793720647.9875655,
+    "seen": 1794210282.337446,
     "ast_hash": "21aa5f4dc73f961a6a8d62c71be50433",
     "semantic_hash": ""
   },
@@ -240,8 +240,8 @@
     "semantic_hash": "8e96b8933d3513b51cd1756774b99af3"
   },
   "PickleGit/Services/AppSettings.cs": {
-    "mtime": 1793716366.5738645,
-    "seen": 1793717512.7863154,
+    "mtime": 1793720647.9930174,
+    "seen": 1794210282.3375022,
     "ast_hash": "a0a7d54bdd0c7e4c82b3e8d17a23b451",
     "semantic_hash": ""
   },
@@ -276,10 +276,10 @@
     "semantic_hash": "fa3747417150dd3e51980f1968863390"
   },
   "PickleGit/Services/GitService.cs": {
-    "mtime": 1793625666.6722596,
-    "seen": 1793717512.7863214,
+    "mtime": 1794211270.6886365,
+    "seen": 1794211543.6880314,
     "ast_hash": "23f618418bd76fd435bd974e2191376e",
-    "semantic_hash": "23f618418bd76fd435bd974e2191376e"
+    "semantic_hash": ""
   },
   "PickleGit/Services/Git/CliGitService.cs": {
     "mtime": 1786297365.682732,
@@ -294,8 +294,8 @@
     "semantic_hash": "43c7b5cd17ba172f55c0c86e3aaff048"
   },
   "PickleGit/Services/Git/GitCli.cs": {
-    "mtime": 1793718336.7769449,
-    "seen": 1793718544.673531,
+    "mtime": 1793720647.99886,
+    "seen": 1794210282.3375201,
     "ast_hash": "c55aa9714597bb00c1830e6afeac1e78",
     "semantic_hash": ""
   },
@@ -468,8 +468,8 @@
     "semantic_hash": "5ed13f4d9ad8d773109b2b47ad65c02a"
   },
   "PickleGit/ViewModels/AppViewModel.cs": {
-    "mtime": 1793718351.0395968,
-    "seen": 1793718544.6735792,
+    "mtime": 1793720648.009445,
+    "seen": 1794210282.3375766,
     "ast_hash": "d7742a7ccd7e52ff0ae0316b61d23f29",
     "semantic_hash": ""
   },
@@ -546,10 +546,10 @@
     "semantic_hash": "89e65cc4dfe63e7125b1730bb8083e24"
   },
   "PickleGit/ViewModels/RepositoryViewModel.Detail.cs": {
-    "mtime": 1786385653.8861594,
-    "seen": 1793624239.824751,
+    "mtime": 1794211270.6916387,
+    "seen": 1794211543.6881094,
     "ast_hash": "4ec0fd94ae31f96b7346b4fcf5eafce9",
-    "semantic_hash": "4ec0fd94ae31f96b7346b4fcf5eafce9"
+    "semantic_hash": ""
   },
   "PickleGit/ViewModels/RepositoryViewModel.Diff.cs": {
     "mtime": 1793625666.6825926,
@@ -570,21 +570,21 @@
     "semantic_hash": "9592e8ba87bba38bea9117fff96cb23e"
   },
   "PickleGit/ViewModels/RepositoryViewModel.Remote.cs": {
-    "mtime": 1793718310.0402012,
-    "seen": 1793718544.6736073,
+    "mtime": 1793720648.0144467,
+    "seen": 1794210282.3376105,
     "ast_hash": "13f40c3d938cf5fc0ef42939f8b964fe",
     "semantic_hash": ""
   },
   "PickleGit/ViewModels/RepositoryViewModel.Staging.cs": {
-    "mtime": 1793625666.6845298,
-    "seen": 1793717512.7863696,
-    "ast_hash": "34ef4a99b5dfa1c6ea7837aa00c545e4",
-    "semantic_hash": "34ef4a99b5dfa1c6ea7837aa00c545e4"
+    "mtime": 1794212143.0665789,
+    "seen": 1794212324.8052232,
+    "ast_hash": "ecbd3e50e1b6342f399022fa509690fa",
+    "semantic_hash": ""
   },
   "PickleGit/ViewModels/RepositoryViewModel.cs": {
-    "mtime": 1793718350.2596595,
-    "seen": 1793718544.6736104,
-    "ast_hash": "2f341639aef3f27c2fee197df0c904f9",
+    "mtime": 1794211401.043811,
+    "seen": 1794211543.68812,
+    "ast_hash": "809c0c27cf89225b4be96f0a4b56d2dd",
     "semantic_hash": ""
   },
   "PickleGit/Views/CloneDialog.xaml": {
@@ -612,10 +612,10 @@
     "semantic_hash": "9bda31e5bfd6558682650c8e612972c1"
   },
   "PickleGit/Views/CommitDetailView.xaml": {
-    "mtime": 1793625666.6910632,
-    "seen": 1793717512.7863753,
+    "mtime": 1794211270.6961462,
+    "seen": 1794211543.6881278,
     "ast_hash": "887959312aa6b0bafee4ea9b11ea86c6",
-    "semantic_hash": "887959312aa6b0bafee4ea9b11ea86c6"
+    "semantic_hash": ""
   },
   "PickleGit/Views/CommitDetailView.xaml.cs": {
     "mtime": 1784646661.383022,
@@ -780,8 +780,8 @@
     "semantic_hash": "82d1fdc736be6ae88d87e34f0f63f441"
   },
   "PickleGit/Views/SettingsWindow.xaml": {
-    "mtime": 1793718351.6796503,
-    "seen": 1793718544.6736643,
+    "mtime": 1793720648.026117,
+    "seen": 1794210282.3376794,
     "ast_hash": "d55f8487f0cd697fc972ceaa0e5d6514",
     "semantic_hash": ""
   },
@@ -1068,10 +1068,10 @@
     "semantic_hash": "b2142c1481af393f29afbf465d19c1e2"
   },
   ".claude/retro-log.md": {
-    "mtime": 1791096400.4520614,
-    "seen": 1793624239.8248146,
-    "ast_hash": "741cd4688f9e095df8f9ab0553004292",
-    "semantic_hash": "741cd4688f9e095df8f9ab0553004292"
+    "mtime": 1794212287.874999,
+    "seen": 1794212324.805419,
+    "ast_hash": "50e5b5022037a178a5b1fd6b0d403b76",
+    "semantic_hash": ""
   },
   ".claude/reviews/adhoc-conflict-staging-diff-fixes.md": {
     "mtime": 1793625666.635569,
@@ -1626,21 +1626,39 @@
     "semantic_hash": ""
   },
   ".plans/adhoc-background-auto-fetch.md": {
-    "mtime": 1793717502.3498178,
-    "seen": 1793717512.7864873,
-    "ast_hash": "a0d1e34339001938f8d883c42df9a406",
+    "mtime": 1793720647.971753,
+    "seen": 1794210282.337852,
+    "ast_hash": "a1bdabae53768fdb7293670a3e87329f",
     "semantic_hash": ""
   },
   ".plans/adhoc-background-auto-fetch.report.md": {
-    "mtime": 1793717502.4786565,
-    "seen": 1793717512.7864885,
-    "ast_hash": "f8dcc82c84400c014202ca1a99c80417",
+    "mtime": 1793720647.9787111,
+    "seen": 1794210282.337854,
+    "ast_hash": "2f3c27b1e1e95f095958fc9fa7c7a6b4",
     "semantic_hash": ""
   },
   ".claude/reviews/adhoc-background-auto-fetch.md": {
-    "mtime": 1793718160.4957807,
-    "seen": 1793718544.6737444,
-    "ast_hash": "8ef287fdae3a7c37e3cc866704e240e6",
+    "mtime": 1793720647.9623947,
+    "seen": 1794210282.3377748,
+    "ast_hash": "1d7db77a2332a138dcf1dcf57d63148f",
+    "semantic_hash": ""
+  },
+  ".plans/adhoc-merge-commit-no-changes.md": {
+    "mtime": 1794212287.8643281,
+    "seen": 1794212324.8055532,
+    "ast_hash": "bcfa522146656c34463d2280e7d39f81",
+    "semantic_hash": ""
+  },
+  ".plans/adhoc-merge-commit-no-changes.report.md": {
+    "mtime": 1794211532.5633447,
+    "seen": 1794211543.6883695,
+    "ast_hash": "ed1f576b8707e7de3dd1447cafd859ed",
+    "semantic_hash": ""
+  },
+  ".claude/reviews/adhoc-merge-commit-no-changes.md": {
+    "mtime": 1794212231.9910386,
+    "seen": 1794212324.8054338,
+    "ast_hash": "46644ffdd590e70bd7669769485c8993",
     "semantic_hash": ""
   }
 }
