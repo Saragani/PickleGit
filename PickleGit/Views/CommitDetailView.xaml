@@ -800,6 +800,8 @@
                           Style="{StaticResource DarkListView}"
                           ItemContainerStyle="{StaticResource DarkListViewItem}"
                           ItemsSource="{Binding AggregatedFiles}"
+                          SelectedItem="{Binding SelectedAggregatedFile}"
+                          SelectionMode="Single"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           Visibility="{Binding FileViewMode, Converter={StaticResource EnumEqualsVis}, ConverterParameter=Flat}">
                     <ListView.ItemTemplate>
@@ -834,6 +836,7 @@
                           ItemContainerStyle="{StaticResource DarkListViewItem}"
                           ItemsSource="{Binding AggregatedFilesTreeRows}"
                           ItemTemplateSelector="{StaticResource AggregatedFilesTreeSelector}"
+                          SelectedItem="{Binding SelectedAggregatedFilesTreeRow}"
                           SelectionMode="Single"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           Visibility="{Binding FileViewMode, Converter={StaticResource EnumEqualsVis}, ConverterParameter=Tree}">

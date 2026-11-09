@@ -74,6 +74,9 @@ namespace PickleGit.ViewModels
 
         private void OnSelectedNodesChanged()
         {
+            // Any commit-selection change invalidates the multi-select file pick and its range diff
+            // (done before IsMultiSelection flips, so SelectedFile's setter doesn't see a mixed state).
+            ClearAggregatedFileSelection();
             SelectedCount = _selectedNodes.Count;
             IsMultiSelection = _selectedNodes.Count > 1;
 
@@ -113,6 +116,9 @@ namespace PickleGit.ViewModels
                 DetailCommit = null;
                 CommitFiles = new ObservableCollection<FileChange>();
                 ShowWorkingDir = false;
+                // A file picked in the previous context (e.g. an unstaged file under the WIP node)
+                // must not carry over — it would keep its working-tree diff live under multi-select.
+                SelectedFile = null;
                 ComputeAggregatedFiles();
             }
 
@@ -128,6 +134,7 @@ namespace PickleGit.ViewModels
                 .Where(n => n.Commit?.IsUncommitted != true && n.Commit?.Sha != null)
                 .Select(n => n.Commit.Sha)
                 .ToList();
+            _aggregatedShas = shas;
 
             Dictionary<string, (int count, FileChangeKind kind)> map;
             try
@@ -171,6 +178,131 @@ namespace PickleGit.ViewModels
             _aggregatedFiles.Clear();
             foreach (var f in ordered) _aggregatedFiles.Add(f);
             RebuildAggregatedFileTreeRows();
+        }
+
+        // ── Multi-select "Files changed" selection ────────────────────────────
+
+        private AggregatedFileChange _selectedAggregatedFile;
+        /// <summary>Flat-mode selection in the multi-select "Files changed" panel. Null from the view
+        /// (an ItemsSource rebuild dropping the row) is ignored — it's cleared by a commit-selection
+        /// change or by SelectedFile moving off the aggregated pick (DropAggregatedRowSelection).</summary>
+        public AggregatedFileChange SelectedAggregatedFile
+        {
+            get => _selectedAggregatedFile;
+            set
+            {
+                if (value == null || ReferenceEquals(value, _selectedAggregatedFile)) return;
+                SelectAggregatedFile(value);
+            }
+        }
+
+        private AggregatedFileTreeRow _selectedAggregatedFilesTreeRow;
+        /// <summary>Tree-mode selection in the multi-select "Files changed" panel; folder rows don't
+        /// select a file.</summary>
+        public AggregatedFileTreeRow SelectedAggregatedFilesTreeRow
+        {
+            get => _selectedAggregatedFilesTreeRow;
+            set
+            {
+                if (value == null || ReferenceEquals(value, _selectedAggregatedFilesTreeRow)) return;
+                if (value.Kind != FileTreeRowKind.File || value.File == null)
+                {
+                    Set(ref _selectedAggregatedFilesTreeRow, value);
+                    return;
+                }
+                SelectAggregatedFile(value.File);
+            }
+        }
+
+        // The FileChange handed to SelectedFile for the current aggregated selection — lets a commit
+        // selection change clear SelectedFile only when it came from this panel.
+        private FileChange _aggregatedSelectedFileChange;
+
+        private void SelectAggregatedFile(AggregatedFileChange file)
+        {
+            // Keep the Flat and Tree lists pointing at the same file so toggling FileViewMode agrees.
+            Set(ref _selectedAggregatedFile, file, nameof(SelectedAggregatedFile));
+            Set(ref _selectedAggregatedFilesTreeRow,
+                AggregatedFilesTreeRows?.FirstOrDefault(r => r.Kind == FileTreeRowKind.File && ReferenceEquals(r.File, file)),
+                nameof(SelectedAggregatedFilesTreeRow));
+            _aggregatedSelectedFileChange = new FileChange { Path = file.Path, Kind = file.Kind };
+            SelectedFile = _aggregatedSelectedFileChange;
+        }
+
+        /// <summary>True when <see cref="SelectedFile"/> is the file picked from the multi-select panel
+        /// (not a leftover from a previous selection context).</summary>
+        private bool IsAggregatedFileSelected =>
+            _aggregatedSelectedFileChange != null && ReferenceEquals(_selectedFile, _aggregatedSelectedFileChange);
+
+        /// <summary>Un-highlights the multi-select panel's row so the same file can be clicked again —
+        /// called whenever SelectedFile moves off the aggregated pick (closing the diff, etc.).</summary>
+        private void DropAggregatedRowSelection()
+        {
+            _aggregatedSelectedFileChange = null;
+            Set(ref _selectedAggregatedFile, null, nameof(SelectedAggregatedFile));
+            Set(ref _selectedAggregatedFilesTreeRow, null, nameof(SelectedAggregatedFilesTreeRow));
+        }
+
+        private void ClearAggregatedFileSelection()
+        {
+            ++_rangeDiffVersion; // drop any in-flight range diff
+            if (IsAggregatedFileSelected)
+            {
+                SelectedFile = null;
+                FlatDiffItems = Array.Empty<DiffItem>();
+                SideBySideItems = Array.Empty<SideBySideItem>();
+            }
+            DropAggregatedRowSelection();
+        }
+
+        // SHAs the aggregated "Files changed" panel was built from. The range diff uses this snapshot,
+        // not _selectedNodes, because a background refresh's ReselectSameCommit can collapse
+        // _selectedNodes to one node while the panel (and SelectedCount) still show the multi-select.
+        private List<string> _aggregatedShas = new List<string>();
+
+        private int _rangeDiffVersion;
+
+        /// <summary>Multi-select file diff: the oldest selected commit's parent → the newest selected
+        /// commit, by graph order (not date — a rebased commit's dates can disagree with its position).
+        /// A non-contiguous selection deliberately includes the unselected commits in between.</summary>
+        private async Task LoadRangeDiffAsync(string filePath)
+        {
+            var version = ++_rangeDiffVersion;
+            var selected = new HashSet<string>(_aggregatedShas);
+            // GraphNodes is ordered newest-first: the first selected hit is the newest, the last the oldest.
+            var ordered = GraphNodes.Where(n => n.Commit?.Sha != null && selected.Contains(n.Commit.Sha)).ToList();
+
+            FlatDiffItems = Array.Empty<DiffItem>();
+            SideBySideItems = Array.Empty<SideBySideItem>();
+            _currentDiffFile = null;
+            SetCurrentDecodedDiff(null);
+            IsDiffFromStagedFile = false;
+            IsConflictedFileDiff = false;
+            IsLfsPointerDiff = false;
+            IsBinaryDiff = false;
+            IsLargeDiffPending = false;
+            IsImageDiff = false;
+            OldImage = null;
+            NewImage = null;
+            RaisePropertyChanged(nameof(IsWorkingDirDiff));
+            RaisePropertyChanged(nameof(CanPartialStage));
+            if (!_git.IsOpen || ordered.Count == 0) return;
+
+            var newestSha = ordered[0].Commit.Sha;
+            var oldestSha = ordered[ordered.Count - 1].Commit.Sha;
+            var contextLines = ContextLines;
+            // Invoked fire-and-forget from SelectedFile's setter — without this try/catch an exception
+            // is an unobserved task exception and the (already cleared) pane just stays blank.
+            try
+            {
+                var diff = await _git.Executor.RunAsync(() => _git.GetRangeFileDiff(oldestSha, newestSha, filePath, contextLines));
+                if (version != _rangeDiffVersion) return; // selection moved on while loading
+                ApplyDiffResult(diff);
+            }
+            catch (Exception ex)
+            {
+                if (version == _rangeDiffVersion) DialogService.ShowError("Diff", ex.Message);
+            }
         }
 
         private async Task CherryPickSelectedAsync()

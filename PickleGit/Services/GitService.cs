@@ -1116,6 +1116,24 @@ namespace PickleGit.Services
             return result;
         }
 
+        /// <summary>Diffs one file across a commit range — the oldest commit's first parent (an empty
+        /// tree when it's a root commit) vs the newest commit, i.e. "git diff oldest^ newest -- path".
+        /// Used by the multi-commit selection's "Files changed" panel.</summary>
+        public FileDiffResult GetRangeFileDiff(string oldestSha, string newestSha, string filePath, int contextLines = DefaultContextLines)
+        {
+            EnsureOpen();
+            var oldest = _repo.Lookup<Commit>(oldestSha);
+            var newest = _repo.Lookup<Commit>(newestSha);
+            if (oldest == null || newest == null) return new FileDiffResult();
+            var parent = oldest.Parents.FirstOrDefault();
+            var patch = _repo.Diff.Compare<Patch>(parent?.Tree, newest.Tree, new[] { filePath },
+                null, new CompareOptions { ContextLines = contextLines });
+            var result = DecodedTextFallback(ParsePatchEntries(patch), () => SourceAt(parent, filePath),
+                () => SourceAt(newest, filePath), filePath, contextLines, ignoreWhitespace: false, stageable: false);
+            Highlighting.SyntaxHighlighter.Apply(result.Hunks, filePath);
+            return result;
+        }
+
         /// <summary>Unstaged changes for one file — index vs working directory (what "git diff &lt;path&gt;" shows).</summary>
         public FileDiffResult GetUnstagedFileDiff(string filePath, int contextLines = DefaultContextLines)
         {
