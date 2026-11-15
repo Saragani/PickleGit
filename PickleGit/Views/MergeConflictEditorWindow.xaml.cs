@@ -23,12 +23,15 @@ namespace PickleGit.Views
         private MergeConflictSessionViewModel _sessionVm;
         private MergeConflictFileViewModel _currentFileVm;
 
-        // Scroll sync between the two Ours/Theirs pane ListViews — copies DiffView.xaml.cs's
-        // exact mechanism (ApplyTemplate() before FindDescendant<ScrollViewer>, since neither
-        // Loaded firing nor a same-priority deferred callback reliably guarantees the ListView's
-        // ControlTemplate has been applied yet — see CLAUDE.md).
+        // Scroll sync between the Ours/Theirs/Result pane ListViews (Controls/ScrollSyncGroup.cs).
+        // Each pane's internal ScrollViewer is found with ApplyTemplate() before
+        // FindDescendant<ScrollViewer>, since neither Loaded firing nor a same-priority deferred
+        // callback reliably guarantees the ListView's ControlTemplate has been applied yet — see CLAUDE.md.
         private ScrollViewer _leftScroll, _rightScroll;
-        private bool _syncingScroll;
+        private readonly ScrollSyncGroup _scrollSync = new ScrollSyncGroup();
+        // Ours and Theirs both bind PaneItems (identical rows) → absolute offset sync between them;
+        // Result (ResultItems) has no key, so it follows by scroll delta and keeps block alignment.
+        private static readonly object PaneRowsKey = new object();
 
         // Cross-line text selection (drag / Ctrl+click-extend / Ctrl+A / Ctrl+C) for copying —
         // purely a copy/paste convenience, with NO effect on which lines are Included. Picking a
@@ -328,6 +331,10 @@ namespace PickleGit.Views
             _leftTextSelection?.ClearSelection();
             _rightTextSelection?.ClearSelection();
             _resultTextSelection?.ClearSelection();
+
+            // The new file's rows replace the old ones in all three panes — once they're laid out,
+            // line the panes up on its current block again (no-op until all three are wired).
+            Dispatcher.BeginInvoke(new Action(OnPaneScrollWired), DispatcherPriority.Loaded);
         }
 
         private void OnScrollToBlockRequested(MergeConflictBlock block)
@@ -335,25 +342,59 @@ namespace PickleGit.Views
             var vm = _currentFileVm;
             if (vm == null) return;
 
+            var resultItem = vm.ResultItems.FirstOrDefault(i => i.BlockVm?.Block == block);
+            ScrollPanesToBlock(block, resultItem);
+        }
+
+        /// <summary>Brings <paramref name="block"/> into view in Ours/Theirs (its toolbar row) and
+        /// Result (<paramref name="resultItem"/>), each pane positioned on its own rows. The panes'
+        /// row sets differ (PaneItems vs ResultItems), so letting the scroll-sync group copy one
+        /// pane's pixel offset onto the others would pull them off the block — hence RunIndependent.</summary>
+        private void ScrollPanesToBlock(MergeConflictBlock block, ConflictResultItem resultItem)
+        {
+            var vm = _currentFileVm;
+            if (vm == null) return;
             var paneItem = vm.PaneItems.FirstOrDefault(i =>
                 i.Kind == ConflictPaneRowKind.BlockToolbar && i.BlockVm?.Block == block);
-            if (paneItem != null)
-            {
-                ConflictLeftListView.ScrollIntoView(paneItem);
-                ConflictRightListView.ScrollIntoView(paneItem);
-            }
 
-            var resultItem = vm.ResultItems.FirstOrDefault(i => i.BlockVm?.Block == block);
-            if (resultItem != null) ConflictResultListView.ScrollIntoView(resultItem);
+            _scrollSync.RunIndependent(() =>
+            {
+                if (paneItem != null)
+                {
+                    ListViewScrollHelper.ScrollToTop(ConflictLeftListView, _leftScroll, paneItem);
+                    ListViewScrollHelper.ScrollToTop(ConflictRightListView, _rightScroll, paneItem);
+                }
+                if (resultItem != null) ListViewScrollHelper.ScrollToTop(ConflictResultListView, _resultScroll, resultItem);
+            });
+        }
+
+        /// <summary>Called as each pane's ScrollViewer is found; once all three are in the sync
+        /// group, aligns them on the current unresolved block (or, with none left, on Ours' offset)
+        /// so the editor never opens with the panes at different positions.</summary>
+        private void OnPaneScrollWired()
+        {
+            if (_leftScroll == null || _rightScroll == null || _resultScroll == null) return;
+            var vm = _currentFileVm;
+            var unresolved = vm?.UnresolvedBlockVms;
+            if (unresolved != null && unresolved.Count > 0)
+            {
+                int idx = Math.Max(0, Math.Min(unresolved.Count - 1, vm.CurrentUnresolvedIndex));
+                OnScrollToBlockRequested(unresolved[idx].Block);
+            }
+            else
+            {
+                _scrollSync.SyncFrom(_leftScroll);
+            }
         }
 
         private void OnRequestClose(bool saved) => DialogResult = saved;
 
         private ScrollViewer _resultScroll;
 
-        // All three panes scroll together — scrolling any one of Ours/Theirs/Result moves the
-        // other two to match (vertically only; each pane's horizontal scroll stays independent,
-        // since their content widths/gutters differ).
+        // All three panes scroll together vertically — scrolling any one of Ours/Theirs/Result
+        // moves the other two to match. Horizontally only Ours and Theirs are linked (they share
+        // PaneItems, so their columns line up); Result's content width/gutter differs, so its
+        // horizontal scroll stays independent.
         private void ConflictLeftListView_Loaded(object sender, RoutedEventArgs e)
         {
             Dispatcher.BeginInvoke(new System.Action(() =>
@@ -362,8 +403,12 @@ namespace PickleGit.Views
                 ConflictLeftListView.ApplyTemplate();
                 _leftScroll = FindDescendant<ScrollViewer>(ConflictLeftListView);
                 if (_leftScroll != null)
-                    _leftScroll.ScrollChanged += (s, ev) => { SyncScroll(_leftScroll, _rightScroll, _resultScroll); _leftTextSelection.Recompute(); };
+                {
+                    _scrollSync.Add(_leftScroll, syncHorizontal: true, alignmentKey: PaneRowsKey);
+                    _leftScroll.ScrollChanged += (s, ev) => _leftTextSelection.Recompute();
+                }
                 ConflictLeftListView.SizeChanged += (s, ev) => _leftTextSelection.Recompute();
+                OnPaneScrollWired();
             }), DispatcherPriority.Loaded);
         }
 
@@ -375,8 +420,12 @@ namespace PickleGit.Views
                 ConflictRightListView.ApplyTemplate();
                 _rightScroll = FindDescendant<ScrollViewer>(ConflictRightListView);
                 if (_rightScroll != null)
-                    _rightScroll.ScrollChanged += (s, ev) => { SyncScroll(_rightScroll, _leftScroll, _resultScroll); _rightTextSelection.Recompute(); };
+                {
+                    _scrollSync.Add(_rightScroll, syncHorizontal: true, alignmentKey: PaneRowsKey);
+                    _rightScroll.ScrollChanged += (s, ev) => _rightTextSelection.Recompute();
+                }
                 ConflictRightListView.SizeChanged += (s, ev) => _rightTextSelection.Recompute();
+                OnPaneScrollWired();
             }), DispatcherPriority.Loaded);
         }
 
@@ -388,8 +437,12 @@ namespace PickleGit.Views
                 ConflictResultListView.ApplyTemplate();
                 _resultScroll = FindDescendant<ScrollViewer>(ConflictResultListView);
                 if (_resultScroll != null)
-                    _resultScroll.ScrollChanged += (s, ev) => { SyncScroll(_resultScroll, _leftScroll, _rightScroll); _resultTextSelection.Recompute(); };
+                {
+                    _scrollSync.Add(_resultScroll, syncHorizontal: false);
+                    _resultScroll.ScrollChanged += (s, ev) => _resultTextSelection.Recompute();
+                }
                 ConflictResultListView.SizeChanged += (s, ev) => _resultTextSelection.Recompute();
+                OnPaneScrollWired();
             }), DispatcherPriority.Loaded);
         }
 
@@ -519,25 +572,6 @@ namespace PickleGit.Views
             return null;
         }
 
-        // ScrollViewer.ScrollChanged does not fire synchronously inside ScrollToVerticalOffset —
-        // it's delivered on a later dispatcher pass. Resetting _syncingScroll immediately after
-        // issuing the target1/target2 offset changes therefore does NOT guard against them: by the
-        // time their own ScrollChanged events actually arrive, the guard has long since gone back
-        // to false, so each one re-enters SyncScroll for real and pushes an offset back onto the
-        // other two panes. With three panes ping-ponging like that every auto-scroll tick, the
-        // offsets race and visibly jump/oscillate instead of advancing smoothly. Fix: keep the
-        // guard up until after a dispatcher pass has had a chance to deliver those deferred events.
-        private void SyncScroll(ScrollViewer source, ScrollViewer target1, ScrollViewer target2)
-        {
-            if (_syncingScroll) return;
-            _syncingScroll = true;
-            target1?.ScrollToVerticalOffset(source.VerticalOffset);
-            target1?.ScrollToHorizontalOffset(source.HorizontalOffset);
-            target2?.ScrollToVerticalOffset(source.VerticalOffset);
-            target2?.ScrollToHorizontalOffset(source.HorizontalOffset);
-            Dispatcher.BeginInvoke(new System.Action(() => _syncingScroll = false), DispatcherPriority.ContextIdle);
-        }
-
         // ── Cross-line text selection (copy only) ───────────────────────────────────────────────
         // Row text sources per pane. BlockToolbar rows have no RowText element at all (see the
         // templates), so they simply never take part in selection — nothing special needed here.
@@ -597,9 +631,9 @@ namespace PickleGit.Views
 
         /// <summary>The pane's own ScrollViewer, keyed the same way as <see cref="ResolvePane"/> —
         /// used so Page Up/Down scrolls exactly the pane that has focus. Scrolling it is enough to
-        /// keep all three panes in sync: each one's ScrollChanged handler (wired in the *_Loaded
-        /// methods above) already calls SyncScroll to move the other two to match, the same
-        /// mechanism a mouse-driven scrollbar drag already goes through.</summary>
+        /// keep all three panes in sync: every pane is a member of _scrollSync (added in the *_Loaded
+        /// methods above), which moves the other two to match — the same mechanism a mouse-driven
+        /// scrollbar drag already goes through.</summary>
         private ScrollViewer ResolvePaneScrollViewer(ListView lv)
         {
             if (ReferenceEquals(lv, ConflictLeftListView)) return _leftScroll;
@@ -852,6 +886,28 @@ namespace PickleGit.Views
         private void RightFindClose_Click(object sender, RoutedEventArgs e) { if (_sessionVm != null) _sessionVm.RightFind.IsOpen = false; }
         private void ResultFindClose_Click(object sender, RoutedEventArgs e) { if (_sessionVm != null) _sessionVm.ResultFind.IsOpen = false; }
 
+        // Ours/Theirs change maps: a click on a conflict band aligns all three panes on that block
+        // (same as the Result map); elsewhere, scroll just that pane and let the sync group carry
+        // the other two.
+        private void ConflictLeftChangeMap_JumpRequested(object sender, double fraction) =>
+            JumpPaneToFraction((DiffChangeMapControl)sender, ConflictLeftListView, _leftScroll, fraction);
+
+        private void ConflictRightChangeMap_JumpRequested(object sender, double fraction) =>
+            JumpPaneToFraction((DiffChangeMapControl)sender, ConflictRightListView, _rightScroll, fraction);
+
+        private void JumpPaneToFraction(DiffChangeMapControl map, ListView lv, ScrollViewer sv, double fraction)
+        {
+            int idx = map.ResolveTargetRow(fraction, lv.Items.Count);
+            if (idx < 0) return;
+            var block = (lv.Items[idx] as ConflictPaneItem)?.BlockVm?.Block;
+            if (block != null)
+            {
+                OnScrollToBlockRequested(block);
+                return;
+            }
+            ListViewScrollHelper.ScrollToTop(lv, sv, lv.Items[idx]);
+        }
+
         private void ConflictResultChangeMap_JumpRequested(object sender, double fraction)
         {
             if (_currentFileVm?.IsManuallyEdited == true)
@@ -870,11 +926,17 @@ namespace PickleGit.Views
             }
 
             var lv = ConflictResultListView;
-            if (lv.Items.Count == 0) return;
-            int idx = (int)(fraction * lv.Items.Count);
-            if (idx < 0) idx = 0;
-            if (idx >= lv.Items.Count) idx = lv.Items.Count - 1;
-            lv.ScrollIntoView(lv.Items[idx]);
+            int idx = ((DiffChangeMapControl)sender).ResolveTargetRow(fraction, lv.Items.Count);
+            if (idx < 0) return;
+
+            // A conflict marker → align Ours/Theirs on that same block (their rows differ from
+            // Result's, so plain pixel sync would land them elsewhere). A context row has no block
+            // to anchor on, so just scroll Result and let the sync group carry the others.
+            var target = lv.Items[idx] as ConflictResultItem;
+            if (target?.BlockVm != null)
+                ScrollPanesToBlock(target.BlockVm.Block, target);
+            else
+                ListViewScrollHelper.ScrollToTop(lv, _resultScroll, lv.Items[idx]);
         }
 
         private void ConflictLeftCopySelection_Click(object sender, RoutedEventArgs e) => _leftTextSelection.TryCopySelection();

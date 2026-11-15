@@ -510,14 +510,17 @@ namespace PickleGit.Views
         }
 
         // ── Side-by-side scroll sync: both panes move together (vertically, so rows stay aligned,
-        // and horizontally: behavior of mirroring either pane's scrollbar onto the
-        // other). Wired from each ListView's own Loaded event, deferred to the DispatcherPriority.Loaded
+        // and horizontally, mirroring either pane's scrollbar onto the other) via
+        // Controls/ScrollSyncGroup.cs, which tells echoes of its own pushes apart from genuine
+        // scrolls — including a narrower pane clamping at its own max. Wired from each ListView's own Loaded event, deferred to the DispatcherPriority.Loaded
         // queue slot with an explicit ApplyTemplate() call first — verified empirically that neither
         // Loaded firing nor a later dispatcher callback guarantees the ListView's ControlTemplate
         // (where its internal ScrollViewer lives) has actually been applied yet; ApplyTemplate() forces
         // it immediately so the descendant search below reliably finds a real ScrollViewer.
         private ScrollViewer _leftScroll, _rightScroll, _unifiedScroll;
-        private bool _syncingScroll;
+        private readonly ScrollSyncGroup _scrollSync = new ScrollSyncGroup();
+        // Both panes bind SideBySideItems (identical rows) → absolute offset sync.
+        private static readonly object SideBySideRowsKey = new object();
 
         private void UnifiedListView_Loaded(object sender, RoutedEventArgs e)
         {
@@ -539,7 +542,10 @@ namespace PickleGit.Views
                 SideBySideLeftListView.ApplyTemplate();
                 _leftScroll = FindDescendant<ScrollViewer>(SideBySideLeftListView);
                 if (_leftScroll != null)
-                    _leftScroll.ScrollChanged += (s, ev) => { SyncScroll(_leftScroll, _rightScroll); _sideBySideLeftTextSelection.Recompute(); };
+                {
+                    _scrollSync.Add(_leftScroll, syncHorizontal: true, alignmentKey: SideBySideRowsKey);
+                    _leftScroll.ScrollChanged += (s, ev) => _sideBySideLeftTextSelection.Recompute();
+                }
                 SideBySideLeftListView.SizeChanged += (s, ev) => _sideBySideLeftTextSelection.Recompute();
             }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
@@ -553,20 +559,11 @@ namespace PickleGit.Views
                 _rightScroll = FindDescendant<ScrollViewer>(SideBySideRightListView);
                 if (_rightScroll != null)
                 {
-                    _rightScroll.ScrollChanged += (s, ev) => SyncScroll(_rightScroll, _leftScroll);
+                    _scrollSync.Add(_rightScroll, syncHorizontal: true, alignmentKey: SideBySideRowsKey);
                     _rightScroll.ScrollChanged += (s, ev) => _sideBySideRightTextSelection.Recompute();
                 }
                 SideBySideRightListView.SizeChanged += (s, ev) => _sideBySideRightTextSelection.Recompute();
             }), System.Windows.Threading.DispatcherPriority.Loaded);
-        }
-
-        private void SyncScroll(ScrollViewer source, ScrollViewer target)
-        {
-            if (_syncingScroll || target == null) return;
-            _syncingScroll = true;
-            target.ScrollToVerticalOffset(source.VerticalOffset);
-            target.ScrollToHorizontalOffset(source.HorizontalOffset);
-            _syncingScroll = false;
         }
 
         // ── Cross-line text-selection copy (Ctrl+C / context-menu "Copy") ───────────────────────
@@ -579,7 +576,7 @@ namespace PickleGit.Views
         /// <see cref="ResolveTextSelectionController"/> — used so Page Up/Down scrolls exactly the
         /// pane that has focus. Scrolling it (rather than e.g. scrolling all three at once) is
         /// enough to keep every pane in sync: each ScrollViewer's own ScrollChanged handler (wired in
-        /// the *_Loaded methods below) already calls SyncScroll to move its sibling(s) to match,
+        /// the *_Loaded methods below) is in _scrollSync, which moves its sibling to match,
         /// which is the exact same mechanism a mouse-driven scrollbar drag already goes through.</summary>
         private ScrollViewer ResolveScrollViewerFor(ListView lv) =>
             ReferenceEquals(lv, UnifiedListView) ? _unifiedScroll
@@ -730,20 +727,22 @@ namespace PickleGit.Views
 
         // ── Change-map click-to-jump (Controls/DiffChangeMapControl.cs) ─────────────────────────
         private void UnifiedChangeMap_JumpRequested(object sender, double fraction) =>
-            JumpListViewToFraction(UnifiedListView, fraction);
+            JumpListViewToFraction((DiffChangeMapControl)sender, UnifiedListView, _unifiedScroll, fraction);
 
         // Scrolling the left pane triggers the right pane too via the existing scroll-sync wiring
-        // above (SyncScroll), so only one ListView needs to be driven directly here.
+        // above (_scrollSync), so only one ListView needs to be driven directly here.
         private void SideBySideChangeMap_JumpRequested(object sender, double fraction) =>
-            JumpListViewToFraction(SideBySideLeftListView, fraction);
+            JumpListViewToFraction((DiffChangeMapControl)sender, SideBySideLeftListView, _leftScroll, fraction);
 
-        private static void JumpListViewToFraction(ListView lv, double fraction)
+        // Snaps the click onto the nearest changed run and puts its first row near the top of the
+        // pane, so the change itself is visible (plain ScrollIntoView would leave it below the fold
+        // when jumping downward).
+        private static void JumpListViewToFraction(DiffChangeMapControl map, ListView lv, ScrollViewer sv, double fraction)
         {
-            if (lv == null || lv.Items.Count == 0) return;
-            int idx = (int)(fraction * lv.Items.Count);
-            if (idx < 0) idx = 0;
-            if (idx >= lv.Items.Count) idx = lv.Items.Count - 1;
-            lv.ScrollIntoView(lv.Items[idx]);
+            if (lv == null) return;
+            int idx = map.ResolveTargetRow(fraction, lv.Items.Count);
+            if (idx < 0) return;
+            ListViewScrollHelper.ScrollToTop(lv, sv, lv.Items[idx]);
         }
 
         private static T FindDescendant<T>(DependencyObject root) where T : DependencyObject
