@@ -477,6 +477,12 @@ namespace PickleGit.ViewModels
         private IReadOnlyList<DiffLineKind> _resultRowKinds = Array.Empty<DiffLineKind>();
         public IReadOnlyList<DiffLineKind> ResultRowKinds { get => _resultRowKinds; private set => Set(ref _resultRowKinds, value); }
 
+        /// <summary>Same minimap encoding as <see cref="ResultRowKinds"/>, one entry per
+        /// <see cref="PaneItems"/> row — shared by the Ours and Theirs panes' change maps (both bind
+        /// the same PaneItems, so their rows line up 1:1).</summary>
+        private IReadOnlyList<DiffLineKind> _paneRowKinds = Array.Empty<DiffLineKind>();
+        public IReadOnlyList<DiffLineKind> PaneRowKinds { get => _paneRowKinds; private set => Set(ref _paneRowKinds, value); }
+
         private ExistenceChoice _existenceChoice;
         public ExistenceChoice ExistenceChoice
         {
@@ -1056,6 +1062,9 @@ namespace PickleGit.ViewModels
                     : DiffLineKind.Deleted;
             }
             ResultRowKinds = resultRowKinds;
+            PaneRowKinds = pane.Select(p => p.BlockVm == null ? DiffLineKind.Context
+                : p.BlockVm.IsResolvedEffective ? DiffLineKind.Added
+                : DiffLineKind.Deleted).ToArray();
         }
 
         /// <summary>Writes the resolution to disk (content conflict) or performs the keep/delete

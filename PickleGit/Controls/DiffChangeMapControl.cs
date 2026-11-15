@@ -79,5 +79,38 @@ namespace PickleGit.Controls
             JumpRequested?.Invoke(this, frac);
             e.Handled = true;
         }
+
+        /// <summary>Maps a click fraction (as raised by <see cref="JumpRequested"/>) to the row to
+        /// jump to: the first row of the changed run under the click, or of the nearest one within a
+        /// few pixels — marks are drawn at least 2px tall, so a click that visibly hits a thin band
+        /// can land on the context row next to it. Falls back to the plain proportional row when no
+        /// changed run is that close, or when RowKinds is unset. Returns -1 when
+        /// <paramref name="rowCount"/> is 0.</summary>
+        public int ResolveTargetRow(double fraction, int rowCount)
+        {
+            if (rowCount <= 0) return -1;
+            int idx = (int)(fraction * rowCount);
+            idx = idx < 0 ? 0 : idx >= rowCount ? rowCount - 1 : idx;
+
+            var kinds = RowKinds;
+            if (kinds == null || kinds.Count != rowCount || ActualHeight <= 0) return idx;
+
+            int reach = (int)Math.Ceiling(SnapPixels / ActualHeight * rowCount);
+            int hit = -1;
+            for (int d = 0; d <= reach && hit < 0; d++)
+            {
+                if (idx - d >= 0 && IsChange(kinds[idx - d])) hit = idx - d;
+                else if (idx + d < rowCount && IsChange(kinds[idx + d])) hit = idx + d;
+            }
+            if (hit < 0) return idx;
+
+            var kind = kinds[hit];
+            while (hit > 0 && kinds[hit - 1] == kind) hit--;
+            return hit;
+        }
+
+        private const double SnapPixels = 4.0;
+
+        private static bool IsChange(DiffLineKind k) => k == DiffLineKind.Added || k == DiffLineKind.Deleted;
     }
 }

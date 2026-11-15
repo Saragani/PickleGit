@@ -667,6 +667,14 @@
 
                             <Border Grid.Column="0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                                 <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="10"/>
+                                    </Grid.ColumnDefinitions>
+                                    <!-- Conflict-location minimap — same encoding as the Result pane's
+                                         (see its comment below), fed PaneRowKinds. -->
+                                    <ctrl:DiffChangeMapControl Grid.Column="1" RowKinds="{Binding PaneRowKinds}"
+                                                               JumpRequested="ConflictLeftChangeMap_JumpRequested"/>
                                     <ListView x:Name="ConflictLeftListView" ItemsSource="{Binding PaneItems}"
                                               Style="{StaticResource NoVirtualizeListView}"
                                               ItemContainerStyle="{StaticResource NoFocusListViewItem}"
@@ -729,6 +737,14 @@
 
                             <Border Grid.Column="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                                 <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="10"/>
+                                    </Grid.ColumnDefinitions>
+                                    <!-- Conflict-location minimap — same encoding as the Result pane's
+                                         (see its comment below), fed PaneRowKinds. -->
+                                    <ctrl:DiffChangeMapControl Grid.Column="1" RowKinds="{Binding PaneRowKinds}"
+                                                               JumpRequested="ConflictRightChangeMap_JumpRequested"/>
                                     <ListView x:Name="ConflictRightListView" ItemsSource="{Binding PaneItems}"
                                               Style="{StaticResource NoVirtualizeListView}"
                                               ItemContainerStyle="{StaticResource NoFocusListViewItem}"
