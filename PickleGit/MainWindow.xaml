@@ -541,6 +541,8 @@
                                  Visibility="{Binding ActiveTab.HasProgress, Converter={StaticResource BoolToVis},
                                               FallbackValue=Collapsed}"/>
                     <TextBlock Text="{Binding ActiveTab.StatusMessage, FallbackValue='Ready'}"
+                               ToolTip="{Binding ActiveTab.StatusMessage}"
+                               MaxWidth="700" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"/>
                 </StackPanel>
             </Grid>

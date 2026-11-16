@@ -64,7 +64,47 @@ namespace PickleGit.ViewModels
         /// <summary>Commit message/author/date, plus tag name if exactly tagged — bound as the
         /// detached-HEAD status-bar badge's tooltip; null while on a branch. See ComputeDetachedHeadInfo.</summary>
         public string DetachedHeadTooltip { get => _detachedHeadTooltip; private set => Set(ref _detachedHeadTooltip, value); }
-        public string StatusMessage { get => _statusMessage; set => Set(ref _statusMessage, value); }
+        // The status bar is a single line: multi-line text (e.g. raw git stderr, which can be a
+        // whole HTML error page from a failing remote) would otherwise grow the status bar until
+        // it pushes the rest of the window out of view. Full text belongs in the error dialog/log.
+        public string StatusMessage { get => _statusMessage; set => Set(ref _statusMessage, ToStatusLine(value)); }
+
+        private const int MaxStatusLength = 300;
+
+        internal static string ToStatusLine(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            if (text.IndexOf('\n') < 0 && text.IndexOf('\r') < 0 && text.Length <= MaxStatusLength)
+                return text;
+
+            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                            .Select(l => l.Trim())
+                            .Where(l => l.Length > 0)
+                            .ToList();
+            if (lines.Count == 0) return string.Empty;
+
+            string summary = lines[0];
+            // git's own verdict ("error: failed to push some refs ...") is far more useful than
+            // whatever warning/remote chatter happened to come first.
+            // Skip(1): the first line may itself be our own "Error: " prefix, which would match.
+            string gitError = lines.Skip(1).FirstOrDefault(l =>
+                l.StartsWith("error:", StringComparison.OrdinalIgnoreCase) ||
+                l.StartsWith("fatal:", StringComparison.OrdinalIgnoreCase));
+            if (gitError != null)
+            {
+                string detail = gitError.Substring(gitError.IndexOf(':') + 1).Trim();
+                summary = summary.StartsWith("Error:", StringComparison.Ordinal) ? "Error: " + detail : gitError;
+            }
+
+            if (summary.Length > MaxStatusLength)
+                summary = summary.Substring(0, MaxStatusLength) + "…";
+
+            if (text.IndexOf("<!DOCTYPE html", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("<html", StringComparison.OrdinalIgnoreCase) >= 0)
+                summary += " (the remote returned an HTML error page — possibly a server outage)";
+
+            return summary;
+        }
         public bool IsBusy
         {
             get => _isBusy;
@@ -2277,6 +2317,8 @@ namespace PickleGit.ViewModels
                           "Fix by re-pointing this branch's upstream at the correct remote branch, e.g.:\n" +
                           "  git branch --set-upstream-to=origin/<CorrectName> <this-branch>";
                 }
+                // StatusMessage keeps only one summary line, so log the full text here.
+                AppLog.Error($"Operation failed [{RepoName}]: {msg}");
                 StatusMessage = $"Error: {msg}";
                 DialogService.ShowError("Operation Failed", msg, ex.ToString());
                 return false;
