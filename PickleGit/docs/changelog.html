@@ -456,6 +456,7 @@
         <li><a href="#phase-11"><span class="num mono">11</span>Background Refresh, Decoupled</a></li>
         <li><a href="#phase-12"><span class="num mono">12</span>Pane Resizing, Rebuilt</a></li>
         <li><a href="#phase-13"><span class="num mono">13</span>Stability &amp; Auth Hardening</a></li>
+        <li><a href="#phase-14"><span class="num mono">14</span>Background Fetch, UTF-16 &amp; Merge Editor</a></li>
       </ol>
       <ol class="rail-extra">
         <li><a href="#architecture"><span class="num mono">—</span>Architecture</a></li>
@@ -474,8 +475,8 @@
          and a fair number of things that broke along the way and got fixed before they shipped.</p>
 
       <div class="stats">
-        <div class="stat"><div class="n mono">14</div><div class="l">phases, 00 → 13</div></div>
-        <div class="stat"><div class="n mono">48</div><div class="l">bugs caught live, not just in review</div></div>
+        <div class="stat"><div class="n mono">15</div><div class="l">phases, 00 → 14</div></div>
+        <div class="stat"><div class="n mono">53</div><div class="l">bugs caught live, not just in review</div></div>
         <div class="stat"><div class="n mono">3</div><div class="l">hosting providers, one abstraction</div></div>
         <div class="stat"><div class="n mono">1</div><div class="l">theme — dark, start to finish</div></div>
       </div>
@@ -1331,6 +1332,149 @@
              the same thing a plain terminal <code>git push</code> was doing correctly the whole time.</p>
         </div>
       </div>
+    </section>
+
+    <!-- ══════════════════════ PHASE 14 ══════════════════════ -->
+    <section class="phase" id="phase-14">
+      <div class="phase-head">
+        <span class="phase-badge mono">PHASE 14</span>
+        <h2 class="phase-title display">Background Fetch, UTF-16 &amp; Merge Editor</h2>
+      </div>
+      <p class="thesis">Since <span class="mono">PickleGit_1.0.24</span>: eight product commits. Two new
+         capabilities (background fetch of every open tab, and a range diff for a multi-commit selection), a
+         merge editor whose three panes finally stay in step, real text diffs and staging for UTF-16 and BOM
+         files, and a run of fixes. The most serious fix: staging an LFS-tracked file through the app wrote the
+         raw file into git instead of an LFS pointer.</p>
+
+      <ul class="feature-list">
+        <li><div><b>Background fetch for every open tab</b> — <span class="desc">on startup, and then every N
+            minutes (Settings → General, default 5, 0 turns it off), every open tab is fetched one after another,
+            so remote-tracking refs and ahead/behind counts no longer stay stale until you click Fetch. It never
+            prompts and never shows a dialog; skips and failures go to the log only. Only remotes git can reach
+            without a PickleGit-managed login are fetched: SSH, a local path or <code>file://</code>, and HTTPS
+            with a credential helper. Git Credential Manager is forced non-interactive, so an expired login fails
+            fast instead of opening a sign-in window. The tab stays usable while it fetches: each remote is its
+            own executor work item, so an operation you start mid-fetch runs as soon as that remote finishes.
+            Each remote has a 60 s timeout, and closing a tab cancels its fetch at once.</span></div></li>
+        <li><div><b>Range diff for a multi-commit selection</b> — <span class="desc">with several commits
+            selected, clicking a file in the aggregated "Files changed" panel (flat or tree view) used to do
+            nothing. It now shows that file's diff from the oldest selected commit's first parent (an empty tree
+            for a root commit) to the newest selected commit, in graph order. A non-contiguous selection includes
+            the commits in between, and the diff header shows the commit count. The range comes from the SHAs
+            the panel was built from, so a background refresh can't narrow it.</span></div></li>
+        <li><div><b>Merge editor panes stay in sync</b> — <span class="desc">Ours, Theirs and Result no longer
+            drift apart on a fast wheel, a Result marker click, or the editor's own startup. Opening the editor,
+            switching files, Prev/Next and any change-map click line all three panes up on the same conflict
+            block. Ours and Theirs get their own conflict change maps (red unresolved, green resolved). Only Ours
+            and Theirs share horizontal scroll. The side-by-side diff's left/right sync, which never actually
+            blocked anything, uses the same new mechanism.</span></div></li>
+        <li><div><b>Jumps put the change on screen</b> — <span class="desc">change-map clicks in the merge editor
+            and the diff view snap to the nearest changed run and place it near the top of the pane, in one
+            layout pass with no intermediate frame. <code>ScrollIntoView</code> used to leave a downward target on
+            the bottom edge, with the change itself off-screen.</span></div></li>
+        <li><div><b>UTF-16 and BOM files diff as text</b> — <span class="desc">when libgit2 calls a diff binary
+            but both sides decode as text (UTF-16 LE/BE with or without a BOM, or UTF-8 with a BOM), the diff is
+            computed in-app with a linear-space Myers diff. This covers the staged, unstaged, history,
+            ignore-whitespace and branch-compare views. Hunk and line stage, unstage and discard work on these
+            files too. They refuse to overwrite content that changed since the diff loaded, and they are disabled
+            when <code>.gitattributes</code> applies a filter or an encoding/eol conversion.</span></div></li>
+        <li><div><b>UTF-16 merge conflicts are resolvable in the merge editor</b> — <span class="desc">git refuses
+            to text-merge UTF-16, so the editor used to see no conflicts, and Save &amp; Stage silently resolved
+            the file to "ours". Conflicts git treated as binary are now rebuilt from the index stages with an
+            in-app three-way merge, then saved in the file's original encoding, BOM and line endings. A file that
+            is really binary, too large, or changed outside the editor shows a warning, and Save &amp; Stage is
+            disabled.</span></div></li>
+        <li><div><b>Staged/Unstaged trees: multi-select and folder actions</b> — <span class="desc">folders start
+            expanded in every file tree, and selecting a file in tree mode now shows its diff. The Staged and
+            Unstaged trees support Ctrl/Shift multi-select, applied as one bulk change. A selected folder stands
+            for every file beneath it, and deselecting a file inside it splits the folder. Folder rows get
+            Stage/Unstage/Discard and conflict-resolution context menus.</span></div></li>
+        <li><div><b>Bulk conflict resolution</b> — <span class="desc">Take Ours, Take Theirs and Mark Resolved now
+            apply to every selected conflicted file, not just the first. They skip files that have no chosen
+            side, split long path lists into batches under the command-line limit, and ask for confirmation
+            before touching more than one file or staging a file that still contains conflict markers.</span></div></li>
+        <li><div><b>Finish a merge that resolved to no changes</b> — <span class="desc">when every conflict is
+            resolved with "ours", the result can match HEAD and nothing is staged. Git still has
+            <code>MERGE_HEAD</code> and will record the merge commit, but Commit and Commit &amp; Push required
+            staged files, so the merge could only be finished from the command line. Both now enable while a
+            merge is in progress with no conflicts left, and update the moment the last conflict is
+            resolved.</span></div></li>
+      </ul>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Fixes</p>
+          <p><b>Staging an LFS-tracked file pushed the whole file, not a pointer.</b> Staging went through
+             LibGit2Sharp's <code>Commands.Stage</code>, which never runs external <code>filter.*.clean</code>
+             commands, git-lfs's included. The file went into the git blob as raw content, and a later push
+             carried all of it: confirmed against a real commit that pushed a 146 MB raw blob (the previous commit
+             held a correct 134-byte pointer) and was rejected by Bitbucket's 100 MB limit. This was the
+             write-side twin of a bug class already fixed on the read side, where checkout, reset, revert, merge
+             and stash apply all go through <code>git.exe</code> so the smudge filter runs. Stage File, Stage
+             Files and Stage All now run <code>git add</code> when git.exe is available, with path lists split
+             under the Windows command-line limit, and reopen the libgit2 handle afterwards.</p>
+          <p><b>The credentials dialog appeared for repos that didn't need it.</b> Single-remote Fetch, Pull and
+             Push, and the credential lookup, picked the first remote alphabetically. In a repo with an extra
+             local-path remote (for example a braid cache) that remote came before <code>origin</code>, the
+             credential-helper check failed, and PickleGit fell back to its own dialog. A new
+             <code>PrimaryRemote</code> (<code>origin</code>, else the first remote) is used at every such call
+             site.</p>
+          <p><b>Cancel left git hanging.</b> Cancelling a git command killed only the <code>git.exe</code>
+             launcher. Its child processes kept the output pipes open, so the cancelled call and its executor
+             thread hung forever. Cancel now kills the whole process tree (<code>taskkill /T</code>), which also
+             fixes the toolbar Cancel button. The process handle stays open until the kill finishes, so a reused
+             PID can never be hit.</p>
+          <p><b>Amend during a merge silently dropped the merge.</b> LibGit2Sharp's amend kept the previous
+             commit's parents and cleared <code>MERGE_HEAD</code>, rewriting that commit with the merged tree.
+             Amending while a merge is in progress is now refused with an error.</p>
+          <p><b>Merge editor papercuts.</b> Typing in the manual-edit pane while the find bar had a search term
+             moved the caret, because every edit re-ran find navigation; edits now refresh matches without
+             navigating. Change-map clicks now scroll the manual-edit pane too. "Open Merge Editor" could open
+             the editor twice; it is now guarded against re-entry.</p>
+          <p><b>Multi-select diff edge cases.</b> A file picked in an earlier context (for example an unstaged
+             file under the WIP node) is cleared on entering multi-select, instead of its working-tree diff
+             leaking into the panel. Closing the diff un-highlights the row, so the same file can be opened
+             again.</p>
+          <p><b>A long error took over the window.</b> A push that failed during a Bitbucket outage returned
+             Bitbucket's whole HTML error page (about 13 KB, with inline SVG and a base64 icon) as stderr, and all
+             of it went into the status bar. The status bar grew to fit it and pushed the rest of the window out
+             of view. The status bar now keeps one summary line, prefers git's own <code>error:</code>/<code>fatal:</code>
+             line, notes when the remote sent back an HTML page, and trims with an ellipsis. The full error is
+             written to the log at the failure site.</p>
+        </div>
+      </div>
+
+      <div class="callout bug">
+        <div class="icon">🐞</div>
+        <div class="body">
+          <p class="kicker mono">Caught live, before shipping</p>
+          <p><b><code>git add -- -A</code> treated <code>-A</code> as a file name.</b> The first version of the
+             LFS staging fix put Stage All's <code>-A</code> after the <code>--</code> separator, where git reads
+             it as a literal pathspec. A real UI Automation run caught it; the earlier "verified" checkmark had no
+             test run behind it.</p>
+          <p><b>A remote that never answers hung the background fetch forever.</b> A test TCP listener that
+             accepts a connection and never replies exposed the orphaned-child-process hang described under
+             Cancel above. It also led to the per-remote timeout.</p>
+          <p><b>LibGit2Sharp's cached index undid external staging.</b> In-app UTF-16 staging checked and then
+             wrote the index through a libgit2 handle that still held a stale copy, so <code>Index.Write()</code>
+             could revert staging done outside the app in the meantime. It now reopens the handle first.</p>
+          <p><b>A merge-editor jump that looked right but wasn't.</b> The scroll-sync tests only checked that the
+             pane moved, not that the change was visible. A retest showed downward jumps leaving the change below
+             the fold, and the first fix flickered through an intermediate frame before landing. The final version
+             positions the change in a single layout pass.</p>
+          <p><b>The status-bar summary matched its own prefix.</b> Run against the real 13 KB failed-push text
+             from the log, the first version of the one-line summary picked the app's own "Error:" prefix line as
+             git's <code>error:</code> line, so nothing changed. The search now skips that first line.</p>
+        </div>
+      </div>
+
+      <ul class="feature-list">
+        <li><div><b>Developer tooling</b> — <span class="desc">a portable graphify knowledge-graph setup: a
+            committed graph of the codebase, so <code>graphify query</code>/<code>path</code>/<code>explain</code>
+            work right after cloning, and a PreToolUse hook that does nothing when graphify isn't installed. Each
+            fix above also landed with its plan, review and retro in the repo.</span></div></li>
+      </ul>
     </section>
 
     <!-- ══════════════════════ ARCHITECTURE ══════════════════════ -->
